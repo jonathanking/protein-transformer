@@ -8,8 +8,9 @@ from transformer.Layers import EncoderLayer, DecoderLayer
 __author__ = "Yu-Hsiang Huang"
 
 def get_non_pad_mask(seq):
-    assert seq.dim() == 2
-    return seq.ne(Constants.PAD).type(torch.float).unsqueeze(-1)
+    assert seq.dim() == 3
+    # return seq.ne(Constants.PAD).type(torch.float).unsqueeze(-1)
+    return (seq != 0).any(dim=-1).type(torch.float).unsqueeze(-1)
 
 def get_sinusoid_encoding_table(n_position, d_hid, padding_idx=None):
     ''' Sinusoid position encoding table '''
@@ -36,16 +37,17 @@ def get_attn_key_pad_mask(seq_k, seq_q):
 
     # Expand to fit the shape of key query attention matrix.
     len_q = seq_q.size(1)
-    padding_mask = seq_k.eq(Constants.PAD)
+    # padding_mask = seq_k.eq(Constants.PAD)
+    padding_mask = (seq_k == 0).all(dim=-1)
     padding_mask = padding_mask.unsqueeze(1).expand(-1, len_q, -1)  # b x lq x lk
 
     return padding_mask
 
 def get_subsequent_mask(seq):
     ''' For masking out the subsequent info. '''
-    # TODO: What is subsequent mask?
+    # TODO: What is subsequent mask? Did I modify it correctly?
 
-    sz_b, len_s = seq.size()
+    sz_b, len_s, dim_s = seq.size()
     subsequent_mask = torch.triu(
         torch.ones((len_s, len_s), device=seq.device, dtype=torch.uint8), diagonal=1)
     subsequent_mask = subsequent_mask.unsqueeze(0).expand(sz_b, -1, -1)  # b x ls x ls
@@ -113,8 +115,9 @@ class Decoder(nn.Module):
         super().__init__()
         n_position = len_max_seq + 1
 
+        # TODO should we make all embeddings the same size instead of 20 and 11?
         self.position_enc = nn.Embedding.from_pretrained(
-            get_sinusoid_encoding_table(n_position, d_word_vec, padding_idx=0),
+            get_sinusoid_encoding_table(n_position, 11, padding_idx=0),
             freeze=True)
 
         self.layer_stack = nn.ModuleList([
@@ -157,8 +160,8 @@ class Transformer(nn.Module):
     ''' A sequence to sequence model with attention mechanism. '''
 
     def __init__(
-            self, len_max_seq,  d_angle=11*2,
-            d_word_vec=20, d_model=512, d_inner=2048,
+            self, len_max_seq,  d_angle=11,
+            d_word_vec=11, d_model=11, d_inner=2048,
             n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1):
 
         super().__init__()
@@ -176,7 +179,9 @@ class Transformer(nn.Module):
             dropout=dropout)
 
         self.tgt_angle_prj = nn.Linear(d_model, d_angle, bias=False)
-        nn.init.xavier_normal_(self.tgt_word_prj.weight)
+        nn.init.xavier_normal_(self.tgt_angle_prj.weight)
+
+        self.input_embedding =  nn.Linear(20, d_angle)#nn.Embedding(d_word_vec, d_angle)
 
         assert d_model == d_word_vec, \
         'To facilitate the residual connections, \
@@ -188,9 +193,10 @@ class Transformer(nn.Module):
     def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):
 
         tgt_seq, tgt_pos = tgt_seq[:, :-1], tgt_pos[:, :-1]
-
+        # TODO add a dense layer that transforms the src data into the same dimension as the angle vectors (11 or 22)
+        src_seq = self.input_embedding(src_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
         dec_output, *_ = self.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
-        seq_logit = self.tgt_word_prj(dec_output) * self.x_logit_scale
+        seq_logit = self.tgt_angle_prj(dec_output) * self.x_logit_scale
 
         return seq_logit.view(-1, seq_logit.size(2))

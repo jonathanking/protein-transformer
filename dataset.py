@@ -11,25 +11,33 @@ def paired_collate_fn(insts):
         """
     src_insts, tgt_insts = list(zip(*insts))
     src_insts = collate_fn(src_insts)
-    tgt_insts = collate_fn(tgt_insts)
+    tgt_insts = collate_fn(tgt_insts, is_tgt=True)
     return (*src_insts, *tgt_insts)
 
-def collate_fn(insts):
+def collate_fn(insts, is_tgt=False):
     ''' Pad the instance to the max seq length in batch '''
     # TODO: How to collate input/output such that Tensor datatypes are correct
     # TODO: Must create separate iterators for each input/output data
 
     max_len = max(len(inst) for inst in insts)
 
+    if is_tgt:
+        # TODO Change angle dim to 22
+        pad_dim = 11
+    else:
+        pad_dim = 20
     batch_seq = np.array([
-        inst + [Constants.PAD] * (max_len - len(inst))
-        for inst in insts]) # pads as many chars as necessary for each inst
+        np.concatenate((inst, np.zeros((max_len - len(inst), pad_dim))), axis=0)
+        for inst in insts])
 
     batch_pos = np.array([
-        [pos_i+1 if w_i != Constants.PAD else 0
+        [pos_i+1 if w_i.any() else 0
          for pos_i, w_i in enumerate(inst)] for inst in batch_seq]) # position arr
 
-    batch_seq = torch.LongTensor(batch_seq) 
+    if is_tgt:
+        batch_seq = torch.FloatTensor(batch_seq)
+    else:
+        batch_seq = torch.FloatTensor(batch_seq)
     batch_pos = torch.LongTensor(batch_pos)
 
     return batch_seq, batch_pos

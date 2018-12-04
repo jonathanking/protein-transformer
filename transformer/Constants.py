@@ -1,2 +1,4 @@
+import numpy as np
 
-PAD = 0
+
+PAD = np.zeros(20)

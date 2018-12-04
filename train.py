@@ -16,10 +16,10 @@ from dataset import paired_collate_fn, ProteinDataset
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 
-def cal_performance(pred, gold):
+def cal_performance(pred, gold, device):
     ''' Apply label smoothing if needed '''
     # TODO: possibly add more info for recording performance
-    loss = cal_loss(pred, gold)
+    loss = cal_loss(pred, gold, device)
 
     # pred = pred.max(1)[1]
     # gold = gold.contiguous().view(-1)
@@ -28,11 +28,19 @@ def cal_performance(pred, gold):
     return loss
 
 
-def cal_loss(pred, gold):
+def cal_loss(pred, gold, device):
     ''' Calculate MSE loss. Will eventually need drmsd loss. '''
     # TODO: replace MSE with drmsd loss
-    pred_unpadded = pred.ne(Constants.PAD)
-    gold_unpadded = gold.ne(Constants.PAD)
+    batch_dim = gold.shape[0]
+    pred = pred.view(batch_dim, -1, 11)
+    not_padded_mask = (gold != 0).any(dim=-1)
+    not_padded_mask = not_padded_mask.view(-1, 1).repeat(1, 1, 11).view(batch_dim, -1, 11) # Repeat along last dim
+    if device.type == "cuda":
+        pred_unpadded = pred.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
+        gold_unpadded = gold.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
+    else: 
+        pred_unpadded = pred * not_padded_mask.type(torch.FloatTensor)
+        gold_unpadded = gold * not_padded_mask.type(torch.FloatTensor)
     loss = F.mse_loss(pred_unpadded, gold_unpadded)
 
     return loss
@@ -59,7 +67,7 @@ def train_epoch(model, training_data, optimizer, device):
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
 
         # backward
-        loss = cal_performance(pred, gold)
+        loss = cal_performance(pred, gold, device)
         loss.backward()
 
         # update parameters
@@ -91,7 +99,7 @@ def eval_epoch(model, validation_data, device):
 
             # forward
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss, n_correct = cal_performance(pred, gold)
+            loss = cal_performance(pred, gold, device)
 
             # note keeping
             total_loss += loss.item()
@@ -124,19 +132,19 @@ def train(model, training_data, validation_data, optimizer, device, opt):
         start = time.time()
         train_loss = train_epoch(
             model, training_data, optimizer, device)
-        print('  - (Training)   ppl: {ppl: 8.5f} '\
+        print('  - (Training)   loss: {loss: 8.5f} '\
               'elapse: {elapse:3.3f} min'.format(
-                  ppl=math.exp(min(train_loss, 100)),
+                  loss=train_loss,
                   elapse=(time.time()-start)/60))
 
         start = time.time()
         valid_loss = eval_epoch(model, validation_data, device)
-        print('  - (Validation) ppl: {ppl: 8.5f}, '\
+        print('  - (Validation) loss: {loss: 8.5f}, '\
                 'elapse: {elapse:3.3f} min'.format(
-                    ppl=math.exp(min(valid_loss, 100)),
+                    loss=valid_loss,
                     elapse=(time.time()-start)/60))
 
-
+        valid_losses.append(valid_loss)
         # Record model state and log training info
         model_state_dict = model.state_dict()
         checkpoint = {
@@ -150,7 +158,7 @@ def train(model, training_data, validation_data, optimizer, device, opt):
                 torch.save(checkpoint, model_name)
             elif opt.save_mode == 'best':
                 model_name = opt.save_model + '.chkpt'
-                if valid_loss >= max(valid_losses):
+                if valid_loss <= min(valid_losses):
                     torch.save(checkpoint, model_name)
                     print('    - [Info] The checkpoint file has been updated.')
 
@@ -172,8 +180,8 @@ def main():
     parser.add_argument('-epoch', type=int, default=10)
     parser.add_argument('-batch_size', type=int, default=64)
 
-    parser.add_argument('-d_word_vec', type=int, default=20)
-    parser.add_argument('-d_model', type=int, default=512)
+    parser.add_argument('-d_word_vec', type=int, default=11)
+    parser.add_argument('-d_model', type=int, default=11)
     parser.add_argument('-d_inner_hid', type=int, default=2048)
     parser.add_argument('-d_k', type=int, default=64)
     parser.add_argument('-d_v', type=int, default=64)
@@ -197,7 +205,7 @@ def main():
 
     #========= Loading Dataset =========#
     data = torch.load(opt.data)
-    opt.max_token_seq_len = data['settings'].max_token_seq_len
+    opt.max_token_seq_len = data['settings']["max_len"]
 
     training_data, validation_data = prepare_dataloaders(data, opt)
 
@@ -230,8 +238,8 @@ def prepare_dataloaders(data, opt):
     # TODO create "data.pkl" file which is a dictionary with the necessary data
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
-            seqs=data['train']['seqs'],
-            angs=data['train']['angs']),
+            seqs=data['train']['seq'],
+            angs=data['train']['ang']),
         num_workers=2,
         batch_size=opt.batch_size,
         collate_fn=paired_collate_fn,
@@ -239,8 +247,8 @@ def prepare_dataloaders(data, opt):
 
     valid_loader = torch.utils.data.DataLoader(
         ProteinDataset(
-            seqs=data['valid']['seqs'],
-            angs=data['valid']['angs']),
+            seqs=data['valid']['seq'],
+            angs=data['valid']['ang']),
         num_workers=2,
         batch_size=opt.batch_size,
         collate_fn=paired_collate_fn)
