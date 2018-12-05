@@ -180,8 +180,8 @@ def main():
     parser.add_argument('-epoch', type=int, default=10)
     parser.add_argument('-batch_size', type=int, default=64)
 
-    parser.add_argument('-d_word_vec', type=int, default=11)
-    parser.add_argument('-d_model', type=int, default=11)
+    parser.add_argument('-d_word_vec', type=int, default=20)
+    parser.add_argument('-d_model', type=int, default=512)
     parser.add_argument('-d_inner_hid', type=int, default=2048)
     parser.add_argument('-d_k', type=int, default=64)
     parser.add_argument('-d_v', type=int, default=64)

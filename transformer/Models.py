@@ -69,11 +69,8 @@ class Encoder(nn.Module):
 
         n_position = len_max_seq + 1
 
-        # self.src_word_emb = nn.Embedding(
-        #     n_src_vocab, d_word_vec, padding_idx=Constants.PAD)
-
         self.position_enc = nn.Embedding.from_pretrained(
-            get_sinusoid_encoding_table(n_position, d_word_vec, padding_idx=0),
+            get_sinusoid_encoding_table(n_position, d_model, padding_idx=0),
             freeze=True)
 
         self.layer_stack = nn.ModuleList([
@@ -108,16 +105,15 @@ class Decoder(nn.Module):
 
     def __init__(
             self,
-            len_max_seq, d_word_vec,
+            len_max_seq,
             n_layers, n_head, d_k, d_v,
             d_model, d_inner, dropout=0.1):
 
         super().__init__()
         n_position = len_max_seq + 1
 
-        # TODO should we make all embeddings the same size instead of 20 and 11?
         self.position_enc = nn.Embedding.from_pretrained(
-            get_sinusoid_encoding_table(n_position, 11, padding_idx=0),
+            get_sinusoid_encoding_table(n_position, d_model, padding_idx=0),
             freeze=True)
 
         self.layer_stack = nn.ModuleList([
@@ -161,7 +157,7 @@ class Transformer(nn.Module):
 
     def __init__(
             self, len_max_seq,  d_angle=11,
-            d_word_vec=11, d_model=11, d_inner=2048,
+            d_word_vec=20, d_model=512, d_inner=2048,
             n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1):
 
         super().__init__()
@@ -174,18 +170,16 @@ class Transformer(nn.Module):
 
         self.decoder = Decoder(
             len_max_seq=len_max_seq,
-            d_word_vec=d_word_vec, d_model=d_model, d_inner=d_inner,
+            d_model=d_model, d_inner=d_inner,
             n_layers=n_layers, n_head=n_head, d_k=d_k, d_v=d_v,
             dropout=dropout)
 
+        self.input_embedding = nn.Linear(d_word_vec, d_model)  # nn.Embedding(d_word_vec, d_angle)
         self.tgt_angle_prj = nn.Linear(d_model, d_angle, bias=False)
+        self.tgt_embedding = nn.Linear(d_angle, d_model)
         nn.init.xavier_normal_(self.tgt_angle_prj.weight)
-
-        self.input_embedding =  nn.Linear(20, d_angle)#nn.Embedding(d_word_vec, d_angle)
-
-        assert d_model == d_word_vec, \
-        'To facilitate the residual connections, \
-         the dimensions of all module outputs shall be the same.'
+        nn.init.xavier_normal_(self.input_embedding.weight)
+        nn.init.xavier_normal_(self.tgt_embedding.weight)
 
         self.x_logit_scale = 1.
 
@@ -195,6 +189,7 @@ class Transformer(nn.Module):
         tgt_seq, tgt_pos = tgt_seq[:, :-1], tgt_pos[:, :-1]
         # TODO add a dense layer that transforms the src data into the same dimension as the angle vectors (11 or 22)
         src_seq = self.input_embedding(src_seq)
+        tgt_seq = self.tgt_embedding(tgt_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
         dec_output, *_ = self.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
         seq_logit = self.tgt_angle_prj(dec_output) * self.x_logit_scale
