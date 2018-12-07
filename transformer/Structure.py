@@ -3,33 +3,42 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def angles2coords(angles):
+def angles2coords(angles, device):
     """ Given an angle tensor, returns a coordinate tensor."""
-    coords = initialize_backbone_array(angles)
+    coords = initialize_backbone_array(angles, device)
 
     for i in range(1, len(angles)):
         if angles[i].sum() == 0:
             break
-        coords = extend_backbone(i, angles, coords)
+        coords = extend_backbone(i, angles, coords, device)
     return torch.stack(coords)
 
 
-def initialize_backbone_array(angles):
+def initialize_backbone_array(angles, device):
     """ Given an angle matrix (RES x ANG), this initializes the first 3 backbone points (which are arbitrary) and
         returns a TensorArray of the size required to hold all the coordinates. """
     bondlens = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379}
+    a1 = torch.zeros(3).to(device)
 
-    a1 = torch.zeros(3)
-    a2 = a1 + torch.FloatTensor([bondlens["n-ca"], 0, 0])
-    a3x = torch.cos(np.pi - angles[0,3]) * bondlens["ca-c"]
-    a3y = torch.sin(np.pi - angles[0,3]) * bondlens['ca-c']
-    a3 = torch.FloatTensor([a3x, a3y, 0])
+    if device.type == "cuda":
+        a2 = a1 + torch.cuda.FloatTensor([bondlens["n-ca"], 0, 0])
+        a3x = torch.cos(np.pi - angles[0, 3]) * bondlens["ca-c"]
+        a3y = torch.sin(np.pi - angles[0, 3]) * bondlens['ca-c']
+        a3 = torch.cuda.FloatTensor([a3x, a3y, 0])
+    else:
+        a2 = a1 + torch.FloatTensor([bondlens["n-ca"], 0, 0])
+        a3x = torch.cos(np.pi - angles[0, 3]) * bondlens["ca-c"]
+        a3y = torch.sin(np.pi - angles[0, 3]) * bondlens['ca-c']
+        a3 = torch.FloatTensor([a3x, a3y, 0])
+
+
+
     starting_coords = [a1, a2, a3]
 
     return starting_coords
 
 
-def extend_backbone(i, angles, coords):
+def extend_backbone(i, angles, coords, device):
     """ Returns backbone coordinates for the residue angles[pos]."""
     bondlens = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379}
 
@@ -52,19 +61,19 @@ def extend_backbone(i, angles, coords):
         p3 = coords[-3]
         p2 = coords[-2]
         p1 = coords[-1]
-        next_pt = nerf(p3, p2, p1, b, t, dihedral)
+        next_pt = nerf(p3, p2, p1, b, t, dihedral, device)
         coords.append(next_pt)
 
 
     return coords
 
 
-def l2_normalize(t, eps=1e-12):
-    epsilon = torch.FloatTensor([eps])
+def l2_normalize(t, device, eps=1e-12):
+    epsilon = torch.FloatTensor([eps]).to(device)
     return t / torch.sqrt(torch.max((t**2).sum(), epsilon))
 
 
-def nerf(a, b, c, l, theta, chi):
+def nerf(a, b, c, l, theta, chi, device):
     '''
     Nerf method of finding 4th coord (d)
     in cartesian space
@@ -78,13 +87,13 @@ def nerf(a, b, c, l, theta, chi):
     '''
     # calculate unit vectors AB and BC
 
-    W_hat = l2_normalize(b - a)
-    x_hat = l2_normalize(c - b)
+    W_hat = l2_normalize(b - a, device)
+    x_hat = l2_normalize(c - b, device)
 
     # calculate unit normals n = AB x BC
     # and p = n x BC
     n_unit = torch.cross(W_hat, x_hat)
-    z_hat = l2_normalize(n_unit)
+    z_hat = l2_normalize(n_unit, device)
     y_hat = torch.cross(z_hat, x_hat)
 
     # create rotation matrix [BC; p; n] (3x3)

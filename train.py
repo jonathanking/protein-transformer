@@ -44,6 +44,7 @@ def unpad_angle_vectors(pred, gold, device):
 
 def cal_loss(pred, gold, device):
     ''' Calculate DRMSD loss. '''
+    device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
     pred_unpadded, gold_unpadded = unpad_angle_vectors(pred, gold, device)
 
