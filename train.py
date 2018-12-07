@@ -164,7 +164,7 @@ def train(model, training_data, validation_data, optimizer, device, opt):
         if valid_loss < best_valid_loss_so_far:
             best_valid_loss_so_far = valid_loss
             epoch_last_improved = epoch_i
-        elif epoch_i - epoch_last_improved > 100:
+        elif epoch_i - epoch_last_improved > opt.step_when:
             # Model hasn't improved in 100 epochs
             print("No improvement for 100 epochs. Stopping model training early.")
             break
@@ -204,6 +204,7 @@ def main():
 
     parser.add_argument('-epoch', type=int, default=10)
     parser.add_argument('-batch_size', type=int, default=64)
+    parser.add_argument('-step_when', type=int, default=100)
 
     parser.add_argument('-d_word_vec', type=int, default=20)
     parser.add_argument('-d_model', type=int, default=512)
