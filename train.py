@@ -139,6 +139,8 @@ def train(model, training_data, validation_data, optimizer, device, opt):
             log_vf.write('epoch,loss,ppl,accuracy\n')
 
     valid_losses = []
+    epoch_last_improved = -1
+    best_valid_loss_so_far = 10000
     for epoch_i in range(opt.epoch):
         print('[ Epoch', epoch_i, ']')
 
@@ -158,6 +160,16 @@ def train(model, training_data, validation_data, optimizer, device, opt):
                     elapse=(time.time()-start)/60))
 
         valid_losses.append(valid_loss)
+
+        if valid_loss < best_valid_loss_so_far:
+            best_valid_loss_so_far = valid_loss
+            epoch_last_improved = epoch_i
+        elif epoch_i - epoch_last_improved > 100:
+            # Model hasn't improved in 100 epochs
+            print("No improvement for 100 epochs. Stopping model training early.")
+            break
+
+
         # Record model state and log training info
         model_state_dict = model.state_dict()
         checkpoint = {
