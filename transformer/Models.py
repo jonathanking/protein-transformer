@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import transformer.Constants as Constants
+from transformer.Structure import angles2coords
 from transformer.Layers import EncoderLayer, DecoderLayer
 
 __author__ = "Yu-Hsiang Huang"
@@ -192,6 +193,6 @@ class Transformer(nn.Module):
         tgt_seq = self.tgt_embedding(tgt_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
         dec_output, *_ = self.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
-        seq_logit = self.tgt_angle_prj(dec_output) * self.x_logit_scale
+        angles = self.tgt_angle_prj(dec_output) * self.x_logit_scale
+        return angles
 
-        return seq_logit.view(-1, seq_logit.size(2))

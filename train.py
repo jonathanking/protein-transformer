@@ -15,6 +15,8 @@ import transformer.Constants as Constants
 from dataset import paired_collate_fn, ProteinDataset
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
+from transformer.Structure import angles2coords, drmsd
+from torch import multiprocessing
 
 def cal_performance(pred, gold, device):
     ''' Apply label smoothing if needed '''
@@ -28,22 +30,31 @@ def cal_performance(pred, gold, device):
     return loss
 
 
-def cal_loss(pred, gold, device):
-    ''' Calculate MSE loss. Will eventually need drmsd loss. '''
-    # TODO: replace MSE with drmsd loss
-    batch_dim = gold.shape[0]
-    pred = pred.view(batch_dim, -1, 11)
+def unpad_angle_vectors(pred, gold, device):
     not_padded_mask = (gold != 0).any(dim=-1)
-    not_padded_mask = not_padded_mask.view(-1, 1).repeat(1, 1, 11).view(batch_dim, -1, 11) # Repeat along last dim
+    not_padded_mask = not_padded_mask.view(-1, 1).repeat(1, 1, 11).view(gold.shape[0], -1, gold.shape[-1])  # Repeat along last dim
     if device.type == "cuda":
         pred_unpadded = pred.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
         gold_unpadded = gold.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
-    else: 
+    else:
         pred_unpadded = pred * not_padded_mask.type(torch.FloatTensor)
         gold_unpadded = gold * not_padded_mask.type(torch.FloatTensor)
-    loss = F.mse_loss(pred_unpadded, gold_unpadded)
+    return pred_unpadded, gold_unpadded
 
-    return loss
+
+def cal_loss(pred, gold, device):
+    ''' Calculate DRMSD loss. '''
+    pred, gold = pred.to(device), gold.to(device)
+    pred_unpadded, gold_unpadded = unpad_angle_vectors(pred, gold, device)
+
+    losses = []
+    for pred_item, gold_item in zip(pred_unpadded, gold_unpadded):
+        true_coords = angles2coords(gold_item, device)
+        pred_coords = angles2coords(pred_item, device)
+        loss = drmsd(pred_coords, true_coords)
+        losses.append(loss)
+
+    return torch.mean(torch.stack(losses))
 
 
 def train_epoch(model, training_data, optimizer, device):
@@ -71,7 +82,8 @@ def train_epoch(model, training_data, optimizer, device):
         loss.backward()
 
         # update parameters
-        optimizer.step_and_update_lr()
+        # optimizer.step_and_update_lr()
+        optimizer.step()
 
         # note keeping
         total_loss += loss.item()
@@ -224,11 +236,14 @@ def main():
         n_head=opt.n_head,
         dropout=opt.dropout).to(device)
 
-    optimizer = ScheduledOptim(
-        optim.Adam(
-            filter(lambda x: x.requires_grad, transformer.parameters()),
-            betas=(0.9, 0.98), eps=1e-09),
-        opt.d_model, opt.n_warmup_steps)
+    # optimizer = ScheduledOptim(
+    #     optim.Adam(
+    #         filter(lambda x: x.requires_grad, transformer.parameters()),
+    #         betas=(0.9, 0.98), eps=1e-09),
+    #     opt.d_model, opt.n_warmup_steps)
+
+    optimizer =  optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
+                            betas=(0.9, 0.98), eps=1e-09, lr=0.0001)
 
     train(transformer, training_data, validation_data, optimizer, device ,opt)
 

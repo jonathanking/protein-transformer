@@ -4,7 +4,8 @@ import transformer.Layers
 import transformer.SubLayers
 import transformer.Models
 import transformer.Optim
+import transformer.Structure
 
 __all__ = [
     transformer.Constants, transformer.Modules, transformer.Layers,
-    transformer.SubLayers, transformer.Models]
+    transformer.SubLayers, transformer.Models, transformer.Structure]
