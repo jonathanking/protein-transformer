@@ -151,8 +151,8 @@ def train(model, training_data, validation_data, optimizer, device, opt):
             log_train_file, log_valid_file))
 
         with open(log_train_file, 'w') as log_tf, open(log_valid_file, 'w') as log_vf:
-            log_tf.write('epoch,loss,ppl,accuracy\n')
-            log_vf.write('epoch,loss,ppl,accuracy\n')
+            log_tf.write('epoch,loss\n')
+            log_vf.write('epoch,loss\n')
 
     valid_losses = []
     epoch_last_improved = -1
@@ -205,12 +205,10 @@ def train(model, training_data, validation_data, optimizer, device, opt):
 
         if log_train_file and log_valid_file:
             with open(log_train_file, 'a') as log_tf, open(log_valid_file, 'a') as log_vf:
-                log_tf.write('{epoch},{loss: 8.5f},{ppl: 8.5f}\n'.format(
-                    epoch=epoch_i, loss=train_loss,
-                    ppl=math.exp(min(train_loss, 100))))
-                log_vf.write('{epoch},{loss: 8.5f},{ppl: 8.5f}\n'.format(
-                    epoch=epoch_i, loss=valid_loss,
-                    ppl=math.exp(min(valid_loss, 100))))
+                log_tf.write('{epoch},{loss: 8.5f}\n'.format(
+                    epoch=epoch_i, loss=train_loss))
+                log_vf.write('{epoch},{loss: 8.5f}\n'.format(
+                    epoch=epoch_i, loss=valid_loss))
 
 def main():
     ''' Main function '''
