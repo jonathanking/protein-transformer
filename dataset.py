@@ -46,8 +46,8 @@ class ProteinDataset(torch.utils.data.Dataset):
     def __init__(
         self, seqs=None, angs=None):
 
-        assert seqs
-        assert not angs or (len(seqs) == len(angs))
+        assert seqs is not None
+        assert (angs is None) or (len(seqs) == len(angs))
 
         self._seqs = seqs
         self._angs = angs
@@ -61,6 +61,6 @@ class ProteinDataset(torch.utils.data.Dataset):
         return self.n_insts
 
     def __getitem__(self, idx):
-        if self._angs:
+        if self._angs is not None:
             return self._seqs[idx], self._angs[idx]
         return self._seqs[idx]

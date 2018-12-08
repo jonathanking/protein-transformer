@@ -18,13 +18,6 @@ from transformer.Optim import ScheduledOptim
 from transformer.Structure import angles2coords, drmsd
 from torch import multiprocessing
 
-def cal_performance(pred, gold, device):
-    ''' Apply label smoothing if needed '''
-    # TODO: possibly add more info for recording performance
-    loss = cal_loss(pred, gold, device)
-
-    return loss
-
 
 def unpad_angle_vectors(pred, gold, device):
     not_padded_mask = (gold != 0).any(dim=-1)
@@ -48,11 +41,18 @@ def cal_loss(pred, gold, device):
     for pred_item, gold_item in zip(pred_unpadded, gold_unpadded):
         true_coords = angles2coords(gold_item, device)
         pred_coords = angles2coords(pred_item, device)
-        loss = drmsd(pred_coords, true_coords)
+        loss = drmsd(pred_coords, true_coords)/true_coords.shape[0]
         losses.append(loss)
 
     return torch.mean(torch.stack(losses))
 
+
+def mse_loss(pred, gold):
+    """ Computes MSE loss."""
+    device = torch.device("cpu")
+    pred, gold = pred.to(device), gold.to(device)
+    pred_unpadded, gold_unpadded = unpad_angle_vectors(pred, gold, device)
+    return F.mse_loss(pred_unpadded, gold_unpadded)
 
 def train_epoch(model, training_data, optimizer, device):
     ''' Epoch operation in training phase'''
@@ -203,8 +203,8 @@ def main():
     parser.add_argument('-step_when', type=int, default=100)
 
     parser.add_argument('-d_word_vec', type=int, default=20)
-    parser.add_argument('-d_model', type=int, default=512)
-    parser.add_argument('-d_inner_hid', type=int, default=2048)
+    parser.add_argument('-d_model', type=int, default=256)
+    parser.add_argument('-d_inner_hid', type=int, default=1024)
     parser.add_argument('-d_k', type=int, default=64)
     parser.add_argument('-d_v', type=int, default=64)
 
