@@ -123,6 +123,7 @@ def eval_epoch(model, validation_data, device):
 
             # prepare data
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
+
             gold = tgt_seq[:]
 
             # forward
