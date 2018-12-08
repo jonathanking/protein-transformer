@@ -119,7 +119,7 @@ def drmsd(a, b):
 
     a_ = pairwise_internal_dist(a)
     b_ = pairwise_internal_dist(b)
-    return torch.sqrt(F.mse_loss(a_, b_))
+    return torch.sqrt(torch.mean((a_ - b_)**2))
 
     # num_elems = a_.shape[0]
     #

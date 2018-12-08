@@ -23,10 +23,6 @@ def cal_performance(pred, gold, device):
     # TODO: possibly add more info for recording performance
     loss = cal_loss(pred, gold, device)
 
-    # pred = pred.max(1)[1]
-    # gold = gold.contiguous().view(-1)
-    # non_pad_mask = gold.ne(Constants.PAD)
-
     return loss
 
 
@@ -72,7 +68,7 @@ def train_epoch(model, training_data, optimizer, device):
 
         # prepare data
         src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
-        gold = tgt_seq[:, 1:]
+        gold = tgt_seq[:]
 
         # forward
         optimizer.zero_grad()
@@ -108,7 +104,7 @@ def eval_epoch(model, validation_data, device):
 
             # prepare data
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
-            gold = tgt_seq[:, 1:]
+            gold = tgt_seq[:]
 
             # forward
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
