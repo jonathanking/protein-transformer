@@ -6,6 +6,7 @@ import argparse
 import math
 import time
 
+import numpy as np
 from tqdm import tqdm
 import torch
 import torch.nn.functional as F
@@ -20,8 +21,7 @@ from torch import multiprocessing
 
 
 def unpad_angle_vectors(pred, gold, device):
-    not_padded_mask = (gold != 0).any(dim=-1)
-    not_padded_mask = not_padded_mask.view(-1, 1).repeat(1, 1, 11).view(gold.shape[0], -1, gold.shape[-1])  # Repeat along last dim
+    not_padded_mask = (gold != 0)
     if device.type == "cuda":
         pred_unpadded = pred.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
         gold_unpadded = gold.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
@@ -31,17 +31,29 @@ def unpad_angle_vectors(pred, gold, device):
     return pred_unpadded, gold_unpadded
 
 
+def inverse_trig_transform(t):
+    """ Given a (BATCH x L X 22) tensor, returns (BATCH X L X 11) tensor.
+        Performs atan2 transformation from sin and cos values."""
+    t = t.view(t.shape[0], -1, 11, 2)
+    t_cos = t[:, :, :, 0]
+    t_sin = t[:, :, :, 1]
+    t = torch.atan2(t_sin, t_cos)
+    return t
+
+
 def cal_loss(pred, gold, device):
     ''' Calculate DRMSD loss. '''
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
-    pred_unpadded, gold_unpadded = unpad_angle_vectors(pred, gold, device)
+
+    pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
+    pred, gold = unpad_angle_vectors(pred, gold, device)
 
     losses = []
-    for pred_item, gold_item in zip(pred_unpadded, gold_unpadded):
+    for pred_item, gold_item in zip(pred, gold):
         true_coords = angles2coords(gold_item, device)
         pred_coords = angles2coords(pred_item, device)
-        loss = drmsd(pred_coords, true_coords)/true_coords.shape[0]
+        loss = drmsd(pred_coords, true_coords)
         losses.append(loss)
 
     return torch.mean(torch.stack(losses))
@@ -61,10 +73,11 @@ def train_epoch(model, training_data, optimizer, device):
 
     total_loss = 0
     n_batches = 0.0
+    loss = None
+    training_losses = []
+    pbar = training_data#tqdm(training_data, mininterval=2, desc='  - (Training) Loss = {0}   '.format(loss), leave=False)
 
-    for batch in tqdm(
-            training_data, mininterval=2,
-            desc='  - (Training)   ', leave=False):
+    for batch_num, batch in enumerate(pbar):
 
         # prepare data
         src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
@@ -75,16 +88,21 @@ def train_epoch(model, training_data, optimizer, device):
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
 
         # backward
-        loss = cal_performance(pred, gold, device)
+        loss = cal_loss(pred, gold, device)
+        training_losses.append(float(loss))
         loss.backward()
 
         # update parameters
-        # optimizer.step_and_update_lr()
-        optimizer.step()
+        optimizer.step_and_update_lr()
+        # optimizer.step()
 
         # note keeping
         total_loss += loss.item()
         n_batches += 1
+
+        # pbar.set_description('  - (Training) Loss = {0:.6f}   '.format(float(loss)))
+        # if batch_num % 16 == 0 and len(training_losses) > 32:
+        #     print("Last 32 avg loss = {0:.4f}".format(np.mean(training_losses[-32:])))
 
     return total_loss / n_batches
 
@@ -98,9 +116,10 @@ def eval_epoch(model, validation_data, device):
 
 
     with torch.no_grad():
-        for batch in tqdm(
-                validation_data, mininterval=2,
-                desc='  - (Validation) ', leave=False):
+        for batch in validation_data:
+            # tqdm(
+            #     validation_data, mininterval=2,
+            #     desc='  - (Validation) ', leave=False):
 
             # prepare data
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
@@ -108,7 +127,7 @@ def eval_epoch(model, validation_data, device):
 
             # forward
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss = cal_performance(pred, gold, device)
+            loss = cal_loss(pred, gold, device)
 
             # note keeping
             total_loss += loss.item()
@@ -157,10 +176,10 @@ def train(model, training_data, validation_data, optimizer, device, opt):
 
         valid_losses.append(valid_loss)
 
-        if valid_loss < best_valid_loss_so_far:
+        if opt.step_when and valid_loss < best_valid_loss_so_far:
             best_valid_loss_so_far = valid_loss
             epoch_last_improved = epoch_i
-        elif epoch_i - epoch_last_improved > opt.step_when:
+        elif opt.step_when and epoch_i - epoch_last_improved > opt.step_when:
             # Model hasn't improved in 100 epochs
             print("No improvement for 100 epochs. Stopping model training early.")
             break
@@ -200,7 +219,7 @@ def main():
 
     parser.add_argument('-epoch', type=int, default=10)
     parser.add_argument('-batch_size', type=int, default=64)
-    parser.add_argument('-step_when', type=int, default=100)
+    parser.add_argument('-step_when', type=int, default=None)
 
     parser.add_argument('-d_word_vec', type=int, default=20)
     parser.add_argument('-d_model', type=int, default=256)
@@ -246,14 +265,14 @@ def main():
         n_head=opt.n_head,
         dropout=opt.dropout).to(device)
 
-    # optimizer = ScheduledOptim(
-    #     optim.Adam(
-    #         filter(lambda x: x.requires_grad, transformer.parameters()),
-    #         betas=(0.9, 0.98), eps=1e-09),
-    #     opt.d_model, opt.n_warmup_steps)
+    optimizer = ScheduledOptim(
+        optim.Adam(
+            filter(lambda x: x.requires_grad, transformer.parameters()),
+            betas=(0.9, 0.98), eps=1e-09, lr=1e-12),
+        opt.d_model, opt.n_warmup_steps)
 
-    optimizer =  optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
-                            betas=(0.9, 0.98), eps=1e-09, lr=0.0001)
+    # optimizer =  optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
+    #                         betas=(0.9, 0.98), eps=1e-09, lr=1e-7)
 
     train(transformer, training_data, validation_data, optimizer, device ,opt)
 

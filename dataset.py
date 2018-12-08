@@ -23,7 +23,7 @@ def collate_fn(insts, is_tgt=False):
 
     if is_tgt:
         # TODO Change angle dim to 22
-        pad_dim = 11
+        pad_dim = 22
     else:
         pad_dim = 20
     batch_seq = np.array([

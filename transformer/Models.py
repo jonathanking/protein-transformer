@@ -157,7 +157,7 @@ class Transformer(nn.Module):
     ''' A sequence to sequence model with attention mechanism. '''
 
     def __init__(
-            self, len_max_seq,  d_angle=11,
+            self, len_max_seq,  d_angle=22,
             d_word_vec=20, d_model=512, d_inner=2048,
             n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1):
 
@@ -183,6 +183,7 @@ class Transformer(nn.Module):
         nn.init.xavier_normal_(self.tgt_embedding.weight)
 
         self.x_logit_scale = 1.
+        self.tanh = nn.Tanh()
 
 
     def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):
@@ -194,5 +195,6 @@ class Transformer(nn.Module):
         enc_output, *_ = self.encoder(src_seq, src_pos)
         dec_output, *_ = self.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
         angles = self.tgt_angle_prj(dec_output) * self.x_logit_scale
+        angles = self.tanh(angles)
         return angles
 
