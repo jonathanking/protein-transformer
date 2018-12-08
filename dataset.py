@@ -22,7 +22,6 @@ def collate_fn(insts, is_tgt=False):
     max_len = max(len(inst) for inst in insts)
 
     if is_tgt:
-        # TODO Change angle dim to 22
         pad_dim = 22
     else:
         pad_dim = 20
@@ -39,6 +38,7 @@ def collate_fn(insts, is_tgt=False):
     else:
         batch_seq = torch.FloatTensor(batch_seq)
     batch_pos = torch.LongTensor(batch_pos)
+
 
     return batch_seq, batch_pos
 

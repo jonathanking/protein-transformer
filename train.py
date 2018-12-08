@@ -75,7 +75,7 @@ def train_epoch(model, training_data, optimizer, device):
     n_batches = 0.0
     loss = None
     training_losses = []
-    pbar = training_data#tqdm(training_data, mininterval=2, desc='  - (Training) Loss = {0}   '.format(loss), leave=False)
+    pbar = tqdm(training_data, mininterval=2, desc='  - (Training) Loss = {0}   '.format(loss), leave=False)
 
     for batch_num, batch in enumerate(pbar):
 
@@ -100,9 +100,9 @@ def train_epoch(model, training_data, optimizer, device):
         total_loss += loss.item()
         n_batches += 1
 
-        # pbar.set_description('  - (Training) Loss = {0:.6f}   '.format(float(loss)))
-        # if batch_num % 16 == 0 and len(training_losses) > 32:
-        #     print("Last 32 avg loss = {0:.4f}".format(np.mean(training_losses[-32:])))
+        pbar.set_description('  - (Training) Loss = {0:.6f}   '.format(float(loss)))
+        if batch_num % 5 == 0 and len(training_losses) > 5:
+            print("Last 32 avg loss = {0:.4f}".format(np.mean(training_losses[-32:])))
 
     return total_loss / n_batches
 
@@ -229,7 +229,7 @@ def main():
 
     parser.add_argument('-n_head', type=int, default=8)
     parser.add_argument('-n_layers', type=int, default=6)
-    parser.add_argument('-n_warmup_steps', type=int, default=4000)
+    parser.add_argument('-n_warmup_steps', type=int, default=10)
 
     parser.add_argument('-dropout', type=float, default=0.1)
 
@@ -268,11 +268,11 @@ def main():
     optimizer = ScheduledOptim(
         optim.Adam(
             filter(lambda x: x.requires_grad, transformer.parameters()),
-            betas=(0.9, 0.98), eps=1e-09, lr=1e-12),
+            betas=(0.9, 0.98), eps=1e-09, lr=1e-4),
         opt.d_model, opt.n_warmup_steps)
 
     # optimizer =  optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
-    #                         betas=(0.9, 0.98), eps=1e-09, lr=1e-7)
+    #                         betas=(0.9, 0.98), eps=1e-09, lr=1e-3)
 
     train(transformer, training_data, validation_data, optimizer, device ,opt)
 
