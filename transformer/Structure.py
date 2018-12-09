@@ -3,13 +3,11 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def angles2coords(angles, device):
+def angles2coords(angles, pad_loc, device):
     """ Given an angle tensor, returns a coordinate tensor."""
     coords = initialize_backbone_array(angles, device)
 
-    for i in range(1, len(angles)):
-        if angles[i].sum() == 0:
-            break
+    for i in range(1, pad_loc):
         coords = extend_backbone(i, angles, coords, device)
     return torch.stack(coords)
 

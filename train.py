@@ -20,7 +20,7 @@ from transformer.Structure import angles2coords, drmsd
 from torch import multiprocessing
 
 
-def unpad_angle_vectors(pred, gold, device):
+def copy_padding_from_gold(pred, gold, device):
     not_padded_mask = (gold != 0)
     if device.type == "cuda":
         pred_unpadded = pred.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
@@ -47,12 +47,13 @@ def cal_loss(pred, gold, device):
     pred, gold = pred.to(device), gold.to(device)
 
     pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
-    pred, gold = unpad_angle_vectors(pred, gold, device)
+    pred, gold = copy_padding_from_gold(pred, gold, device)
 
     losses = []
     for pred_item, gold_item in zip(pred, gold):
-        true_coords = angles2coords(gold_item, device)
-        pred_coords = angles2coords(pred_item, device)
+        pad_loc = int(np.argmax((gold_item == 0).sum(dim=-1)))
+        true_coords = angles2coords(gold_item, pad_loc, device)
+        pred_coords = angles2coords(pred_item, pad_loc, device)
         loss = drmsd(pred_coords, true_coords)
         losses.append(loss)
 
@@ -63,7 +64,7 @@ def mse_loss(pred, gold):
     """ Computes MSE loss."""
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
-    pred_unpadded, gold_unpadded = unpad_angle_vectors(pred, gold, device)
+    pred_unpadded, gold_unpadded = copy_padding_from_gold(pred, gold, device)
     return F.mse_loss(pred_unpadded, gold_unpadded)
 
 def train_epoch(model, training_data, optimizer, device):
