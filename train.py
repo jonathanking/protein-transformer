@@ -52,6 +52,8 @@ def cal_loss(pred, gold, device):
     losses = []
     for pred_item, gold_item in zip(pred, gold):
         pad_loc = int(np.argmax((gold_item == 0).sum(dim=-1)))
+        if pad_loc is 0:
+            pad_loc = gold_item.shape[0]
         true_coords = angles2coords(gold_item, pad_loc, device)
         pred_coords = angles2coords(pred_item, pad_loc, device)
         loss = drmsd(pred_coords, true_coords)
