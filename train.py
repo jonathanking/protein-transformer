@@ -101,9 +101,11 @@ def train_epoch(model, training_data, optimizer, device):
         total_loss += loss.item()
         n_batches += 1
 
-        pbar.set_description('  - (Training) Loss = {0:.6f}   '.format(float(loss)))
-        if batch_num % 5 == 0 and len(training_losses) > 5:
-            print("Last 32 avg loss = {0:.4f}".format(np.mean(training_losses[-32:])))
+        if len(training_losses) > 32:
+            pbar.set_description('  - (Training) Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr))
+        else:
+            pbar.set_description('  - (Training) Loss = {0:.6f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr))
+
 
     return total_loss / n_batches
 
