@@ -81,7 +81,10 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
     n_batches = 0.0
     loss = None
     training_losses = []
-    pbar = tqdm(training_data, mininterval=2, desc='  - (Training) Loss = {0}   '.format(loss), leave=False)
+    if not opt.print_loss:
+        pbar = tqdm(training_data, mininterval=2, desc='  - (Training) Loss = {0}   '.format(loss), leave=False)
+    else:
+        pbar = training_data
 
     for batch_num, batch in enumerate(pbar):
 
@@ -98,6 +101,18 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
         training_losses.append(float(loss_norm))
         loss.backward()
 
+        # Clip gradients
+        torch.nn.utils.clip_grad_norm_(model.parameters(), opt.clip)
+
+        if torch.isnan(loss):
+            print("NaN loss received. Trying next batch.")
+            continue
+        if opt.print_loss and len(training_losses) > 32:
+            print('Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
+                float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr, loss_norm))
+        # elif opt.print_loss:
+        #     print('Loss = {0:.6f}, NLoss = {2:.2f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr, float(loss_norm)))
+
         # update parameters
         optimizer.step_and_update_lr()
         # optimizer.step()
@@ -106,10 +121,10 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
         total_loss += loss.item()
         n_batches += 1
 
-        if len(training_losses) > 32:
+        if not opt.print_loss and len(training_losses) > 32:
             pbar.set_description('  - (Training) Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
                 float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr, loss_norm))
-        else:
+        elif not opt.print_loss:
             pbar.set_description('  - (Training) Loss = {0:.6f}, NLoss = {2:.2f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr, loss_norm))
 
         if opt.batch_log and  batch_num % 100 == 0:
@@ -252,6 +267,7 @@ def main():
     parser.add_argument('-epoch', type=int, default=10)
     parser.add_argument('-batch_size', type=int, default=64)
     parser.add_argument('-step_when', type=int, default=None)
+    parser.add_argument('-clip', type=float, default=1.0)
 
     parser.add_argument('-d_word_vec', type=int, default=20)
     parser.add_argument('-d_model', type=int, default=256)
@@ -261,7 +277,7 @@ def main():
 
     parser.add_argument('-n_head', type=int, default=8)
     parser.add_argument('-n_layers', type=int, default=6)
-    parser.add_argument('-n_warmup_steps', type=int, default=10)
+    parser.add_argument('-n_warmup_steps', type=int, default=75)
 
     parser.add_argument('-dropout', type=float, default=0.1)
 
@@ -269,6 +285,7 @@ def main():
     parser.add_argument('-save_model', default=None)
     parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='best')
     parser.add_argument('-batch_log', action='store_true', help="Save the model on a batch performance basis. Uses length-normalized DRMSD.")
+    parser.add_argument('-print_loss', action='store_true')
 
     parser.add_argument('-no_cuda', action='store_true')
     parser.add_argument('-label_smoothing', action='store_true')
@@ -301,7 +318,7 @@ def main():
     optimizer = ScheduledOptim(
         optim.Adam(
             filter(lambda x: x.requires_grad, transformer.parameters()),
-            betas=(0.9, 0.98), eps=1e-09, lr=1e-4),
+            betas=(0.9, 0.98), eps=1e-09, lr=1e-5),
         opt.d_model, opt.n_warmup_steps)
 
     # optimizer =  optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
