@@ -50,6 +50,7 @@ def cal_loss(pred, gold, device):
     pred, gold = copy_padding_from_gold(pred, gold, device)
 
     losses = []
+    loss_norms = []
     for pred_item, gold_item in zip(pred, gold):
         pad_loc = int(np.argmax((gold_item == 0).sum(dim=-1)))
         if pad_loc is 0:
@@ -57,9 +58,11 @@ def cal_loss(pred, gold, device):
         true_coords = angles2coords(gold_item, pad_loc, device)
         pred_coords = angles2coords(pred_item, pad_loc, device)
         loss = drmsd(pred_coords, true_coords)
+        loss_norm = loss * 100 / pad_loc
         losses.append(loss)
+        loss_norms.append(loss_norm)
 
-    return torch.mean(torch.stack(losses))
+    return torch.mean(torch.stack(losses)), torch.mean(torch.stack(loss_norms))
 
 
 def mse_loss(pred, gold):
@@ -69,7 +72,7 @@ def mse_loss(pred, gold):
     pred_unpadded, gold_unpadded = copy_padding_from_gold(pred, gold, device)
     return F.mse_loss(pred_unpadded, gold_unpadded)
 
-def train_epoch(model, training_data, optimizer, device):
+def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
     ''' Epoch operation in training phase'''
 
     model.train()
@@ -91,8 +94,8 @@ def train_epoch(model, training_data, optimizer, device):
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
 
         # backward
-        loss = cal_loss(pred, gold, device)
-        training_losses.append(float(loss))
+        loss, loss_norm = cal_loss(pred, gold, device)
+        training_losses.append(float(loss_norm))
         loss.backward()
 
         # update parameters
@@ -104,9 +107,13 @@ def train_epoch(model, training_data, optimizer, device):
         n_batches += 1
 
         if len(training_losses) > 32:
-            pbar.set_description('  - (Training) Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr))
+            pbar.set_description('  - (Training) Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
+                float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr, loss_norm))
         else:
-            pbar.set_description('  - (Training) Loss = {0:.6f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr))
+            pbar.set_description('  - (Training) Loss = {0:.6f}, NLoss = {2:.2f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr, loss_norm))
+
+        if opt.batch_log and  batch_num % 100 == 0:
+            save_model_and_log_per_batch(opt, model, loss_norm, training_losses, log_train_file)
 
 
     return total_loss / n_batches
@@ -166,8 +173,7 @@ def train(model, training_data, validation_data, optimizer, device, opt):
         print('[ Epoch', epoch_i, ']')
 
         start = time.time()
-        train_loss = train_epoch(
-            model, training_data, optimizer, device)
+        train_loss = train_epoch(model, training_data, optimizer, device, opt, log_train_file)
         print('  - (Training)   loss: {loss: 8.5f} '\
               'elapse: {elapse:3.3f} min'.format(
                   loss=train_loss,
@@ -191,29 +197,51 @@ def train(model, training_data, validation_data, optimizer, device, opt):
             break
 
 
-        # Record model state and log training info
-        model_state_dict = model.state_dict()
-        checkpoint = {
-            'model': model_state_dict,
-            'settings': opt,
-            'epoch': epoch_i}
 
-        if opt.save_model:
-            if opt.save_mode == 'all':
-                model_name = opt.save_model + '_loss_{vloss:3.3f}.chkpt'.format(vloss=valid_loss)
+        save_model_and_log(opt, model, valid_loss, valid_losses, log_train_file, log_valid_file, train_loss, epoch_i)
+
+
+
+
+def save_model_and_log(opt, model, valid_loss, valid_losses, log_train_file, log_valid_file, train_loss, epoch_i):
+    # Record model state and log training info
+    model_state_dict = model.state_dict()
+    checkpoint = {
+        'model': model_state_dict,
+        'settings': opt,
+        'epoch': epoch_i}
+
+    if opt.save_model:
+        if opt.save_mode == 'all':
+            model_name = opt.save_model + '_loss_{vloss:3.3f}.chkpt'.format(vloss=valid_loss)
+            torch.save(checkpoint, model_name)
+        elif opt.save_mode == 'best':
+            model_name = opt.save_model + '.chkpt'
+            if valid_loss <= min(valid_losses):
                 torch.save(checkpoint, model_name)
-            elif opt.save_mode == 'best':
-                model_name = opt.save_model + '.chkpt'
-                if valid_loss <= min(valid_losses):
-                    torch.save(checkpoint, model_name)
-                    print('    - [Info] The checkpoint file has been updated.')
-
-        if log_train_file and log_valid_file:
-            with open(log_train_file, 'a') as log_tf, open(log_valid_file, 'a') as log_vf:
+                print('    - [Info] The checkpoint file has been updated.')
+    if log_train_file and log_valid_file:
+        with open(log_train_file, 'a') as log_tf, open(log_valid_file, 'a') as log_vf:
+            if not opt.batch_log:
                 log_tf.write('{epoch},{loss: 8.5f}\n'.format(
                     epoch=epoch_i, loss=train_loss))
-                log_vf.write('{epoch},{loss: 8.5f}\n'.format(
-                    epoch=epoch_i, loss=valid_loss))
+            log_vf.write('{epoch},{loss: 8.5f}\n'.format(
+                epoch=epoch_i, loss=valid_loss))
+
+def save_model_and_log_per_batch(opt, model, train_loss, train_losses, log_train_file):
+    # Record model state and log training info
+    model_state_dict = model.state_dict()
+    checkpoint = {
+        'model': model_state_dict,
+        'settings': opt}
+
+    if opt.save_model:
+        model_name = opt.save_model + '_loss_{vloss:3.3f}.chkpt'.format(vloss=train_loss)
+        torch.save(checkpoint, model_name)
+        print('    - [Info] The checkpoint file has been updated.')
+    if log_train_file:
+        with open(log_train_file, 'a') as log_tf:
+            log_tf.write('{loss: 8.5f}\n'.format(loss=train_loss))
 
 def main():
     ''' Main function '''
@@ -240,6 +268,7 @@ def main():
     parser.add_argument('-log', default=None)
     parser.add_argument('-save_model', default=None)
     parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='best')
+    parser.add_argument('-batch_log', action='store_true', help="Save the model on a batch performance basis. Uses length-normalized DRMSD.")
 
     parser.add_argument('-no_cuda', action='store_true')
     parser.add_argument('-label_smoothing', action='store_true')
