@@ -19,7 +19,6 @@ from transformer.Optim import ScheduledOptim
 from transformer.Structure import angles2coords, drmsd
 from torch import multiprocessing
 
-
 def copy_padding_from_gold(pred, gold, device):
     not_padded_mask = (gold != 0)
     if device.type == "cuda":
@@ -104,9 +103,6 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
         # Clip gradients
         torch.nn.utils.clip_grad_norm_(model.parameters(), opt.clip)
 
-        if torch.isnan(loss):
-            print("NaN loss received. Trying next batch.")
-            continue
         if opt.print_loss and len(training_losses) > 32:
             print('Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
                 float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr, loss_norm))
@@ -155,7 +151,7 @@ def eval_epoch(model, validation_data, device):
 
             # forward
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss = cal_loss(pred, gold, device)
+            loss, loss_norm = cal_loss(pred, gold, device)
 
             # note keeping
             total_loss += loss.item()
@@ -329,7 +325,6 @@ def main():
 def prepare_dataloaders(data, opt):
     """ data is a dictionary containing all necessary training data."""
     # ========= Preparing DataLoader =========#
-    # TODO create "data.pkl" file which is a dictionary with the necessary data
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=data['train']['seq'],

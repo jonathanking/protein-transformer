@@ -117,7 +117,8 @@ def drmsd(a, b):
 
     a_ = pairwise_internal_dist(a)
     b_ = pairwise_internal_dist(b)
-    return torch.sqrt(torch.mean((a_ - b_)**2))
+    res =  torch.sqrt(torch.mean((a_ - b_)**2) + 1e-10)
+    return res
 
     # num_elems = a_.shape[0]
     #
@@ -136,5 +137,5 @@ def pairwise_internal_dist(coords):
     c1 = coords.unsqueeze(1)
     c2 = coords.unsqueeze(0)
     z = c1 - c2 + 1e-10  # (L x L x 3)
-    res = torch.norm(z, dim=2)         # (L x L)
+    res = torch.norm(z, dim=2)
     return res
