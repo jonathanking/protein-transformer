@@ -40,7 +40,14 @@ def inverse_trig_transform(t):
     return t
 
 
-def cal_loss(pred, gold, device):
+def cal_loss(pred, gold, device, alpha=3):
+    d_loss, dnorm_loss = drmsd_loss(pred, gold, device)
+    m_loss = mse_loss(pred, gold)
+
+    return (m_loss / 2.894) + (d_loss / 18.3745), 0
+
+
+def drmsd_loss(pred, gold, device):
     ''' Calculate DRMSD loss. '''
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
@@ -68,7 +75,9 @@ def mse_loss(pred, gold):
     """ Computes MSE loss."""
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
+    pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
     pred_unpadded, gold_unpadded = copy_padding_from_gold(pred, gold, device)
+
     return F.mse_loss(pred_unpadded, gold_unpadded)
 
 def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
