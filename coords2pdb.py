@@ -33,11 +33,12 @@ print('Pickle successfully found and loaded')
 with open(os.path.join(outdir, "order.txt"), "w") as order_file:
     for key in dic.keys():
         order_file.write(key + "\n")
-        new_coords = dic[key]
+        new_coords, loss, loss_norm = dic[key]
         pdb_id = key.split('_')[0]
         chain_id = key.split("_")[-1]
 
         prot = parsePDB(pdb_id)
+        print(pdb_id, chain_id)
 
         #dealing with multiple coordsets
         if len(prot.getCoordsets())>1:
@@ -54,5 +55,5 @@ with open(os.path.join(outdir, "order.txt"), "w") as order_file:
             print('Error! Shape mismatch for ' + str(key))
         else:
             backbone.setCoords(new_coords)
-            writePDB(os.path.join(outdir,  pdb_id + '_pred.pdb'), backbone)
+            writePDB(os.path.join(outdir,  pdb_id + '_pred_{0:.2f}_n{1:.2f}.pdb'.format(loss, loss_norm)), backbone)
 
