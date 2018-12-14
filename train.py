@@ -40,11 +40,14 @@ def inverse_trig_transform(t):
     return t
 
 
-def cal_loss(pred, gold, device, alpha=3):
-    d_loss, dnorm_loss = drmsd_loss(pred, gold, device)
-    m_loss = mse_loss(pred, gold)
+def cal_loss(pred, gold, device, combined=True):
+    if combined:
+        d_loss, dnorm_loss = drmsd_loss(pred, gold, device)
+        m_loss = mse_loss(pred, gold)
 
-    return (m_loss / 2.894) + (d_loss / 18.3745), 0
+        return (m_loss / 2.894) + (d_loss / 18.3745), 0
+    else:
+        return drmsd_loss(pred, gold, device)
 
 
 def drmsd_loss(pred, gold, device):
