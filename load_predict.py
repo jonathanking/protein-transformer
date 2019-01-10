@@ -41,10 +41,22 @@ the_model = transformer.Models.Transformer(opt.max_token_seq_len,
 the_model.load_state_dict(model_state)
 
 data = torch.load(opt.data)
+
+to_predict = ["2C77_A", "1NS3_A", "4W2R_E"]
+actual_order = []
+seqs = []
+angs = []
+for i, prot in enumerate(data[dataset]["ids"]):
+    if prot.upper() in to_predict:
+        seqs.append(data[dataset]["seq"][i])
+        angs.append(data[dataset]["ang"][i])
+        actual_order.append(prot)
+assert len(seqs) == 3 and len(angs) ==3
+
 data_loader = torch.utils.data.DataLoader(
     ProteinDataset(
-        seqs=data[dataset]['seq'],
-        angs=data[dataset]['ang']),
+        seqs=seqs,#data[dataset]['seq'],
+        angs=angs),#data[dataset]['ang']),
     num_workers=2,
     batch_size=1,
     collate_fn=paired_collate_fn,
@@ -84,7 +96,7 @@ with torch.no_grad():
         #    break
 
     d = {}
-    for key, val in zip(data['test']['ids'], cords_list):
+    for key, val in zip(actual_order, cords_list):
         d[key] = val
 
     with open(out_path, 'wb') as f:
