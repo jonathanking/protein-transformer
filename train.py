@@ -4,6 +4,7 @@ This script handling the training process.
 
 import argparse
 import math
+import os
 import time
 
 import numpy as np
@@ -92,7 +93,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
     n_batches = 0.0
     loss = None
     training_losses = []
-    if not opt.print_loss:
+    if True:#not opt.print_loss:
         pbar = tqdm(training_data, mininterval=2, desc='  - (Training) Loss = {0}   '.format(loss), leave=False)
     else:
         pbar = training_data
@@ -108,7 +109,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
 
         # backward
-        loss, loss_norm = cal_loss(pred, gold, device)
+        loss, loss_norm = cal_loss(pred, gold, device, combined=opt.combined_loss)
         training_losses.append(float(loss_norm))
         loss.backward()
 
@@ -181,6 +182,7 @@ def train(model, training_data, validation_data, optimizer, device, opt):
     if opt.log:
         log_train_file = opt.log + '.train.log'
         log_valid_file = opt.log + '.valid.log'
+        os.makedirs(os.path.dirname(log_train_file), exist_ok=True)
 
         print('[Info] Training performance will be written to file: {} and {}'.format(
             log_train_file, log_valid_file))
@@ -235,6 +237,7 @@ def save_model_and_log(opt, model, valid_loss, valid_losses, log_train_file, log
         'epoch': epoch_i}
 
     if opt.save_model:
+        os.makedirs(os.path.dirname(opt.save_model), exist_ok=True)
         if opt.save_mode == 'all':
             model_name = opt.save_model + '_loss_{vloss:3.3f}.chkpt'.format(vloss=valid_loss)
             torch.save(checkpoint, model_name)
@@ -276,6 +279,7 @@ def main():
     parser.add_argument('-batch_size', type=int, default=64)
     parser.add_argument('-step_when', type=int, default=None)
     parser.add_argument('-clip', type=float, default=1.0)
+    parser.add_argument('-combined_loss', action='store_true', help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
 
     parser.add_argument('-d_word_vec', type=int, default=20)
     parser.add_argument('-d_model', type=int, default=256)
