@@ -44,9 +44,13 @@ def inverse_trig_transform(t):
 def cal_loss(pred, gold, device, combined=True):
     if combined:
         d_loss, dnorm_loss = drmsd_loss(pred, gold, device)
-        m_loss = mse_loss(pred, gold)
+        m_loss, mnorm_loss = mse_loss(pred, gold)
 
-        return (m_loss / 2.894) + (d_loss / 18.3745), 0
+        def comb(m , d):
+            return (m / 2.894) + (d / 18.3745)
+
+
+        return comb(m_loss, d_loss), comb(mnorm_loss, dnorm_loss)
     else:
         return drmsd_loss(pred, gold, device)
 
@@ -78,11 +82,16 @@ def drmsd_loss(pred, gold, device):
 def mse_loss(pred, gold):
     """ Computes MSE loss."""
     device = torch.device("cpu")
+
     pred, gold = pred.to(device), gold.to(device)
     pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
     pred_unpadded, gold_unpadded = copy_padding_from_gold(pred, gold, device)
+    pad_loc = int(np.argmax((gold == 0).sum(dim=-1)))
+    if pad_loc is 0:
+        pad_loc = gold.shape[0]
+    mse = F.mse_loss(pred_unpadded, gold_unpadded)
 
-    return F.mse_loss(pred_unpadded, gold_unpadded)
+    return mse, mse / float(pad_loc)
 
 def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
     ''' Epoch operation in training phase'''
@@ -93,7 +102,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
     n_batches = 0.0
     loss = None
     training_losses = []
-    if True:#not opt.print_loss:
+    if not opt.print_loss:
         pbar = tqdm(training_data, mininterval=2, desc='  - (Training) Loss = {0}   '.format(loss), leave=False)
     else:
         pbar = training_data
@@ -119,6 +128,9 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
         if opt.print_loss and len(training_losses) > 32:
             print('Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
                 float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr, loss_norm))
+        elif opt.print_loss and len(training_losses) <= 32:
+            print('Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
+                float(loss), np.mean(training_losses), optimizer.cur_lr, loss_norm))
         # elif opt.print_loss:
         #     print('Loss = {0:.6f}, NLoss = {2:.2f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr, float(loss_norm)))
 

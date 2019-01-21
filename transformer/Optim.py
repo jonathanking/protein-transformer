@@ -9,7 +9,7 @@ class ScheduledOptim():
         self.n_warmup_steps = n_warmup_steps
         self.n_current_steps = 0
         self.init_lr = np.power(d_model, -0.5)
-        self.cur_lr = None
+        self.cur_lr = self.init_lr
 
     def step_and_update_lr(self):
         "Step with the inner optimizer"
