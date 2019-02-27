@@ -5,7 +5,8 @@ import transformer.SubLayers
 import transformer.Models
 import transformer.Optim
 import transformer.Structure
+import transformer.Sidechains
 
 __all__ = [
     transformer.Constants, transformer.Modules, transformer.Layers,
-    transformer.SubLayers, transformer.Models, transformer.Structure]
+    transformer.SubLayers, transformer.Models, transformer.Structure, transformer.Sidechains]

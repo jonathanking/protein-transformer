@@ -1,18 +1,33 @@
 import torch
 import numpy as np
 import torch.nn.functional as F
+import Sidechains
 
-
-def angles2coords(angles, pad_loc, device):
-    """ Given an angle tensor, returns a coordinate tensor."""
-    coords = initialize_backbone_array(angles, device)
+def generate_coords(angles, pad_loc, input_seq, device):
+    """ Given a tensor of angles (L x 11), produces the entire set of cartesian coordinates using the NeRF method,
+        (L x A` x 3), where A` is the number of atoms generated (depends on amino acid sequence)."""
+    bb_arr = init_backbone(angles, device)
+    sc_arr = init_sidechain(angles, bb_arr)
 
     for i in range(1, pad_loc):
-        coords = extend_backbone(i, angles, coords, device)
-    return torch.stack(coords)
+        bb_pts = extend_backbone(i, angles, bb_arr, device)
+        bb_arr += bb_pts
+
+        # Extend sidechain
+        sc_pts = Sidechains.extend_sidechain(i, angles, bb_arr, sc_arr, input_seq)
+        sc_arr += sc_pts
 
 
-def initialize_backbone_array(angles, device):
+    return torch.stack(bb_arr + sc_arr)
+
+
+def init_sidechain(angles, backbone):
+    """ Builds the first sidechain based off of the first backbone atoms."""
+    # TODO init sidechains
+    return [torch.zeros(3)]
+
+
+def init_backbone(angles, device):
     """ Given an angle matrix (RES x ANG), this initializes the first 3 backbone points (which are arbitrary) and
         returns a TensorArray of the size required to hold all the coordinates. """
     bondlens = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379}
@@ -39,7 +54,7 @@ def initialize_backbone_array(angles, device):
 def extend_backbone(i, angles, coords, device):
     """ Returns backbone coordinates for the residue angles[pos]."""
     bondlens = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379}
-
+    bb_pts = []
     for j in range(3):
         if j == 0:
             # we are placing N
@@ -60,13 +75,14 @@ def extend_backbone(i, angles, coords, device):
         p2 = coords[-2]
         p1 = coords[-1]
         next_pt = nerf(p3, p2, p1, b, t, dihedral, device)
-        coords.append(next_pt)
+        bb_pts.append(next_pt)
 
 
-    return coords
+    return bb_pts
 
 
 def l2_normalize(t, device, eps=1e-12):
+    """ Safe L2-normalization for pytorch."""
     epsilon = torch.FloatTensor([eps]).to(device)
     return t / torch.sqrt(torch.max((t**2).sum(), epsilon))
 
@@ -109,33 +125,3 @@ def nerf(a, b, c, l, theta, chi, device):
     res = c + torch.mm(M, d).squeeze()
 
     return res.squeeze()
-
-
-def drmsd(a, b):
-    """ Given two coordinate tensors, returns the dRMSD score between them.
-        Both tensors must be the exact same shape. """
-
-    a_ = pairwise_internal_dist(a)
-    b_ = pairwise_internal_dist(b)
-    res =  torch.sqrt(torch.mean((a_ - b_)**2) + 1e-10)
-    return res
-
-    # num_elems = a_.shape[0]
-    #
-    # # Option 1 - RMSD as expected. Sqrt placement can be altered to mimic MAQ's description below.
-    # sq_diff = (a_**2) - (b_**2)
-    # summed = sq_diff.sum()
-    # mean = summed / num_elems
-    # res = torch.sqrt(mean)
-    #
-    #
-    # return res
-
-
-def pairwise_internal_dist(coords):
-    """ Returns a tensor of the pairwise distances between all points in coords. """
-    c1 = coords.unsqueeze(1)
-    c2 = coords.unsqueeze(0)
-    z = c1 - c2 + 1e-10  # (L x L x 3)
-    res = torch.norm(z, dim=2)
-    return res

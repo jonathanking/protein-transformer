@@ -9,86 +9,13 @@ import time
 import numpy as np
 from tqdm import tqdm
 import torch
-import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
 from dataset import paired_collate_fn, ProteinDataset
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
-from transformer.Structure import angles2coords, drmsd
+from losses import cal_loss
 
-def copy_padding_from_gold(pred, gold, device):
-    not_padded_mask = (gold != 0)
-    if device.type == "cuda":
-        pred_unpadded = pred.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
-        gold_unpadded = gold.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
-    else:
-        pred_unpadded = pred * not_padded_mask.type(torch.FloatTensor)
-        gold_unpadded = gold * not_padded_mask.type(torch.FloatTensor)
-    return pred_unpadded, gold_unpadded
-
-
-def inverse_trig_transform(t):
-    """ Given a (BATCH x L X 22) tensor, returns (BATCH X L X 11) tensor.
-        Performs atan2 transformation from sin and cos values."""
-    t = t.view(t.shape[0], -1, 11, 2)
-    t_cos = t[:, :, :, 0]
-    t_sin = t[:, :, :, 1]
-    t = torch.atan2(t_sin, t_cos)
-    return t
-
-
-def cal_loss(pred, gold, device, combined=True):
-    if combined:
-        d_loss, dnorm_loss = drmsd_loss(pred, gold, device)
-        m_loss, mnorm_loss = mse_loss(pred, gold)
-
-        def comb(m , d):
-            return (m / 2.894) + (d / 18.3745)
-
-
-        return comb(m_loss, d_loss), comb(mnorm_loss, dnorm_loss)
-    else:
-        return drmsd_loss(pred, gold, device)
-
-
-def drmsd_loss(pred, gold, device):
-    ''' Calculate DRMSD loss. '''
-    device = torch.device("cpu")
-    pred, gold = pred.to(device), gold.to(device)
-
-    pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
-    pred, gold = copy_padding_from_gold(pred, gold, device)
-
-    losses = []
-    loss_norms = []
-    for pred_item, gold_item in zip(pred, gold):
-        pad_loc = int(np.argmax((gold_item == 0).sum(dim=-1)))
-        if pad_loc is 0:
-            pad_loc = gold_item.shape[0]
-        true_coords = angles2coords(gold_item, pad_loc, device)
-        pred_coords = angles2coords(pred_item, pad_loc, device)
-        loss = drmsd(pred_coords, true_coords)
-        loss_norm = loss * 100 / pad_loc
-        losses.append(loss)
-        loss_norms.append(loss_norm)
-
-    return torch.mean(torch.stack(losses)), torch.mean(torch.stack(loss_norms))
-
-
-def mse_loss(pred, gold):
-    """ Computes MSE loss."""
-    device = torch.device("cpu")
-
-    pred, gold = pred.to(device), gold.to(device)
-    pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
-    pred_unpadded, gold_unpadded = copy_padding_from_gold(pred, gold, device)
-    pad_loc = int(np.argmax((gold == 0).sum(dim=-1)))
-    if pad_loc is 0:
-        pad_loc = gold.shape[0]
-    mse = F.mse_loss(pred_unpadded, gold_unpadded)
-
-    return mse, mse / float(pad_loc)
 
 def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
     ''' Epoch operation in training phase'''
@@ -115,7 +42,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
 
         # backward
-        loss, loss_norm = cal_loss(pred, gold, device, combined=opt.combined_loss)
+        loss, loss_norm = cal_loss(pred, gold, src_seq, device, combined=opt.combined_loss)
         training_losses.append(float(loss_norm))
         loss.backward()
 
@@ -173,7 +100,7 @@ def eval_epoch(model, validation_data, device):
 
             # forward
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss, loss_norm = cal_loss(pred, gold, device)
+            loss, loss_norm = cal_loss(pred, gold, src_seq, device)
 
             # note keeping
             total_loss += loss.item()
