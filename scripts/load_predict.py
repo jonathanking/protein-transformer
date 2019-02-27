@@ -90,7 +90,7 @@ with torch.no_grad():
         #     pad_loc = gold.shape[1]
 
         print('Loss: {0:.2f}, NLoss: {1:.2f}, Predshape: {2}'.format(float(loss), float(loss_norm), pred.shape))
-        coords = struct.angles2coords(pred[0], pred.shape[1], torch.device('cpu'))
+        coords = struct.generate_coords(pred[0], pred.shape[1], torch.device('cpu'))
         cords_list.append((np.asarray(coords), float(loss), float(loss_norm)))
         #if len(cords_list) > 50:
         #    break
