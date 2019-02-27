@@ -46,7 +46,6 @@ def get_attn_key_pad_mask(seq_k, seq_q):
 
 def get_subsequent_mask(seq):
     ''' For masking out the subsequent info. '''
-    # TODO: What is subsequent mask? Did I modify it correctly?
 
     sz_b, len_s, dim_s = seq.size()
     subsequent_mask = torch.triu(
@@ -54,8 +53,7 @@ def get_subsequent_mask(seq):
     subsequent_mask = subsequent_mask.unsqueeze(0).expand(sz_b, -1, -1)  # b x ls x ls
 
     return subsequent_mask
-# TODO: remove all word to index Embeddings
-# TODO: attempt to use protein data in the model and train with MSE loss
+
 
 class Encoder(nn.Module):
     ''' A encoder model with self attention mechanism. '''
@@ -135,7 +133,6 @@ class Decoder(nn.Module):
         dec_enc_attn_mask = get_attn_key_pad_mask(seq_k=src_seq, seq_q=tgt_seq)
 
         # -- Forward
-        # TODO: modify decoder output. last layer should emit Batch*L*11*2. 
         dec_output = tgt_seq + self.position_enc(tgt_pos)
 
         for dec_layer in self.layer_stack:

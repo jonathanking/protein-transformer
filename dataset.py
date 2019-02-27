@@ -2,7 +2,6 @@ import numpy as np
 import torch
 import torch.utils.data
 
-from transformer import Constants
 
 def paired_collate_fn(insts):
     """ This function creates mini-batches (4-tuples) of src_seq/pos,
@@ -16,8 +15,6 @@ def paired_collate_fn(insts):
 
 def collate_fn(insts, is_tgt=False):
     ''' Pad the instance to the max seq length in batch '''
-    # TODO: How to collate input/output such that Tensor datatypes are correct
-    # TODO: Must create separate iterators for each input/output data
 
     max_len = max(len(inst) for inst in insts)
 

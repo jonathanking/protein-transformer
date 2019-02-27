@@ -3,7 +3,6 @@ This script handling the training process.
 '''
 
 import argparse
-import math
 import os
 import time
 
@@ -13,12 +12,10 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
-import transformer.Constants as Constants
 from dataset import paired_collate_fn, ProteinDataset
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 from transformer.Structure import angles2coords, drmsd
-from torch import multiprocessing
 
 def copy_padding_from_gold(pred, gold, device):
     not_padded_mask = (gold != 0)
