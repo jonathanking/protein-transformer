@@ -1,49 +1,52 @@
 import torch
 import numpy as np
-import torch.nn.functional as F
 import Sidechains
+
+BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379}
 
 def generate_coords(angles, pad_loc, input_seq, device):
     """ Given a tensor of angles (L x 11), produces the entire set of cartesian coordinates using the NeRF method,
         (L x A` x 3), where A` is the number of atoms generated (depends on amino acid sequence)."""
     bb_arr = init_backbone(angles, device)
-    sc_arr = init_sidechain(angles, bb_arr)
+    sc_arr = init_sidechain(angles, bb_arr, input_seq)
 
     for i in range(1, pad_loc):
         bb_pts = extend_backbone(i, angles, bb_arr, device)
         bb_arr += bb_pts
 
         # Extend sidechain
-        sc_pts = Sidechains.extend_sidechain(i, angles, bb_arr, sc_arr, input_seq)
+        sc_pts = Sidechains.extend_sidechain(i, angles, bb_arr, input_seq)
         sc_arr += sc_pts
 
 
     return torch.stack(bb_arr + sc_arr)
 
 
-def init_sidechain(angles, backbone):
-    """ Builds the first sidechain based off of the first backbone atoms."""
-    # TODO init sidechains
-    return [torch.zeros(3)]
+def init_sidechain(angles, bb_arr, input_seq):
+    """ Builds the first sidechain based off of the first backbone atoms and a ficticious previous atom.
+        This allows us to reuse the extend_sidechain method. Assumes the first atom of the backbone is at (0,0,0). """
+    fake_prev_c = torch.zeros(3)
+    fake_prev_c[0] = -np.cos(np.pi - 122) * BONDLENS["c-n"]
+    fake_prev_c[1] = -np.sin(np.pi - 122) * BONDLENS["c-n"]
+    sc = Sidechains.extend_sidechain(0, angles, [fake_prev_c] + bb_arr, input_seq)
+    return sc
 
 
 def init_backbone(angles, device):
     """ Given an angle matrix (RES x ANG), this initializes the first 3 backbone points (which are arbitrary) and
         returns a TensorArray of the size required to hold all the coordinates. """
-    bondlens = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379}
     a1 = torch.zeros(3).to(device)
 
     if device.type == "cuda":
-        a2 = a1 + torch.cuda.FloatTensor([bondlens["n-ca"], 0, 0])
-        a3x = torch.cos(np.pi - angles[0, 3]) * bondlens["ca-c"]
-        a3y = torch.sin(np.pi - angles[0, 3]) * bondlens['ca-c']
-        a3 = torch.cuda.FloatTensor([a3x, a3y, 0])
+        a2 = a1 + torch.cuda.FloatTensor([BONDLENS["n-ca"], 0, 0])
+        a3x = torch.cos(np.pi - angles[0, 3]) * BONDLENS["ca-c"]
+        a3y = torch.sin(np.pi - angles[0, 3]) * BONDLENS['ca-c']
+        a3 = a2 + torch.cuda.FloatTensor([a3x, a3y, 0])
     else:
-        a2 = a1 + torch.FloatTensor([bondlens["n-ca"], 0, 0])
-        a3x = torch.cos(np.pi - angles[0, 3]) * bondlens["ca-c"]
-        a3y = torch.sin(np.pi - angles[0, 3]) * bondlens['ca-c']
-        a3 = torch.FloatTensor([a3x, a3y, 0])
-
+        a2 = a1 + torch.FloatTensor([BONDLENS["n-ca"], 0, 0])
+        a3x = torch.cos(np.pi - angles[0, 3]) * BONDLENS["ca-c"]
+        a3y = torch.sin(np.pi - angles[0, 3]) * BONDLENS['ca-c']
+        a3 = a2 + torch.FloatTensor([a3x, a3y, 0])
 
 
     starting_coords = [a1, a2, a3]
@@ -53,23 +56,22 @@ def init_backbone(angles, device):
 
 def extend_backbone(i, angles, coords, device):
     """ Returns backbone coordinates for the residue angles[pos]."""
-    bondlens = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379}
     bb_pts = []
     for j in range(3):
         if j == 0:
             # we are placing N
             t = angles[i, 4]  # thetas["ca-c-n"]
-            b = bondlens["c-n"]
+            b = BONDLENS["c-n"]
             dihedral = angles[i - 1, 1]  # psi of previous residue
         elif j == 1:
             # we are placing Ca
             t = angles[i, 5]  # thetas["c-n-ca"]
-            b = bondlens["n-ca"]
+            b = BONDLENS["n-ca"]
             dihedral = angles[i - 1, 2]  # omega of previous residue
         else:
             # we are placing C
             t = angles[i, 3]  # thetas["n-ca-c"]
-            b = bondlens["ca-c"]
+            b = BONDLENS["ca-c"]
             dihedral = angles[i, 0]  # phi of current residue
         p3 = coords[-3]
         p2 = coords[-2]

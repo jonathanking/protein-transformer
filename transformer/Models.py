@@ -184,9 +184,6 @@ class Transformer(nn.Module):
 
 
     def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):
-
-        # tgt_seq, tgt_pos = tgt_seq[:, :-1], tgt_pos[:, :-1]
-        # TODO add a dense layer that transforms the src data into the same dimension as the angle vectors (11 or 22)
         src_seq = self.input_embedding(src_seq)
         tgt_seq = self.tgt_embedding(tgt_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
