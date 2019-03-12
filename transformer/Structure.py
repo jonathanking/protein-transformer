@@ -4,11 +4,12 @@ import Sidechains
 
 BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379}
 
-def generate_coords(angles, pad_loc, input_seq, device):
+def generate_coords(angles, pad_loc, input_seq, device, return_tuples=False):
     """ Given a tensor of angles (L x 11), produces the entire set of cartesian coordinates using the NeRF method,
         (L x A` x 3), where A` is the number of atoms generated (depends on amino acid sequence)."""
     bb_arr = init_backbone(angles, device)
     sc_arr = init_sidechain(angles, bb_arr, input_seq)
+    sc_arr_tups = [sc_arr]
 
     for i in range(1, pad_loc):
         bb_pts = extend_backbone(i, angles, bb_arr, device)
@@ -17,15 +18,18 @@ def generate_coords(angles, pad_loc, input_seq, device):
         # Extend sidechain
         sc_pts = Sidechains.extend_sidechain(i, angles, bb_arr, input_seq)
         sc_arr += sc_pts
+        sc_arr_tups += [sc_pts]
 
-
+    assert len(bb_arr) / 3 == len(sc_arr_tups), "Backbone and sidechain arrays must match sizes."
+    if return_tuples:
+        return torch.stack(bb_arr + sc_arr), [x.detach().numpy() for x in bb_arr],  [x.detach().numpy() for x in sc_arr_tups]
     return torch.stack(bb_arr + sc_arr)
 
 
 def init_sidechain(angles, bb_arr, input_seq):
     """ Builds the first sidechain based off of the first backbone atoms and a ficticious previous atom.
         This allows us to reuse the extend_sidechain method. Assumes the first atom of the backbone is at (0,0,0). """
-    fake_prev_c = torch.zeros(3)
+    fake_prev_c = torch.FloatTensor(torch.zeros(3))
     fake_prev_c[0] = -np.cos(np.pi - 122) * BONDLENS["c-n"]
     fake_prev_c[1] = -np.sin(np.pi - 122) * BONDLENS["c-n"]
     sc = Sidechains.extend_sidechain(0, angles, [fake_prev_c] + bb_arr, input_seq)
@@ -35,7 +39,7 @@ def init_sidechain(angles, bb_arr, input_seq):
 def init_backbone(angles, device):
     """ Given an angle matrix (RES x ANG), this initializes the first 3 backbone points (which are arbitrary) and
         returns a TensorArray of the size required to hold all the coordinates. """
-    a1 = torch.zeros(3).to(device)
+    a1 = torch.FloatTensor(torch.zeros(3, requires_grad=True).to(device))
 
     if device.type == "cuda":
         a2 = a1 + torch.cuda.FloatTensor([BONDLENS["n-ca"], 0, 0])
