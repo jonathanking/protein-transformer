@@ -101,6 +101,25 @@ def make_pdbs(id_coords_dict, outdir):
             writePDB(os.path.join(outdir, key + '_nl{0:.2f}.pdb'.format(loss_norm)), backbone)
 
 
+def load_model(args):
+    device = torch.device('cpu')
+    chkpt = torch.load(args.model_chkpt, map_location=device)
+    model_args = chkpt['settings']
+    model_state = chkpt['model']
+    if args.data is None:
+        args.data = model_args.data
+
+    the_model = transformer.Models.Transformer(model_args.max_token_seq_len,
+                                               d_k=model_args.d_k,
+                                               d_v=model_args.d_v,
+                                               d_model=model_args.d_model,
+                                               d_inner=model_args.d_inner_hid,
+                                               n_layers=model_args.n_layers,
+                                               n_head=model_args.n_head,
+                                               dropout=model_args.dropout)
+    the_model.load_state_dict(model_state)
+    return args, the_model
+
 if __name__ == "__main__":
     pathPDBFolder("/home/jok120/build/pdb/")
     parser = argparse.ArgumentParser(description="Loads a model and makes predictions as PDBs.")
@@ -119,24 +138,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Load model
-    device = torch.device('cpu')
-    chkpt = torch.load(args.model_chkpt, map_location=device)
-    model_args = chkpt['settings']
-    model_state = chkpt['model']
-    if args.data is None:
-        args.data = model_args.data
+    args, the_model = load_model(args)
 
-    the_model = transformer.Models.Transformer(model_args.max_token_seq_len,
-                                               d_k=model_args.d_k,
-                                               d_v=model_args.d_v,
-                                               d_model=model_args.d_model,
-                                               d_inner=model_args.d_inner_hid,
-                                               n_layers=model_args.n_layers,
-                                               n_head=model_args.n_head,
-                                               dropout=model_args.dropout)
-    the_model.load_state_dict(model_state)
-
-    # Aquire seqs and angles to predict / compare from
+    # Acquire seqs and angles to predict / compare from
     data_loader, ids = get_data_loader(torch.load(args.data), args.dataset, n=args.n)
 
     # Make predictions as coordinates
