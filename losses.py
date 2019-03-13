@@ -1,11 +1,8 @@
-import torch, torch.nn as nn
-import torch.nn.functional as F
-from torch.multiprocessing import Pool
-import torch.multiprocessing as mp
-
 import numpy as np
+import torch
+import torch.nn.functional as F
 
-from Structure import generate_coords
+from transformer.Structure import generate_coords
 
 
 def cal_loss(pred, gold, input_seq, device, combined=True):

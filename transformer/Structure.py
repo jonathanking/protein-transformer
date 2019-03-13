@@ -1,6 +1,7 @@
-import torch
 import numpy as np
-import Sidechains
+import torch
+
+import transformer.Sidechains as Sidechains
 
 BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379}
 

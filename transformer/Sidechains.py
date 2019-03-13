@@ -1,4 +1,3 @@
-import Structure
 import torch
 
 BONDLENS = {'cc-cv': 1.375,
@@ -184,6 +183,7 @@ def generate_sidechain_dihedrals(angles, i):
 def extend_any_sc(info, aa_code):
     """ Given a bunch of info (angle tensors, relevant bb and sc coords) and an amino acid code, generates the coords
         for that specific AA. Returns a pointer to the """
+    import transformer.Structure as Structure
     lens = map(lambda bondname: BONDLENS[bondname], SC_DATA[aa_code]["bonds"])
     angs = map(lambda anglname: torch.tensor(BONDANGS[anglname]), SC_DATA[aa_code]["angles"])
     i, angles, bb_arr = info
