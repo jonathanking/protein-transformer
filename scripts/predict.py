@@ -131,7 +131,7 @@ if __name__ == "__main__":
                         help="Path to data dictionary to predict. Defaults to test set from the data file that the" + \
                              " model was originally associated with.")
     parser.add_argument("-dataset", type=str, choices=["train", "valid", "test", "all"], default="test",
-                        help="Which dataset within the data file to predict on (one of {train, valid, test, all}).")
+                        help="Which dataset within the data file to predict on.")
     parser.add_argument("-n", type=int, default=5, required=False,
                         help="How many items to randomly predict from dataset.")
 
