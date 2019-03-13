@@ -65,11 +65,12 @@ def make_predictions(the_model, data_loader):
             pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
             pred, gold = copy_padding_from_gold(pred, gold, torch.device('cpu'))
 
-            print('Loss: {0:.2f}, NLoss: {1:.2f}, Predshape: {2}'.format(float(loss), float(loss_norm), pred.shape))
+            # print('Loss: {0:.2f}, NLoss: {1:.2f}, Predshape: {2}'.format(float(loss), float(loss_norm), pred.shape))
             all, bb, sc = struct.generate_coords(pred[0], pred.shape[1], src_seq[0], torch.device('cpu'),
                                                  return_tuples=True)
             coords_list.append((np.asarray(bb), np.asarray(sc), float(loss), float(loss_norm)))
-    return coords_list, losses, norm_losses
+    print("Avg Loss = {0:.2f}, Avg NLoss = {1:.2f}".format(np.mean(losses), np.mean(norm_losses)))
+    return coords_list
 
 
 def make_pdbs(id_coords_dict, outdir):
@@ -101,16 +102,20 @@ def make_pdbs(id_coords_dict, outdir):
 
 
 if __name__ == "__main__":
+    pathPDBFolder("/home/jok120/build/pdb/")
     parser = argparse.ArgumentParser(description="Loads a model and makes predictions as PDBs.")
     parser.add_argument('model_chkpt', type=str,
                         help="Path to model checkpoint file.")
+    parser.add_argument("outdir", type=str,
+                        help="Output directory to save predictions.")
     parser.add_argument("-data", type=str, required=False,
                         help="Path to data dictionary to predict. Defaults to test set from the data file that the" + \
                              " model was originally associated with.")
     parser.add_argument("-dataset", type=str, choices=["train", "valid", "test", "all"], default="test",
                         help="Which dataset within the data file to predict on (one of {train, valid, test, all}).")
-    parser.add_argument("outdir", type=str,
-                        help="Output directory to save predictions.")
+    parser.add_argument("-n", type=int, default=5, required=False,
+                        help="How many items to randomly predict from dataset.")
+
     args = parser.parse_args()
 
     # Load model
@@ -132,10 +137,10 @@ if __name__ == "__main__":
     the_model.load_state_dict(model_state)
 
     # Aquire seqs and angles to predict / compare from
-    data_loader, ids = get_data_loader(torch.load(args.data), args.dataset)
+    data_loader, ids = get_data_loader(torch.load(args.data), args.dataset, n=args.n)
 
     # Make predictions as coordinates
-    coords_list, losses, norm_losses = make_predictions(the_model, data_loader)
+    coords_list = make_predictions(the_model, data_loader)
     id_coords_dict = {k: v for k, v in zip(ids, coords_list)}
 
     # Make PDB files from coords
