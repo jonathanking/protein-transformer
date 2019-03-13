@@ -1,28 +1,27 @@
-'''
-This script handling the training process.
-'''
-
 import argparse
+import csv
 import os
 import time
 
 import numpy as np
-from tqdm import tqdm
 import torch
 import torch.optim as optim
 import torch.utils.data
+from tqdm import tqdm
+
 from dataset import paired_collate_fn, ProteinDataset
+from losses import cal_loss
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
-from losses import cal_loss
 
 
-def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
+def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     ''' Epoch operation in training phase'''
 
     model.train()
 
     total_loss = 0
+    total_nloss = 0
     n_batches = 0.0
     loss = None
     training_losses = []
@@ -32,16 +31,12 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
         pbar = training_data
 
     for batch_num, batch in enumerate(pbar):
-
-        # prepare data
         src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
         gold = tgt_seq[:]
 
-        # forward
         optimizer.zero_grad()
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
 
-        # backward
         loss, loss_norm = cal_loss(pred, gold, src_seq, device, combined=opt.combined_loss)
         training_losses.append(float(loss_norm))
         loss.backward()
@@ -55,15 +50,14 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
         elif opt.print_loss and len(training_losses) <= 32:
             print('Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
                 float(loss), np.mean(training_losses), optimizer.cur_lr, loss_norm))
-        # elif opt.print_loss:
-        #     print('Loss = {0:.6f}, NLoss = {2:.2f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr, float(loss_norm)))
+
 
         # update parameters
         optimizer.step_and_update_lr()
-        # optimizer.step()
 
         # note keeping
         total_loss += loss.item()
+        total_nloss += loss_norm.item()
         n_batches += 1
 
         if not opt.print_loss and len(training_losses) > 32:
@@ -72,11 +66,10 @@ def train_epoch(model, training_data, optimizer, device, opt, log_train_file):
         elif not opt.print_loss:
             pbar.set_description('  - (Training) Loss = {0:.6f}, NLoss = {2:.2f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr, loss_norm))
 
-        if opt.batch_log and  batch_num % 100 == 0:
-            save_model_and_log_per_batch(opt, model, loss_norm, training_losses, log_train_file)
+        log_batch(log_writer, loss.item(), loss_norm.item(), is_val=False, is_end_of_epoch=False, time=time.time())
 
+    return total_loss / n_batches, total_nloss / n_batches
 
-    return total_loss / n_batches
 
 def eval_epoch(model, validation_data, device):
     ''' Epoch operation in evaluation phase '''
@@ -84,68 +77,48 @@ def eval_epoch(model, validation_data, device):
     model.eval()
 
     total_loss = 0
+    total_nloss = 0
     n_batches = 0.0
-
 
     with torch.no_grad():
         for batch in validation_data:
-            # tqdm(
-            #     validation_data, mininterval=2,
-            #     desc='  - (Validation) ', leave=False):
-
-            # prepare data
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
-
             gold = tgt_seq[:]
-
-            # forward
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
             loss, loss_norm = cal_loss(pred, gold, src_seq, device)
-
-            # note keeping
             total_loss += loss.item()
+            total_nloss += loss_norm.item()
             n_batches += 1
 
-    return total_loss / n_batches
+    return total_loss / n_batches, total_nloss / n_batches
 
-def train(model, training_data, validation_data, optimizer, device, opt):
+
+def train(model, training_data, validation_data, optimizer, device, opt, log_writer):
     ''' Start training '''
-
-    log_train_file = None
-    log_valid_file = None
-
-    # Set up training/validation log files.
-    if opt.log:
-        log_train_file = opt.log + '.train.log'
-        log_valid_file = opt.log + '.valid.log'
-        os.makedirs(os.path.dirname(log_train_file), exist_ok=True)
-
-        print('[Info] Training performance will be written to file: {} and {}'.format(
-            log_train_file, log_valid_file))
-
-        with open(log_train_file, 'w') as log_tf, open(log_valid_file, 'w') as log_vf:
-            log_tf.write('epoch,loss\n')
-            log_vf.write('epoch,loss\n')
 
     valid_losses = []
     epoch_last_improved = -1
-    best_valid_loss_so_far = 10000
+    best_valid_loss_so_far = np.inf
     for epoch_i in range(opt.epoch):
         print('[ Epoch', epoch_i, ']')
 
         start = time.time()
-        train_loss = train_epoch(model, training_data, optimizer, device, opt, log_train_file)
+        train_loss, train_nloss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
         print('  - (Training)   loss: {loss: 8.5f} '\
               'elapse: {elapse:3.3f} min'.format(
                   loss=train_loss,
                   elapse=(time.time()-start)/60))
 
         start = time.time()
-        valid_loss = eval_epoch(model, validation_data, device)
+        valid_loss, valid_nloss = eval_epoch(model, validation_data, device)
         print('  - (Validation) loss: {loss: 8.5f}, '\
                 'elapse: {elapse:3.3f} min'.format(
                     loss=valid_loss,
                     elapse=(time.time()-start)/60))
+
+        t = time.time()
+        log_batch(log_writer, train_loss, train_nloss, is_val=False, is_end_of_epoch=True, time=t)
+        log_batch(log_writer, valid_loss, valid_nloss, is_val=True, is_end_of_epoch=True, time=t)
 
         valid_losses.append(valid_loss)
 
@@ -153,18 +126,14 @@ def train(model, training_data, validation_data, optimizer, device, opt):
             best_valid_loss_so_far = valid_loss
             epoch_last_improved = epoch_i
         elif opt.step_when and epoch_i - epoch_last_improved > opt.step_when:
-            # Model hasn't improved in 100 epochs
-            print("No improvement for 100 epochs. Stopping model training early.")
+            # Model hasn't improved in X epochs
+            print("No improvement for {} epochs. Stopping model training early.".format(opt.step_when))
             break
 
+        save_model(opt, model, valid_loss, valid_losses, epoch_i)
 
 
-        save_model_and_log(opt, model, valid_loss, valid_losses, log_train_file, log_valid_file, train_loss, epoch_i)
-
-
-
-
-def save_model_and_log(opt, model, valid_loss, valid_losses, log_train_file, log_valid_file, train_loss, epoch_i):
+def save_model(opt, model, valid_loss, valid_losses, epoch_i):
     # Record model state and log training info
     model_state_dict = model.state_dict()
     checkpoint = {
@@ -172,44 +141,25 @@ def save_model_and_log(opt, model, valid_loss, valid_losses, log_train_file, log
         'settings': opt,
         'epoch': epoch_i}
 
-    if opt.save_model:
-        os.makedirs(os.path.dirname(opt.save_model), exist_ok=True)
-        if opt.save_mode == 'all':
-            model_name = opt.save_model + '_loss_{vloss:3.3f}.chkpt'.format(vloss=valid_loss)
-            torch.save(checkpoint, model_name)
-        elif opt.save_mode == 'best':
-            model_name = opt.save_model + '.chkpt'
-            if valid_loss <= min(valid_losses):
-                torch.save(checkpoint, model_name)
-                print('    - [Info] The checkpoint file has been updated.')
-    if log_train_file and log_valid_file:
-        with open(log_train_file, 'a') as log_tf, open(log_valid_file, 'a') as log_vf:
-            if not opt.batch_log:
-                log_tf.write('{epoch},{loss: 8.5f}\n'.format(
-                    epoch=epoch_i, loss=train_loss))
-            log_vf.write('{epoch},{loss: 8.5f}\n'.format(
-                epoch=epoch_i, loss=valid_loss))
-
-def save_model_and_log_per_batch(opt, model, train_loss, train_losses, log_train_file):
-    # Record model state and log training info
-    model_state_dict = model.state_dict()
-    checkpoint = {
-        'model': model_state_dict,
-        'settings': opt}
-
-    if opt.save_model:
-        model_name = opt.save_model + '_loss_{vloss:3.3f}.chkpt'.format(vloss=train_loss)
-        torch.save(checkpoint, model_name)
+    if opt.save_mode == 'all':
+        chkpt_file_name = opt.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, valid_loss)
+        torch.save(checkpoint, chkpt_file_name)
+    if valid_loss <= min(valid_losses):
+        chkpt_file_name = opt.chkpt_path + "_best.chkpt".format(epoch_i, valid_loss)
+        torch.save(checkpoint, chkpt_file_name)
         print('    - [Info] The checkpoint file has been updated.')
-    if log_train_file:
-        with open(log_train_file, 'a') as log_tf:
-            log_tf.write('{loss: 8.5f}\n'.format(loss=train_loss))
+
+
+def log_batch(log_writer, loss, nloss, is_val=False, is_end_of_epoch=False, time=time.time()):
+    # Record model state and log training info, 'loss,nloss,is_val,is_end_of_epoch,time\n'
+    log_writer.writerow([loss, nloss, is_val, is_end_of_epoch, time])
 
 def main():
     ''' Main function '''
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-data', required=True)
+    parser.add_argument("-name", type=str, required=True, help="The model name.")
 
     parser.add_argument('-epoch', type=int, default=10)
     parser.add_argument('-batch_size', type=int, default=64)
@@ -229,10 +179,8 @@ def main():
 
     parser.add_argument('-dropout', type=float, default=0.1)
 
-    parser.add_argument('-log', default=None)
-    parser.add_argument('-save_model', default=None)
+    parser.add_argument('-log', default=None, nargs="?")
     parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='best')
-    parser.add_argument('-batch_log', action='store_true', help="Save the model on a batch performance basis. Uses length-normalized DRMSD.")
     parser.add_argument('-print_loss', action='store_true')
 
     parser.add_argument('-no_cuda', action='store_true')
@@ -248,10 +196,22 @@ def main():
 
     training_data, validation_data = prepare_dataloaders(data, opt)
 
+    # ========= Preparing Log and Checkpoint Files =========#
+    if not opt.log:
+        opt.log_file = "./logs/" + opt.name + '.train'
+    else:
+        opt.log_file = "./logs/" + opt.log + '.train'
+    print('[Info] Training performance will be written to file: {}'.format(opt.log_file))
+    os.makedirs(os.path.dirname(opt.log_file), exist_ok=True)
+    log_f = open(opt.log_file, 'w', buffering=1)
+    log_f.write('loss,nloss,is_val,is_end_of_epoch,time\n')
+    log_writer = csv.writer(log_f)
+    opt.chkpt_path = "./checkpoints/" + opt.name
+    os.makedirs("./checkpoints", exist_ok=True)
+
     #========= Preparing Model =========#
 
     print(opt)
-
     device = torch.device('cuda' if opt.cuda else 'cpu')
     transformer = Transformer(
         opt.max_token_seq_len,
@@ -266,13 +226,12 @@ def main():
     optimizer = ScheduledOptim(
         optim.Adam(
             filter(lambda x: x.requires_grad, transformer.parameters()),
-            betas=(0.9, 0.98), eps=1e-09, lr=1e-5),
+            betas=(0.9, 0.98), eps=1e-09, lr=1e-6),
         opt.d_model, opt.n_warmup_steps)
 
-    # optimizer =  optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
-    #                         betas=(0.9, 0.98), eps=1e-09, lr=1e-3)
-
-    train(transformer, training_data, validation_data, optimizer, device ,opt)
+    train(transformer, training_data, validation_data, optimizer, device, opt, log_writer)
+    log_f.close()
+    # TODO: Add test data evaluation
 
 def prepare_dataloaders(data, opt):
     """ data is a dictionary containing all necessary training data."""
