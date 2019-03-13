@@ -19,11 +19,11 @@ def generate_coords(angles, pad_loc, input_seq, device, return_tuples=False):
         # Extend sidechain
         sc_pts = Sidechains.extend_sidechain(i, angles, bb_arr, input_seq)
         sc_arr += sc_pts
-        sc_arr_tups += [sc_pts]
+        sc_arr_tups += [[x.detach() for x in sc_pts]]
 
     assert len(bb_arr) / 3 == len(sc_arr_tups), "Backbone and sidechain arrays must match sizes."
     if return_tuples:
-        return torch.stack(bb_arr + sc_arr), [x.detach().numpy() for x in bb_arr],  [x.detach().numpy() for x in sc_arr_tups]
+        return torch.stack(bb_arr + sc_arr), [x.detach().numpy() for x in bb_arr], sc_arr_tups
     return torch.stack(bb_arr + sc_arr)
 
 
