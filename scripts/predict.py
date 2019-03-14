@@ -58,7 +58,7 @@ def make_predictions(the_model, data_loader):
 
             # forward
             pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss, loss_norm = cal_loss(pred, gold, src_seq, device, combined=False)
+            loss, loss_norm = cal_loss(pred, gold, src_seq, torch.device('cpu'), combined=False)
             losses.append(loss)
             norm_losses.append(loss_norm)
 
@@ -91,14 +91,19 @@ def make_pdbs(id_coords_dict, outdir):
                 else:
                     prot.delCoordset(-1)
 
+        # Set backbone atoms
         backbone = prot.select('protein and chain ' + chain_id + ' and name N CA C')
+        assert backbone.getCoords().shape == bb_coords.shape, "Backbone shape mismatch for " + key
+        backbone.setCoords(bb_coords)
 
-        if not backbone.getCoords().shape == bb_coords.shape:
-            # there is an error in the process!!
-            print('Error! Shape mismatch for ' + str(key))
-        else:
-            backbone.setCoords(bb_coords)
-            writePDB(os.path.join(outdir, key + '_nl{0:.2f}.pdb'.format(loss_norm)), backbone)
+        # Set sidechain atoms
+        # chains = [c for c in prot.select("protein and chain " + chain_id).getHierView()]
+        # assert len(chains) == 1, "HV has more than one chain for " + key
+        # residues = list(chains[0].iterResidues())
+        # assert len(sc_coords) == len(residues)
+        # for res_sc_coords, res in zip(sc_coords, residues):
+
+        writePDB(os.path.join(outdir, key + '_nl{0:.2f}.pdb'.format(loss_norm)), backbone)
 
 
 def load_model(args):

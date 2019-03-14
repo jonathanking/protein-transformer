@@ -12,28 +12,32 @@ Usaage: pdb_generator.py <pickled dic>
         The angle matrix is the 3D cords of the backbone (N-Ca-C)
 '''
 
-from prody import *
+import os
 import pickle
 import sys
-import os
+
+from prody import *
 
 if not len(sys.argv) == 3:
     print("Improper Usage!")
     print("pdb_generator.py <pickle dic of angles> <out_dir>")
     sys.exit()
 
-outdir = sys.argv[-1]
+outdir = "./" + sys.argv[-1]
 pathPDBFolder(outdir)
+
 
 with open(sys.argv[1], "rb") as f:
     dic = pickle.load(f)
 
 print('Pickle successfully found and loaded')
 
+os.makedirs(outdir, exist_ok=True)
+
 with open(os.path.join(outdir, "order.txt"), "w") as order_file:
     for key in dic.keys():
         order_file.write(key + "\n")
-        new_coords, loss, loss_norm = dic[key]
+        bb_coords, sc_coords, loss, loss_norm = dic[key]
         pdb_id = key.split('_')[0]
         chain_id = key.split("_")[-1]
 
@@ -50,10 +54,10 @@ with open(os.path.join(outdir, "order.txt"), "w") as order_file:
 
         backbone = prot.select('protein and chain ' + chain_id + ' and name N CA C')
 
-        if not backbone.getCoords().shape == new_coords.shape:
+        if not backbone.getCoords().shape == bb_coords.shape:
             # there is an error in the process!!
             print('Error! Shape mismatch for ' + str(key))
         else:
-            backbone.setCoords(new_coords)
+            backbone.setCoords(bb_coords)
             writePDB(os.path.join(outdir,  pdb_id + '_pred_{0:.2f}_n{1:.2f}.pdb'.format(loss, loss_norm)), backbone)
 

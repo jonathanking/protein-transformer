@@ -1,5 +1,7 @@
-import torch
 import numpy as np
+import torch
+
+np.random.seed(7)
 from tqdm import tqdm
 import sys
 import pickle
@@ -18,16 +20,14 @@ norm_loss_out_path = out_path[:-6] + "_ndrmsd.npy"
 device = torch.device('cpu')
 chkpt = torch.load(model_path, map_location=device)
 opt = chkpt['settings']
-epoch = chkpt['epoch']
 model_state = chkpt['model']
 
 import transformer.Models
-from transformer.Optim import ScheduledOptim
-import torch.optim as optim
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
 import transformer.Structure as struct
-from train import cal_loss, inverse_trig_transform, copy_padding_from_gold
+from train import cal_loss
+from losses import inverse_trig_transform, copy_padding_from_gold
 
 
 the_model = transformer.Models.Transformer(opt.max_token_seq_len,
@@ -42,7 +42,7 @@ the_model.load_state_dict(model_state)
 
 data = torch.load(opt.data)
 
-to_predict = ["2C77_A", "1NS3_A", "4W2R_E"]
+to_predict = np.random.choice(data[dataset]["ids"], 3)  # ["2NLP_D", "3ASK_Q", "1SZA_C"]
 actual_order = []
 seqs = []
 angs = []
@@ -66,6 +66,7 @@ cords_list = []
 losses = []
 norm_losses = []
 
+# TODO: make batch_level predictions?
 with torch.no_grad():
     for batch in tqdm(data_loader, mininterval=2,
                       desc=' - (Evaluation ', leave=False):
@@ -76,7 +77,7 @@ with torch.no_grad():
         # forward
         try:
             pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss, loss_norm = cal_loss(pred, gold, device, combined=False)
+            loss, loss_norm = cal_loss(pred, gold, src_seq, device, combined=False)
             losses.append(loss)
             norm_losses.append(loss_norm)
         except:
@@ -90,10 +91,10 @@ with torch.no_grad():
         #     pad_loc = gold.shape[1]
 
         print('Loss: {0:.2f}, NLoss: {1:.2f}, Predshape: {2}'.format(float(loss), float(loss_norm), pred.shape))
-        coords = struct.generate_coords(pred[0], pred.shape[1], torch.device('cpu'))
-        cords_list.append((np.asarray(coords), float(loss), float(loss_norm)))
-        #if len(cords_list) > 50:
-        #    break
+        all, bb, sc = struct.generate_coords(pred[0], pred.shape[1], src_seq[0], torch.device('cpu'),
+                                             return_tuples=True)
+        cords_list.append((np.asarray(bb), np.asarray(sc), float(loss), float(loss_norm)))
+
 
     d = {}
     for key, val in zip(actual_order, cords_list):
