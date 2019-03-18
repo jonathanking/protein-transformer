@@ -42,7 +42,8 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         loss.backward()
 
         # Clip gradients
-        torch.nn.utils.clip_grad_norm_(model.parameters(), opt.clip)
+        if opt.clip:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), opt.clip)
 
         if opt.print_loss and len(training_losses) > 32:
             print('Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
@@ -168,7 +169,7 @@ def main():
     parser.add_argument("-b", '--batch_size', type=int, default=8)
     parser.add_argument('-early_stopping', type=int, default=None)
     parser.add_argument('-n_warmup_steps', type=int, default=75)
-    parser.add_argument('-clip', type=float, default=1.0)
+    parser.add_argument('-clip', type=float, default=None)
     parser.add_argument('-combined_loss', action='store_true', help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
 
     # Model parameters

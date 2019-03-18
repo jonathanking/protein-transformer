@@ -1,0 +1,15 @@
+python train.py -name 0312A -data data/data_031819.torch -lr 1e-1 -n_warmup_steps 500
+python train.py -name 0312B -data data/data_031819.torch -lr 1e-1
+python train.py -name 0312A -data data/data_031819.torch -lr 1e-2 -n_warmup_steps 500
+python train.py -name 0312B -data data/data_031819.torch -lr 1e-2
+python train.py -name 0312A -data data/data_031819.torch -lr 1e-3 -n_warmup_steps 500
+python train.py -name 0312B -data data/data_031819.torch -lr 1e-3
+python train.py -name 0312A -data data/data_031819.torch -lr 1e-4 -n_warmup_steps 500
+python train.py -name 0312B -data data/data_031819.torch -lr 1e-4
+python train.py -name 0312A -data data/data_031819.torch -lr 1e-5 -n_warmup_steps 500
+python train.py -name 0312B -data data/data_031819.torch -lr 1e-5
+python train.py -name 0312A -data data/data_031819.torch -lr 1e-6 -n_warmup_steps 500
+python train.py -name 0312B -data data/data_031819.torch -lr 1e-6
+python train.py -name 0312A -data data/data_031819.torch -lr 1e-7 -n_warmup_steps 500
+python train.py -name 0312B -data data/data_031819.torch -lr 1e-7
+
