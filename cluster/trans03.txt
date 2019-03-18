@@ -1,1 +1,0 @@
-python train.py -data data/data_1208_trig_seq10.torch -batch_size 4 -epoch 35 -save_model checkpoints/trans03_35E_1CV_1DRMSDMSE_1000WS -n_warmup_steps 2000 -batch_log -print_loss -log checkpoints/trans03_35E_1CV_1DRMSDMSE_1000WS -clip 1 -combined_loss > logs/trans03_35E_1CV_1DRMSDMSE_1000WS.log 2>&1
