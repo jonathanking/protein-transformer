@@ -1,6 +1,7 @@
 import argparse
 import csv
 import os
+import sys
 import time
 
 import numpy as np
@@ -68,6 +69,10 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
             pbar.set_description('  - (Training) Loss = {0:.6f}, NLoss = {2:.2f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr, loss_norm))
 
         log_batch(log_writer, loss.item(), loss_norm.item(), is_val=False, is_end_of_epoch=False, time=time.time())
+
+        if np.isnan(loss.item()):
+            print("A nan loss has occurred. Exiting training.")
+            sys.exit(1)
 
     return total_loss / n_batches, total_nloss / n_batches
 
@@ -164,7 +169,7 @@ def main():
     parser.add_argument("-name", type=str, required=True, help="The model name.")
 
     # Training parameters
-    parser.add_argument("-lr", "--learningrate", type=float, default=1 * (10 ** -6))
+    parser.add_argument("-lr", "--learning_rate", type=float, default=1 * (10 ** -6))
     parser.add_argument('-epoch', type=int, default=10)
     parser.add_argument("-b", '--batch_size', type=int, default=8)
     parser.add_argument('-early_stopping', type=int, default=None)
@@ -227,7 +232,7 @@ def main():
     optimizer = ScheduledOptim(
         optim.Adam(
             filter(lambda x: x.requires_grad, transformer.parameters()),
-            betas=(0.9, 0.98), eps=1e-09, lr=opt.lr),
+            betas=(0.9, 0.98), eps=1e-09, lr=opt.learning_rate),
         opt.d_model, opt.n_warmup_steps)
 
     train(transformer, training_data, validation_data, optimizer, device, opt, log_writer)
