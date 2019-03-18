@@ -1,29 +1,29 @@
-python train.py -name 0318_lr:-1_warmup:500_clip:None -data data/data_031819.torch -print_loss -lr 1e-1 -n_warmup_steps 500 > logs/0318_lr:-1_warmup:500_clip:None.log 2>&1
-python train.py -name 0318_lr:-1_warmup:75_clip:None -data data/data_031819.torch -print_loss -lr 1e-1 > logs/0318_lr:-1_warmup:75_clip:None.log 2>&1
-python train.py -name 0318_lr:-2_warmup:500_clip:None -data data/data_031819.torch -print_loss -lr 1e-2 -n_warmup_steps 500 > logs/0318_lr:-2_warmup:500_clip:None.log 2>&1
-python train.py -name 0318_lr:-2_warmup:75_clip:None -data data/data_031819.torch -print_loss -lr 1e-2 > logs/0318_lr:-2_warmup:75_clip:None.log 2>&1
-python train.py -name 0318_lr:-3_warmup:500_clip:None -data data/data_031819.torch -print_loss -lr 1e-3 -n_warmup_steps 500 > logs/0318_lr:-3_warmup:500_clip:None.log 2>&1
-python train.py -name 0318_lr:-3_warmup:75_clip:None -data data/data_031819.torch -print_loss -lr 1e-3 > logs/0318_lr:-3_warmup:75_clip:None.log 2>&1
-python train.py -name 0318_lr:-4_warmup:500_clip:None -data data/data_031819.torch -print_loss -lr 1e-4 -n_warmup_steps 500 > logs/0318_lr:-4_warmup:500_clip:None.log 2>&1
-python train.py -name 0318_lr:-4_warmup:75_clip:None -data data/data_031819.torch -print_loss -lr 1e-4 > logs/0318_lr:-4_warmup:75_clip:None.log 2>&1
-python train.py -name 0318_lr:-5_warmup:500_clip:None -data data/data_031819.torch -print_loss -lr 1e-5 -n_warmup_steps 500 > logs/0318_lr:-5_warmup:500_clip:None.log 2>&1
-python train.py -name 0318_lr:-5_warmup:75_clip:None -data data/data_031819.torch -print_loss -lr 1e-5 > logs/0318_lr:-5_warmup:75_clip:None.log 2>&1
-python train.py -name 0318_lr:-6_warmup:500_clip:None -data data/data_031819.torch -print_loss -lr 1e-6 -n_warmup_steps 500 > logs/0318_lr:-6_warmup:500_clip:None.log 2>&1
-python train.py -name 0318_lr:-6_warmup:75_clip:None -data data/data_031819.torch -print_loss -lr 1e-6 > logs/0318_lr:-6_warmup:75_clip:None.log 2>&1
-python train.py -name 0318_lr:-7_warmup:500_clip:None -data data/data_031819.torch -print_loss -lr 1e-7 -n_warmup_steps 500 > logs/0318_lr:-7_warmup:500_clip:None.log 2>&1
-python train.py -name 0318_lr:-7_warmup:75_clip:None -data data/data_031819.torch -print_loss -lr 1e-7 > logs/0318_lr:-7_warmup:75_clip:None.log 2>&1
-python train.py -name 0318_lr:-1_warmup:500_clip:1 -data data/data_031819.torch -print_loss -lr 1e-1 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-1_warmup:500_clip:1.log 2>&1
-python train.py -name 0318_lr:-1_warmup:75_clip:1 -data data/data_031819.torch -print_loss -lr 1e-1 -clip 1 > logs/0318_lr:-1_warmup:75_clip:1.log 2>&1
-python train.py -name 0318_lr:-2_warmup:500_clip:1 -data data/data_031819.torch -print_loss -lr 1e-2 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-2_warmup:500_clip:1.log 2>&1
-python train.py -name 0318_lr:-2_warmup:75_clip:1 -data data/data_031819.torch -print_loss -lr 1e-2 -clip 1 > logs/0318_lr:-2_warmup:75_clip:1.log 2>&1
-python train.py -name 0318_lr:-3_warmup:500_clip:1 -data data/data_031819.torch -print_loss -lr 1e-3 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-3_warmup:500_clip:1.log 2>&1
-python train.py -name 0318_lr:-3_warmup:75_clip:1 -data data/data_031819.torch -print_loss -lr 1e-3 -clip 1 > logs/0318_lr:-3_warmup:75_clip:1.log 2>&1
-python train.py -name 0318_lr:-4_warmup:500_clip:1 -data data/data_031819.torch -print_loss -lr 1e-4 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-4_warmup:500_clip:1.log 2>&1
-python train.py -name 0318_lr:-4_warmup:75_clip:1 -data data/data_031819.torch -print_loss -lr 1e-4 -clip 1 > logs/0318_lr:-4_warmup:75_clip:1.log 2>&1
-python train.py -name 0318_lr:-5_warmup:500_clip:1 -data data/data_031819.torch -print_loss -lr 1e-5 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-5_warmup:500_clip:1.log 2>&1
-python train.py -name 0318_lr:-5_warmup:75_clip:1 -data data/data_031819.torch -print_loss -lr 1e-5 -clip 1 > logs/0318_lr:-5_warmup:75_clip:1.log 2>&1
-python train.py -name 0318_lr:-6_warmup:500_clip:1 -data data/data_031819.torch -print_loss -lr 1e-6 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-6_warmup:500_clip:1.log 2>&1
-python train.py -name 0318_lr:-6_warmup:75_clip:1 -data data/data_031819.torch -print_loss -lr 1e-6 -clip 1 > logs/0318_lr:-6_warmup:75_clip:1.log 2>&1
-python train.py -name 0318_lr:-7_warmup:500_clip:1 -data data/data_031819.torch -print_loss -lr 1e-7 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-7_warmup:500_clip:1.log 2>&1
-python train.py -name 0318_lr:-7_warmup:75_clip:1 -data data/data_031819.torch -print_loss -lr 1e-7 -clip 1 > logs/0318_lr:-7_warmup:75_clip:1.log 2>&1
+python train.py -name 0318_lr:-1_warmup:500_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-1 -n_warmup_steps 500 > logs/0318_lr:-1_warmup:500_clip:None.log 2>&1
+python train.py -name 0318_lr:-1_warmup:75_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-1 > logs/0318_lr:-1_warmup:75_clip:None.log 2>&1
+python train.py -name 0318_lr:-2_warmup:500_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-2 -n_warmup_steps 500 > logs/0318_lr:-2_warmup:500_clip:None.log 2>&1
+python train.py -name 0318_lr:-2_warmup:75_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-2 > logs/0318_lr:-2_warmup:75_clip:None.log 2>&1
+python train.py -name 0318_lr:-3_warmup:500_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-3 -n_warmup_steps 500 > logs/0318_lr:-3_warmup:500_clip:None.log 2>&1
+python train.py -name 0318_lr:-3_warmup:75_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-3 > logs/0318_lr:-3_warmup:75_clip:None.log 2>&1
+python train.py -name 0318_lr:-4_warmup:500_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-4 -n_warmup_steps 500 > logs/0318_lr:-4_warmup:500_clip:None.log 2>&1
+python train.py -name 0318_lr:-4_warmup:75_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-4 > logs/0318_lr:-4_warmup:75_clip:None.log 2>&1
+python train.py -name 0318_lr:-5_warmup:500_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-5 -n_warmup_steps 500 > logs/0318_lr:-5_warmup:500_clip:None.log 2>&1
+python train.py -name 0318_lr:-5_warmup:75_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-5 > logs/0318_lr:-5_warmup:75_clip:None.log 2>&1
+python train.py -name 0318_lr:-6_warmup:500_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-6 -n_warmup_steps 500 > logs/0318_lr:-6_warmup:500_clip:None.log 2>&1
+python train.py -name 0318_lr:-6_warmup:75_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-6 > logs/0318_lr:-6_warmup:75_clip:None.log 2>&1
+python train.py -name 0318_lr:-7_warmup:500_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-7 -n_warmup_steps 500 > logs/0318_lr:-7_warmup:500_clip:None.log 2>&1
+python train.py -name 0318_lr:-7_warmup:75_clip:None -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-7 > logs/0318_lr:-7_warmup:75_clip:None.log 2>&1
+python train.py -name 0318_lr:-1_warmup:500_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-1 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-1_warmup:500_clip:1.log 2>&1
+python train.py -name 0318_lr:-1_warmup:75_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-1 -clip 1 > logs/0318_lr:-1_warmup:75_clip:1.log 2>&1
+python train.py -name 0318_lr:-2_warmup:500_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-2 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-2_warmup:500_clip:1.log 2>&1
+python train.py -name 0318_lr:-2_warmup:75_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-2 -clip 1 > logs/0318_lr:-2_warmup:75_clip:1.log 2>&1
+python train.py -name 0318_lr:-3_warmup:500_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-3 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-3_warmup:500_clip:1.log 2>&1
+python train.py -name 0318_lr:-3_warmup:75_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-3 -clip 1 > logs/0318_lr:-3_warmup:75_clip:1.log 2>&1
+python train.py -name 0318_lr:-4_warmup:500_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-4 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-4_warmup:500_clip:1.log 2>&1
+python train.py -name 0318_lr:-4_warmup:75_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-4 -clip 1 > logs/0318_lr:-4_warmup:75_clip:1.log 2>&1
+python train.py -name 0318_lr:-5_warmup:500_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-5 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-5_warmup:500_clip:1.log 2>&1
+python train.py -name 0318_lr:-5_warmup:75_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-5 -clip 1 > logs/0318_lr:-5_warmup:75_clip:1.log 2>&1
+python train.py -name 0318_lr:-6_warmup:500_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-6 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-6_warmup:500_clip:1.log 2>&1
+python train.py -name 0318_lr:-6_warmup:75_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-6 -clip 1 > logs/0318_lr:-6_warmup:75_clip:1.log 2>&1
+python train.py -name 0318_lr:-7_warmup:500_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-7 -n_warmup_steps 500 -clip 1 > logs/0318_lr:-7_warmup:500_clip:1.log 2>&1
+python train.py -name 0318_lr:-7_warmup:75_clip:1 -data data/data_031819.torch -print_loss -epochs 200 -lr 1e-7 -clip 1 > logs/0318_lr:-7_warmup:75_clip:1.log 2>&1
 
