@@ -105,7 +105,7 @@ def train(model, training_data, validation_data, optimizer, device, opt, log_wri
     valid_losses = []
     epoch_last_improved = -1
     best_valid_loss_so_far = np.inf
-    for epoch_i in range(opt.epoch):
+    for epoch_i in range(opt.epochs):
         print('[ Epoch', epoch_i, ']')
 
         start = time.time()
@@ -170,7 +170,7 @@ def main():
 
     # Training parameters
     parser.add_argument("-lr", "--learning_rate", type=float, default=1 * (10 ** -6))
-    parser.add_argument('-epoch', type=int, default=10)
+    parser.add_argument('-epochs', type=int, default=10)
     parser.add_argument("-b", '--batch_size', type=int, default=8)
     parser.add_argument('-early_stopping', type=int, default=None)
     parser.add_argument('-n_warmup_steps', type=int, default=75)
