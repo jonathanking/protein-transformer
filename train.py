@@ -122,12 +122,12 @@ def train(model, training_data, validation_data, optimizer, device, opt, log_wri
 
         valid_losses.append(valid_loss)
 
-        if opt.step_when and valid_loss < best_valid_loss_so_far:
+        if opt.early_stopping and valid_loss < best_valid_loss_so_far:
             best_valid_loss_so_far = valid_loss
             epoch_last_improved = epoch_i
-        elif opt.step_when and epoch_i - epoch_last_improved > opt.step_when:
+        elif opt.early_stopping and epoch_i - epoch_last_improved > opt.early_stopping:
             # Model hasn't improved in X epochs
-            print("No improvement for {} epochs. Stopping model training early.".format(opt.step_when))
+            print("No improvement for {} epochs. Stopping model training early.".format(opt.early_stopping))
             break
 
         save_model(opt, model, valid_loss, valid_losses, epoch_i)
@@ -158,33 +158,34 @@ def main():
     ''' Main function '''
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-data', required=True)
+    # Required args
+    parser.add_argument('-data', required=True, help="Path to training data.")
     parser.add_argument("-name", type=str, required=True, help="The model name.")
 
+    # Training parameters
+    parser.add_argument("-lr", "--learningrate", type=float, default=1 * (10 ** -6))
     parser.add_argument('-epoch', type=int, default=10)
-    parser.add_argument('-batch_size', type=int, default=64)
-    parser.add_argument('-step_when', type=int, default=None)
+    parser.add_argument("-b", '--batch_size', type=int, default=8)
+    parser.add_argument('-early_stopping', type=int, default=None)
+    parser.add_argument('-n_warmup_steps', type=int, default=75)
     parser.add_argument('-clip', type=float, default=1.0)
     parser.add_argument('-combined_loss', action='store_true', help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
 
+    # Model parameters
     parser.add_argument('-d_word_vec', type=int, default=20)
     parser.add_argument('-d_model', type=int, default=256)
     parser.add_argument('-d_inner_hid', type=int, default=1024)
     parser.add_argument('-d_k', type=int, default=64)
     parser.add_argument('-d_v', type=int, default=64)
-
     parser.add_argument('-n_head', type=int, default=8)
     parser.add_argument('-n_layers', type=int, default=6)
-    parser.add_argument('-n_warmup_steps', type=int, default=75)
+    parser.add_argument('-dropout', type=float, default=0)
 
-    parser.add_argument('-dropout', type=float, default=0.1)
-
+    # Saving args
     parser.add_argument('-log', default=None, nargs="?")
     parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='best')
     parser.add_argument('-print_loss', action='store_true')
-
     parser.add_argument('-no_cuda', action='store_true')
-    parser.add_argument('-label_smoothing', action='store_true')
 
     opt = parser.parse_args()
     opt.cuda = not opt.no_cuda
@@ -222,11 +223,10 @@ def main():
         n_layers=opt.n_layers,
         n_head=opt.n_head,
         dropout=opt.dropout).to(device)
-
     optimizer = ScheduledOptim(
         optim.Adam(
             filter(lambda x: x.requires_grad, transformer.parameters()),
-            betas=(0.9, 0.98), eps=1e-09, lr=1e-6),
+            betas=(0.9, 0.98), eps=1e-09, lr=opt.lr),
         opt.d_model, opt.n_warmup_steps)
 
     train(transformer, training_data, validation_data, optimizer, device, opt, log_writer)
