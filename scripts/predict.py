@@ -15,7 +15,7 @@ import numpy as np
 import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
-import transformer.Structure as struct
+from transformer.Structure import generate_coords_with_tuples
 from train import cal_loss
 from losses import inverse_trig_transform, copy_padding_from_gold
 from transformer.Sidechains import SC_DATA
@@ -76,7 +76,6 @@ def make_predictions(the_model, data_loader):
     coords_list = []
     losses = []
 
-    # TODO: make batch_level predictions?
     with torch.no_grad():
         for batch in tqdm(data_loader, mininterval=2, desc=' - (Evaluation ', leave=False):
             # prepare data
@@ -91,26 +90,38 @@ def make_predictions(the_model, data_loader):
             pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
             pred, gold = copy_padding_from_gold(pred, gold, torch.device('cpu'))
 
-            all, bb, sc, aa_codes, atom_names = struct.generate_coords(pred[0], pred.shape[1], src_seq[0],
-                                                                       torch.device('cpu'),
-                                                                       return_tuples=True)
-            coords_list.append((np.asarray(bb), np.asarray(sc), float(loss), aa_codes, atom_names))
+            all, bb, bb_tups, sc, aa_codes, atom_names = generate_coords_with_tuples(pred[0], pred.shape[1], src_seq[0],
+                                                                                     torch.device('cpu'))
+            coords_list.append((np.asarray(bb), bb_tups, sc, float(loss), aa_codes, atom_names))
     print("Avg Loss = {0:.2f}".format(np.mean(losses)))
     return coords_list
 
+
+def fill_in_residue(resname, coords, bb_cords, atom_names):
+    """ Given an amino acid that is partially predicted (only the atoms in ATOM_NAMES are predicted),
+        this function returns a list of coords that represents the complete amino acid structure."""
+    all_res_atoms = set(SC_DATA[resname]["all_atoms"][4:])  # ignores N CA C O
+    pred_res_atoms = set(SC_DATA[resname]["pred_atoms"])
+    atoms_not_predicted = all_res_atoms - pred_res_atoms
+
+    # TODO Fill in oxygen position
+    # TODO Add all sidechains here
+    if resname == "ALA":
+        pass
+
+    return [np.zeros(3)]
 
 def make_pdbs(id_coords_dict, outdir):
     """ Given a dictionary that maps PDB_ID -> pred_coordinate_tuple, this function parses the true PDB file and
         assigns coordinates to its atoms so that a PDB file can be generated."""
     os.makedirs(outdir, exist_ok=True)
-    for key in id_coords_dict.keys():
-        bb_coords, sc_coords, loss, aa_codes, atom_names = id_coords_dict[key]
-        flat_atom_names = [an for res in atom_names for an in res]
-        pdb_id = key.split('_')[0]
-        chain_id = key.split("_")[-1]
+    for pdb_chain, data in id_coords_dict.items():
+        bb_coords, bb_tups, sc_tups, loss, aa_codes, atom_names = data
+        pdb_id = pdb_chain.split('_')[0]
+        chain_id = pdb_chain.split("_")[-1]
+        print(pdb_id, chain_id)
 
         prot = parsePDB(pdb_id)
-        print(pdb_id, chain_id)
 
         # dealing with multiple coordsets
         if len(prot.getCoordsets()) > 1:
@@ -122,17 +133,20 @@ def make_pdbs(id_coords_dict, outdir):
 
         # Set backbone atoms
         backbone = prot.select('protein and chain ' + chain_id + ' and name N CA C')
-        assert backbone.getCoords().shape == bb_coords.shape, "Backbone shape mismatch for " + key
+        assert backbone.getCoords().shape == bb_coords.shape, "Backbone shape mismatch for " + pdb_chain
         backbone.setCoords(bb_coords)
 
         # Set sidechain atoms
-        # chains = [c for c in prot.select("protein and chain " + chain_id).getHierView()]
-        # assert len(chains) == 1, "HV has more than one chain for " + key
-        # residues = list(chains[0].iterResidues())
-        # assert len(sc_coords) == len(residues)
-        # for res_sc_coords, res in zip(sc_coords, residues):
+        assert len(aa_codes) == len(sc_tups) and len(sc_tups) == len(
+            atom_names), "Shape mismatch for coordinate tuples."
+        predicted_sidechain_coords = []
+        for res_code, res_coords, res_bb_coords, res_atom_names in zip(aa_codes, sc_tups, bb_tups, atom_names):
+            predicted_sidechain_coords.extend(fill_in_residue(res_code, res_coords, res_bb_coords, res_atom_names))
 
-        writePDB(os.path.join(outdir, key + '_l{0:.2f}.pdb'.format(loss)), predicted_sidechain + backbone)
+        sidechain = prot.select('protein and chain ' + chain_id + ' and sidechain')
+        sidechain.setCoords(predicted_sidechain_coords)
+
+        writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), sidechain + backbone)
 
 
 if __name__ == "__main__":
