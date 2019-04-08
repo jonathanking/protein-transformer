@@ -104,10 +104,15 @@ def fill_in_residue(resname, coords, bb_cords, atom_names):
     pred_res_atoms = set(SC_DATA[resname]["pred_atoms"])
     atoms_not_predicted = all_res_atoms - pred_res_atoms
 
-    # TODO Fill in oxygen position
+    completed_atoms = []
+
     # TODO Add all sidechains here
     if resname == "ALA":
         pass
+    if resname == "ARG":  # NH2
+        pass
+    elif resname == "GLY":
+        return []  # no sidechain
 
     return [np.zeros(3)]
 
@@ -131,6 +136,7 @@ def make_pdbs(id_coords_dict, outdir):
                 else:
                     prot.delCoordset(-1)
 
+        # TODO Fill in oxygen position
         # Set backbone atoms
         backbone = prot.select('protein and chain ' + chain_id + ' and name N CA C')
         assert backbone.getCoords().shape == bb_coords.shape, "Backbone shape mismatch for " + pdb_chain
