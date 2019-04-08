@@ -18,6 +18,7 @@ from dataset import ProteinDataset, paired_collate_fn
 import transformer.Structure as struct
 from train import cal_loss
 from losses import inverse_trig_transform, copy_padding_from_gold
+from transformer.Sidechains import SC_DATA
 
 
 def load_model(args):
@@ -74,7 +75,6 @@ def make_predictions(the_model, data_loader):
         Each tuple is contains (backbone coord. matrix, sidechain coord. matrix, loss, nloss) for a single item."""
     coords_list = []
     losses = []
-    norm_losses = []
 
     # TODO: make batch_level predictions?
     with torch.no_grad():
@@ -85,17 +85,17 @@ def make_predictions(the_model, data_loader):
 
             # forward
             pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss, loss_norm = cal_loss(pred, gold, src_seq, torch.device('cpu'), combined=False)
+            loss = cal_loss(pred, gold, src_seq, torch.device('cpu'), combined=False)
             losses.append(loss)
-            norm_losses.append(loss_norm)
 
             pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
             pred, gold = copy_padding_from_gold(pred, gold, torch.device('cpu'))
 
-            all, bb, sc = struct.generate_coords(pred[0], pred.shape[1], src_seq[0], torch.device('cpu'),
-                                                 return_tuples=True)
-            coords_list.append((np.asarray(bb), np.asarray(sc), float(loss), float(loss_norm)))
-    print("Avg Loss = {0:.2f}, Avg NLoss = {1:.2f}".format(np.mean(losses), np.mean(norm_losses)))
+            all, bb, sc, aa_codes, atom_names = struct.generate_coords(pred[0], pred.shape[1], src_seq[0],
+                                                                       torch.device('cpu'),
+                                                                       return_tuples=True)
+            coords_list.append((np.asarray(bb), np.asarray(sc), float(loss), aa_codes, atom_names))
+    print("Avg Loss = {0:.2f}".format(np.mean(losses)))
     return coords_list
 
 
@@ -104,7 +104,8 @@ def make_pdbs(id_coords_dict, outdir):
         assigns coordinates to its atoms so that a PDB file can be generated."""
     os.makedirs(outdir, exist_ok=True)
     for key in id_coords_dict.keys():
-        bb_coords, sc_coords, loss, loss_norm = id_coords_dict[key]
+        bb_coords, sc_coords, loss, aa_codes, atom_names = id_coords_dict[key]
+        flat_atom_names = [an for res in atom_names for an in res]
         pdb_id = key.split('_')[0]
         chain_id = key.split("_")[-1]
 
@@ -131,10 +132,11 @@ def make_pdbs(id_coords_dict, outdir):
         # assert len(sc_coords) == len(residues)
         # for res_sc_coords, res in zip(sc_coords, residues):
 
-        writePDB(os.path.join(outdir, key + '_nl{0:.2f}.pdb'.format(loss_norm)), backbone)
+        writePDB(os.path.join(outdir, key + '_l{0:.2f}.pdb'.format(loss)), predicted_sidechain + backbone)
 
 
 if __name__ == "__main__":
+    np.random.seed(11)
     pathPDBFolder("/home/jok120/build/pdb/")
     parser = argparse.ArgumentParser(description="Loads a model and makes predictions as PDBs.")
     parser.add_argument('model_chkpt', type=str,
@@ -158,7 +160,7 @@ if __name__ == "__main__":
     data_loader, ids = get_data_loader(torch.load(args.data), args.dataset, n=args.n)
 
     # Make predictions as coordinates
-    coords_list = make_predictions(the_model, data_loader, args.n)
+    coords_list = make_predictions(the_model, data_loader)
     id_coords_dict = {k: v for k, v in zip(ids, coords_list)}
 
     # Make PDB files from coords
