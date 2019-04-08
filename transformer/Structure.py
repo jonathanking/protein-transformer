@@ -3,7 +3,9 @@ import torch
 
 import transformer.Sidechains as Sidechains
 
-BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379}
+BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379,
+            "CZ-NH2": 1,
+            }
 
 
 def generate_coords(angles, pad_loc, input_seq, device):

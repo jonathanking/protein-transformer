@@ -15,7 +15,7 @@ import numpy as np
 import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
-from transformer.Structure import generate_coords_with_tuples
+from transformer.Structure import generate_coords_with_tuples, nerf, BONDLENS
 from train import cal_loss
 from losses import inverse_trig_transform, copy_padding_from_gold
 from transformer.Sidechains import SC_DATA
@@ -24,7 +24,6 @@ from transformer.Sidechains import SC_DATA
 def load_model(args):
     """ Given user-supplied arguments such as a model checkpoint, loads and returns the specified transformer model.
         If the data to predict is not specified, the original file used during training will be re-used. """
-    device = torch.device('cpu')
     chkpt = torch.load(args.model_chkpt, map_location=device)
     model_args = chkpt['settings']
     model_state = chkpt['model']
@@ -97,20 +96,73 @@ def make_predictions(the_model, data_loader):
     return coords_list
 
 
+def get_coords_from_atom_names(atom_names, pred_res, coords):
+    abc = []
+    for an in atom_names:
+        idx = pred_res.index(an)
+        abc.append(coords[idx])
+    return abc
+
+
 def fill_in_residue(resname, coords, bb_cords, atom_names):
     """ Given an amino acid that is partially predicted (only the atoms in ATOM_NAMES are predicted),
         this function returns a list of coords that represents the complete amino acid structure."""
-    all_res_atoms = set(SC_DATA[resname]["all_atoms"][4:])  # ignores N CA C O
-    pred_res_atoms = set(SC_DATA[resname]["pred_atoms"])
-    atoms_not_predicted = all_res_atoms - pred_res_atoms
+    all_res_atoms = SC_DATA[resname]["all_atoms"][4:]  # ignores N CA C O
+    pred_res_atoms = SC_DATA[resname]["pred_atoms"]
+    atoms_not_predicted = set(all_res_atoms) - set(pred_res_atoms)
+
 
     completed_atoms = []
 
     # TODO Add all sidechains here
     if resname == "ALA":
         pass
-    if resname == "ARG":  # NH2
-        pass
+    elif resname == "ARG":  # NH2
+        need = ['CD', 'NE', 'CZ']
+        a, b, c = get_coords_from_atom_names(need, pred_res_atoms, coords)
+        l = BONDLENS["CZ-NH2"]
+        theta = 120.5
+        chi = None
+        nh2 = nerf(a, b, c, l, theta, chi, device)
+        return coords + [nh2]
+    elif resname == "ASN":
+        # TODO fix CG, ND2
+        need = []
+    elif resname == "ASP":  # Place OD2
+        need = ['CA', 'CB', 'CG']
+    elif resname == "CYS":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "GLU":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "GLN":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "GLY":  # no sidechain
+        return []
+    elif resname == "HIS":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "ILE":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "LEU":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "LYS":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "MET":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "PHE":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "PRO":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "SER":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "THR":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "TRP":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "TYR":  # NH2
+        need = ['CD', 'NE', 'CZ']
+    elif resname == "VAL":  # NH2
+        need = ['CD', 'NE', 'CZ']
+
     elif resname == "GLY":
         return []  # no sidechain
 
@@ -174,6 +226,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Load model
+    device = torch.device('cpu')
     args, the_model = load_model(args)
 
     # Acquire seqs and angles to predict / compare from
