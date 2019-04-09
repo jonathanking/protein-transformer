@@ -11,7 +11,12 @@ from sklearn.model_selection import train_test_split
 from multiprocessing import Pool
 import multiprocessing
 import sys
-import argeparse
+import argparse
+
+parser = argparse.ArgumentParser(description="Searches through a query of PDBs and parses/downloads chains")
+parser.add_argument('query_file', type=str, help= 'Path to query file')
+parser.add_argument('out_file', type=str, help='Path to output file (.pkl file)')
+args = parser.parse_args()
     
 AA_MAP = {'A': 15,'C': 0,'D': 1,'E': 17,'F': 8,'G': 10,'H': 11,'I': 5,'K': 4,'L': 12,'M': 19,'N': 9,'P': 6,'Q': 3,'R': 13,'S': 2,'T': 7,'V': 16,'W': 14,'Y': 18}
 CUR_DIR = "/Users/Faiha/documents/ResearchJK/"
@@ -323,10 +328,6 @@ data = {"train": {"seq": X_train,
         "date":  {date}}
 #dump data
 #with open("data{0}.pkl".format(suffix), "wb") as f:
-with open(args.out_file, "wb") as f:
-    pickle.dump(data, f)
-if __name__ == "__main__":
-     parser = argparse.ArgumentParser(description="Searches through a query of PDBs and parses/downloads chains")
-     parser.add_argument('query_file', type=str, help= 'Path to query file')
-     parser.add_argument('out_file', type=str, help='Path to output file (.pkl file)')
-     args = parser.parse_args()
+with open(args.out_file.format(suffix), "wb") as f:
+     pickle.dump(data, f)
+     
