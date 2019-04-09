@@ -22,7 +22,6 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     model.train()
 
     total_loss = 0
-    total_nloss = 0
     n_batches = 0.0
     loss = None
     training_losses = []
@@ -38,8 +37,8 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         optimizer.zero_grad()
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
 
-        loss, loss_norm = cal_loss(pred, gold, src_seq, device, combined=opt.combined_loss)
-        training_losses.append(float(loss_norm))
+        loss = cal_loss(pred, gold, src_seq, device, combined=opt.combined_loss)
+        training_losses.append(float(loss))
         loss.backward()
 
         # Clip gradients
@@ -47,11 +46,11 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
             torch.nn.utils.clip_grad_norm_(model.parameters(), opt.clip)
 
         if opt.print_loss and len(training_losses) > 32:
-            print('Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
-                float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr, loss_norm))
+            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
+                float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr))
         elif opt.print_loss and len(training_losses) <= 32:
-            print('Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
-                float(loss), np.mean(training_losses), optimizer.cur_lr, loss_norm))
+            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
+                float(loss), np.mean(training_losses), optimizer.cur_lr))
 
 
         # update parameters
@@ -59,22 +58,21 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
 
         # note keeping
         total_loss += loss.item()
-        total_nloss += loss_norm.item()
         n_batches += 1
 
         if not opt.print_loss and len(training_losses) > 32:
-            pbar.set_description('  - (Training) Loss = {0:.6f}, NLoss = {3:.2f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
-                float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr, loss_norm))
+            pbar.set_description('  - (Training) Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
+                float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr))
         elif not opt.print_loss:
-            pbar.set_description('  - (Training) Loss = {0:.6f}, NLoss = {2:.2f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr, loss_norm))
+            pbar.set_description('  - (Training) Loss = {0:.6f}, LR = {1:.7f}'.format(float(loss), optimizer.cur_lr))
 
-        log_batch(log_writer, loss.item(), loss_norm.item(), is_val=False, is_end_of_epoch=False, time=time.time())
+        log_batch(log_writer, loss.item(), is_val=False, is_end_of_epoch=False, time=time.time())
 
         if np.isnan(loss.item()):
             print("A nan loss has occurred. Exiting training.")
             sys.exit(1)
 
-    return total_loss / n_batches, total_nloss / n_batches
+    return total_loss / n_batches
 
 
 def eval_epoch(model, validation_data, device):
@@ -83,7 +81,6 @@ def eval_epoch(model, validation_data, device):
     model.eval()
 
     total_loss = 0
-    total_nloss = 0
     n_batches = 0.0
 
     with torch.no_grad():
@@ -91,12 +88,11 @@ def eval_epoch(model, validation_data, device):
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
             gold = tgt_seq[:]
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss, loss_norm = cal_loss(pred, gold, src_seq, device)
+            loss, = cal_loss(pred, gold, src_seq, device)
             total_loss += loss.item()
-            total_nloss += loss_norm.item()
             n_batches += 1
 
-    return total_loss / n_batches, total_nloss / n_batches
+    return total_loss / n_batches
 
 
 def train(model, training_data, validation_data, optimizer, device, opt, log_writer):
@@ -109,22 +105,22 @@ def train(model, training_data, validation_data, optimizer, device, opt, log_wri
         print('[ Epoch', epoch_i, ']')
 
         start = time.time()
-        train_loss, train_nloss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
+        train_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
         print('  - (Training)   loss: {loss: 8.5f} '\
               'elapse: {elapse:3.3f} min'.format(
                   loss=train_loss,
                   elapse=(time.time()-start)/60))
 
         start = time.time()
-        valid_loss, valid_nloss = eval_epoch(model, validation_data, device)
+        valid_loss = eval_epoch(model, validation_data, device)
         print('  - (Validation) loss: {loss: 8.5f}, '\
                 'elapse: {elapse:3.3f} min'.format(
                     loss=valid_loss,
                     elapse=(time.time()-start)/60))
 
         t = time.time()
-        log_batch(log_writer, train_loss, train_nloss, is_val=False, is_end_of_epoch=True, time=t)
-        log_batch(log_writer, valid_loss, valid_nloss, is_val=True, is_end_of_epoch=True, time=t)
+        log_batch(log_writer, train_loss, is_val=False, is_end_of_epoch=True, time=t)
+        log_batch(log_writer, valid_loss, is_val=True, is_end_of_epoch=True, time=t)
 
         valid_losses.append(valid_loss)
 
@@ -156,9 +152,9 @@ def save_model(opt, model, valid_loss, valid_losses, epoch_i):
         print('    - [Info] The checkpoint file has been updated.')
 
 
-def log_batch(log_writer, loss, nloss, is_val=False, is_end_of_epoch=False, time=time.time()):
-    # Record model state and log training info, 'loss,nloss,is_val,is_end_of_epoch,time\n'
-    log_writer.writerow([loss, nloss, is_val, is_end_of_epoch, time])
+def log_batch(log_writer, loss, is_val=False, is_end_of_epoch=False, time=time.time()):
+    # Record model state and log training info, 'loss,is_val,is_end_of_epoch,time\n'
+    log_writer.writerow([loss, is_val, is_end_of_epoch, time])
 
 def main():
     ''' Main function '''
@@ -211,7 +207,7 @@ def main():
     print('[Info] Training performance will be written to file: {}'.format(opt.log_file))
     os.makedirs(os.path.dirname(opt.log_file), exist_ok=True)
     log_f = open(opt.log_file, 'w', buffering=1)
-    log_f.write('loss,nloss,is_val,is_end_of_epoch,time\n')
+    log_f.write('loss,is_val,is_end_of_epoch,time\n')
     log_writer = csv.writer(log_f)
     opt.chkpt_path = "./checkpoints/" + opt.name
     os.makedirs("./checkpoints", exist_ok=True)

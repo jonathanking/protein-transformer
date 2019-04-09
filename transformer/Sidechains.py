@@ -114,55 +114,96 @@ BONDANGS = {'c8-cx-n ': 109.7,
             'cx-2c-sh': 108.6}
 
 SC_DATA = {"ARG": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-n2", "c8-n2-ca", "n2-ca-n2"],
-                   "bonds": ["cx-c8", "c8-c8", "c8-c8", "c8-n2", "n2-ca", "ca-n2"]},
+                   "bonds": ["cx-c8", "c8-c8", "c8-c8", "c8-n2", "n2-ca", "ca-n2"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD', 'NE', 'CZ', 'NH1', 'NH2'],
+                   "pred_atoms": ['CB', 'CG', 'CD', 'NE', 'CZ', 'NH1']},
            "HIS": {"angles": ["ct-cx-n ", "cc-ct-cx", "ct-cc-cv"],
-                   "bonds": ["cx-ct", "cc-ct", "cc-cv"]},
+                   "bonds": ["cx-ct", "cc-ct", "cc-cv"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'ND1', 'CD2', 'CE1', 'NE2'],
+                   "pred_atoms": ['CB', 'CG', 'CD2']},  # TODO Should be CG, ND1, need to lookup cc- ??
            "LYS": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-c8", "c8-c8-n3"],
-                   "bonds": ["cx-c8", "c8-c8", "c8-c8", "c8-c8", "c8-n3"]},
+                   "bonds": ["cx-c8", "c8-c8", "c8-c8", "c8-c8", "c8-n3"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD', 'CE', 'NZ'],
+                   "pred_atoms": ['CB', 'CG', 'CD', 'CE', 'NZ']},
            "ASP": {"angles": ["n -cx-2c", "cx-2c-co", "2c-co-o2"],
-                   "bonds": ["cx-2c", "2c-co", "co-o2"]},
+                   "bonds": ["cx-2c", "2c-co", "co-o2"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'OD1', 'OD2'],
+                   "pred_atoms": ['CB', 'CG', 'OD1']},
            "GLU": {"angles": ["n -cx-2c", "cx-2c-2c", "2c-2c-co", "2c-co-o2"],
-                   "bonds": ["cx-2c", "2c-2c", "2c-co", "co-o2"]},
+                   "bonds": ["cx-2c", "2c-2c", "2c-co", "co-o2"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD', 'OE1', 'OE2'],
+                   "pred_atoms": ['CB', 'CG', 'CD', 'OE1']},
            "SER": {"angles": ["n -cx-2c", "cx-2c-oh"],
-                   "bonds": ["cx-2c", "2c-oh"]},
+                   "bonds": ["cx-2c", "2c-oh"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'OG'],
+                   "pred_atoms": ['CB', 'OG']},
            "THR": {"angles": ["n -cx-3c", "cx-3c-ct"],
-                   "bonds": ["cx-3c", "3c-ct"]},
+                   "bonds": ["cx-3c", "3c-ct"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'OG1', 'CG2'],
+                   "pred_atoms": ['CB', 'CG2']},
            "ASN": {"angles": ["n -cx-2c", "cx-2c-c ", "2c-c -o "],
-                   "bonds": ["cx-2c", "2c-c ", "c -o "]},
+                   "bonds": ["cx-2c", "2c-c ", "c -o "],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'OD1', 'ND2'],
+                   "pred_atoms": ['CB', 'CG', 'OD1']},  # TODO: should be CG, ND2
            "GLN": {"angles": ["n -cx-2c", "cx-2c-2c", "2c-2c-c ", "2c-c -o "],
-                   "bonds": ["cx-2c", "2c-2c", "2c-c ", "c -o "]},
+                   "bonds": ["cx-2c", "2c-2c", "2c-c ", "c -o "],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD', 'OE1', 'NE2'],
+                   "pred_atoms": ['CB', 'CG', 'CD', 'OE1']},  # TODO: should be CG, CD, NE2
            "CYS": {"angles": ["n -cx-2c", "cx-2c-sh"],
-                   "bonds": ["cx-2c", "sh-2c"]},
-           "GLY": {"bonds": [],
-                   "angles": []},  # no sidechain
-           "PRO": {"bonds": [],
-                   "angles": []},  # special case
-           "ALA": {"angles": ["ct-cx-n "],
-                   "bonds": ["cx-ct"]},  # only has beta-carbon
+                   "bonds": ["cx-2c", "sh-2c"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'SG'],
+                   "pred_atoms": ['CB', 'SG']},
            "VAL": {"angles": ["n -cx-3c", "cx-3c-ct"],
-                   "bonds": ["cx-3c", "3c-ct"]},
+                   "bonds": ["cx-3c", "3c-ct"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG1', 'CG2'],
+                   "pred_atoms": ['CB', 'CG1']},
            "ILE": {"angles": ["n -cx-3c", "cx-3c-2c", "3c-2c-ct"],
-                   "bonds": ["cx-3c", "3c-2c", "2c-ct"]},
+                   "bonds": ["cx-3c", "3c-2c", "2c-ct"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG1', 'CG2', 'CD1'],
+                   "pred_atoms": ['CB', 'CG1', 'CD1']},
            "LEU": {"angles": ["n -cx-2c", "cx-2c-3c", "2c-3c-ct"],
-                   "bonds": ["cx-2c", "2c-3c", "3c-ct"]},
+                   "bonds": ["cx-2c", "2c-3c", "3c-ct"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD1', 'CD2'],
+                   "pred_atoms": ['CB', 'CG', 'CD1']},
            "MET": {"angles": ["n -cx-2c", "cx-2c-2c", "2c-2c-s ", "2c-s -ct"],
-                   "bonds": ["cx-2c", "2c-2c", "2c-s ", "s -ct"]},
+                   "bonds": ["cx-2c", "2c-2c", "2c-s ", "s -ct"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'SD', 'CE'],
+                   "pred_atoms": ['CB', 'CG', 'SD', 'CE']},
            "PHE": {"angles": ["n -cx-2c", "cx-2c-ca", "2c-ca-ca"],
-                   "bonds": ["cx-2c", "2c-ca", "ca-ca"]},
+                   "bonds": ["cx-2c", "2c-ca", "ca-ca"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD1', 'CD2', 'CE1', 'CE2', 'CZ'],
+                   "pred_atoms": ['CB', 'CG', 'CD1']},
            "TYR": {"angles": ["n -cx-2c", "cx-2c-ca", "2c-ca-ca"],
-                   "bonds": ["cx-2c", "2c-ca", "ca-ca"]},
+                   "bonds": ["cx-2c", "2c-ca", "ca-ca"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD1', 'CD2', 'CE1', 'CE2', 'CZ', 'OH'],
+                   "pred_atoms": ['CB', 'CG', 'CD1']},
            "TRP": {"angles": ["ct-cx-n ", "cx-ct-c*", "ct-c*-cw"],
-                   "bonds": ["cx-ct", "ct-c*", "c*-cw"]},
+                   "bonds": ["cx-ct", "ct-c*", "c*-cw"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD1', 'CD2', 'NE1', 'CE2', 'CE3', 'CZ2', 'CZ3',
+                                 'CH2'],
+                   "pred_atoms": ['CB', 'CG', 'CD1']},
+           "GLY": {"angles": [],
+                   "bonds": [],
+                   "all_atoms": ['N', 'CA', 'C', 'O'],
+                   "pred_atoms": []},  # no sidechain
+           "PRO": {"angles": [],
+                   "bonds": [],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD'],
+                   "pred_atoms": []},  # special case
+           "ALA": {"angles": ["ct-cx-n "],
+                   "bonds": ["cx-ct"],
+                   "all_atoms": ['N', 'CA', 'C', 'O', 'CB'],
+                   "pred_atoms": []},  # only has beta-carbon
            }
 
 
-def extend_sidechain(i, d, bb_arr, input_seq):
+def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False):
     """ Given an index (i) into an angle tensor (d), builds the requested sidechain and returns it as a list."""
     residue_code = torch.argmax(input_seq[i])
     info = (i, d, bb_arr)
     codes = ["CYS","ASP","SER","GLN","LYS","ILE","PRO","THR","PHE","ASN","GLY","HIS","LEU","ARG","TRP",
              "ALA","VAL","GLU","TYR","MET"]
-    return extend_any_sc(info, codes[residue_code])
+    return extend_any_sc(info, codes[residue_code], return_tuples)
 
 
 def generate_sidechain_dihedrals(angles, i):
@@ -180,7 +221,7 @@ def generate_sidechain_dihedrals(angles, i):
             start += 1
 
 
-def extend_any_sc(info, aa_code):
+def extend_any_sc(info, aa_code, return_tuples=False):
     """ Given a bunch of info (angle tensors, relevant bb and sc coords) and an amino acid code, generates the coords
         for that specific AA. Returns a pointer to the """
     import transformer.Structure as Structure
@@ -197,5 +238,8 @@ def extend_any_sc(info, aa_code):
         next_pt = Structure.nerf(n2, n1, n0, l, a, dihe,device=torch.device("cpu"))
         n2, n1, n0 = n1, n0, next_pt
         sc_pts.append(next_pt)
+
+    if return_tuples:
+        return sc_pts, aa_code, SC_DATA[aa_code]["pred_atoms"]
 
     return sc_pts

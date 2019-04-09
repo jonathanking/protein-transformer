@@ -7,13 +7,13 @@ from transformer.Structure import generate_coords
 
 def cal_loss(pred, gold, input_seq, device, combined=True):
     if combined:
-        d_loss, dnorm_loss = drmsd_loss(pred, gold, input_seq, device)
+        d_loss = drmsd_loss(pred, gold, input_seq, device)
         m_loss, mnorm_loss = mse_loss(pred, gold)
 
         def comb(m , d):
             return (m / 2.894) + (d / 18.3745)
 
-        return comb(m_loss, d_loss), comb(mnorm_loss, dnorm_loss)
+        return comb(mnorm_loss, d_loss)
     else:
         return drmsd_loss(pred, gold, input_seq, device)
 
@@ -51,7 +51,6 @@ def drmsd_loss(pred, gold, input_seq, device):
     pred, gold = copy_padding_from_gold(pred, gold, device)
 
     losses = []
-    loss_norms = []
     for pred_item, gold_item, input_item in zip(pred, gold, input_seq):
         pad_loc = int(np.argmax((gold_item == 0).sum(dim=-1)))
         if pad_loc is 0:
@@ -62,11 +61,9 @@ def drmsd_loss(pred, gold, input_seq, device):
         true_coords = generate_coords(gold_item, pad_loc, input_item, device)
         pred_coords = generate_coords(pred_item, pad_loc, input_item, device)
         loss = drmsd(pred_coords, true_coords)
-        loss_norm = loss * 100 / pad_loc
         losses.append(loss)
-        loss_norms.append(loss_norm)
 
-    return torch.mean(torch.stack(losses)), torch.mean(torch.stack(loss_norms))
+    return torch.mean(torch.stack(losses))
 
 
 def mse_loss(pred, gold):
