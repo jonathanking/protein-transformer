@@ -297,11 +297,10 @@ all_angs = []
 all_ids = []
 for r in results_onehots:
     a, oh, i = r
-    if additional_checks(oh):
+    if additional_checks(oh) and additional_checks(a):
         all_ohs.append(oh)
-    if additional_checks(a):
         all_angs.append(a)
-    all_ids.append(i)
+        all_ids.append(i)
 ohs_ids = list(zip(all_ohs, all_ids))
 # need to add various checks to the lists of matrices
 # 5b. Split into train, test and validation sets. Report sizes.
