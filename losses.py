@@ -12,7 +12,7 @@ def cal_loss(pred, gold, input_seq, device, combined=True):
         print(d_loss, mnorm_loss)
 
         def comb(m , d):
-            return (m / 2.894) + (d / 18.3745)
+            return (m / 0.04) + (d / 10) # guess at starting values for mse, drmsd losses
 
         return comb(mnorm_loss, d_loss)
     else:
