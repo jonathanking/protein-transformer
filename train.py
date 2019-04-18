@@ -76,7 +76,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
 
 
 def eval_epoch(model, validation_data, device):
-    ''' Epoch operation in evaluation phase '''
+    ''' Epoch operation in evaluation phase. '''
 
     model.eval()
 
@@ -88,7 +88,7 @@ def eval_epoch(model, validation_data, device):
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
             gold = tgt_seq[:]
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss, = cal_loss(pred, gold, src_seq, device)
+            loss = cal_loss(pred, gold, src_seq, device)
             total_loss += loss.item()
             n_batches += 1
 
@@ -96,7 +96,7 @@ def eval_epoch(model, validation_data, device):
 
 
 def train(model, training_data, validation_data, optimizer, device, opt, log_writer):
-    ''' Start training '''
+    ''' Start training. '''
 
     valid_losses = []
     epoch_last_improved = -1
@@ -165,11 +165,11 @@ def main():
     parser.add_argument("-name", type=str, required=True, help="The model name.")
 
     # Training parameters
-    parser.add_argument("-lr", "--learning_rate", type=float, default=1 * (10 ** -6))
+    parser.add_argument("-lr", "--learning_rate", type=float, default=1 * (10 ** -3))
     parser.add_argument('-epochs', type=int, default=10)
     parser.add_argument("-b", '--batch_size', type=int, default=8)
     parser.add_argument('-early_stopping', type=int, default=None)
-    parser.add_argument('-n_warmup_steps', type=int, default=75)
+    parser.add_argument('-n_warmup_steps', type=int, default=200)
     parser.add_argument('-clip', type=float, default=None)
     parser.add_argument('-combined_loss', action='store_true', help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
 
