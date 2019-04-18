@@ -9,6 +9,7 @@ def cal_loss(pred, gold, input_seq, device, combined=True):
     if combined:
         d_loss = drmsd_loss(pred, gold, input_seq, device)
         m_loss, mnorm_loss = mse_loss(pred, gold)
+        print(d_loss, mnorm_loss)
 
         def comb(m , d):
             return (m / 2.894) + (d / 18.3745)
