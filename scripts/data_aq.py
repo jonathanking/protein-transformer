@@ -4,7 +4,7 @@ import sys
 import prody as pr
 import requests
 import tqdm
-sys.path.append("/home/jok120/sml/proj/attention-is-all-you-need-pytorch/")
+# sys.path.append("/home/jok120/sml/proj/attention-is-all-you-need-pytorch/")
 from transformer.Sidechains import SC_DATA
 pr.confProDy(verbosity='error')
 import numpy as np
