@@ -19,6 +19,7 @@ from transformer.Structure import generate_coords_with_tuples, nerf, BONDLENS
 from train import cal_loss
 from losses import inverse_trig_transform, copy_padding_from_gold
 from transformer.Sidechains import SC_DATA
+import matplotlib.pyplot as plt
 
 
 def load_model(args):
@@ -195,16 +196,17 @@ def make_pdbs(id_coords_dict, outdir):
         backbone.setCoords(bb_coords)
 
         # Set sidechain atoms
-        assert len(aa_codes) == len(sc_tups) and len(sc_tups) == len(
-            atom_names), "Shape mismatch for coordinate tuples."
-        predicted_sidechain_coords = []
-        for res_code, res_coords, res_bb_coords, res_atom_names in zip(aa_codes, sc_tups, bb_tups, atom_names):
-            predicted_sidechain_coords.extend(fill_in_residue(res_code, res_coords, res_bb_coords, res_atom_names))
+        # assert len(aa_codes) == len(sc_tups) and len(sc_tups) == len(
+        #     atom_names), "Shape mismatch for coordinate tuples."
+        # predicted_sidechain_coords = []
+        # for res_code, res_coords, res_bb_coords, res_atom_names in zip(aa_codes, sc_tups, bb_tups, atom_names):
+        #     predicted_sidechain_coords.extend(fill_in_residue(res_code, res_coords, res_bb_coords, res_atom_names))
 
-        sidechain = prot.select('protein and chain ' + chain_id + ' and sidechain')
-        sidechain.setCoords(predicted_sidechain_coords)
+        # sidechain = prot.select('protein and chain ' + chain_id + ' and sidechain')
+        # sidechain.setCoords(predicted_sidechain_coords)
 
-        writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), sidechain + backbone)
+        # writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), sidechain + backbone)
+        writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), backbone)
 
 
 if __name__ == "__main__":

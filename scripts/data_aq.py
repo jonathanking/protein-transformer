@@ -289,18 +289,23 @@ for r in results:
         results_onehots.append((ang[j], seq_to_onehot(seq[j]), i[j]))
         c += 1
 print(c, "chains successfully parsed and downloaded.")
-
+#function for additional checks of matrices
+def additional_checks(matrix):
+    zeros = not np.any(matrix)
+    if not np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and not zeros:
+        return True
 # 5a. Remove all one-hot (oh) vectors, angles, and sequence ids from tuples
 all_ohs = []
 all_angs = []
 all_ids = []
 for r in results_onehots:
     a, oh, i = r
-    all_ohs.append(oh)
-    all_angs.append(a)
-    all_ids.append(i)
+    if additional_checks(oh) and additional_checks(a):
+        all_ohs.append(oh)
+        all_angs.append(a)
+        all_ids.append(i)
 ohs_ids = list(zip(all_ohs, all_ids))
-
+# need to add various checks to the lists of matrices
 # 5b. Split into train, test and validation sets. Report sizes.
 X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
 X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
