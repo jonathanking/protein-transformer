@@ -4,7 +4,7 @@ import sys
 import prody as pr
 import requests
 import tqdm
-# sys.path.append("/home/jok120/sml/proj/attention-is-all-you-need-pytorch/")
+sys.path.append("/home/jok120/sml/proj/attention-is-all-you-need-pytorch/")
 from transformer.Sidechains import SC_DATA
 pr.confProDy(verbosity='error')
 import numpy as np
@@ -17,12 +17,13 @@ import argparse
 
 parser = argparse.ArgumentParser(description="Searches through a query of PDBs and parses/downloads chains")
 parser.add_argument('query_file', type=str, help= 'Path to query file')
-parser.add_argument('out_file', nargs="?", type=str, help='Path to output file (.pkl file)')
+parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.pkl file)')
 args = parser.parse_args()
+
     
 AA_MAP = {'A': 15,'C': 0,'D': 1,'E': 17,'F': 8,'G': 10,'H': 11,'I': 5,'K': 4,'L': 12,'M': 19,'N': 9,'P': 6,'Q': 3,'R': 13,'S': 2,'T': 7,'V': 16,'W': 14,'Y': 18}
 CUR_DIR = "/home/jok120/pdb/"
-pr.pathPDBFolder(CUR_DIR + "pdbgz/")
+pr.pathPDBFolder(CUR_DIR )
 np.set_printoptions(suppress=True) # suppresses scientific notation when printing
 np.set_printoptions(threshold=np.nan) # suppresses '...' when printing
 
@@ -30,6 +31,10 @@ np.set_printoptions(threshold=np.nan) # suppresses '...' when printing
 today = datetime.datetime.today()
 suffix = today.strftime("%m%d%y")
 print(suffix)
+
+if not args.out_file:
+    args.out_file  = "data/data_" + suffix
+
 print ("Num arguments: ", len(sys.argv))
 # obtain query from file
 url = 'http://www.rcsb.org/pdb/rest/search'
@@ -168,7 +173,7 @@ def get_angles_from_chain(chain, pdb_id):
                     a = atoms[i:i+4]
                     res_dihedrals.append(compute_single_dihedral(a))
             return BACKBONE + BONDANGLES + res_dihedrals + (5 - len(res_dihedrals))*[PAD_CHAR]
-        atom_names2 = ["CA", "C"] + SC_DATA[res.getResname()]
+        # atom_names2 = ["CA", "C"] + SC_DATA[res.getResname()]
         if res.getResname()=="ARG":
             atom_names = ["CA","C","CB","CG","CD","NE","CZ","NH1"]
         elif res.getResname()=="HIS":
@@ -210,8 +215,8 @@ def get_angles_from_chain(chain, pdb_id):
         elif res.getResname()=="TYR":
             atom_names = ["CA","C","CB","CG","CD1"]
 
-        print(atom_names)
-        print(atom_names2)
+        # print(atom_names)
+        # print(atom_names2)
             
         calculated_dihedrals = compute_all_res_dihedrals(atom_names)
         if calculated_dihedrals == None:
@@ -236,31 +241,31 @@ def work(pdb_id):
     pdb_dihedrals = []
     pdb_sequences = []
     ids = []
-    try:
-        print ("PDB ID: " , pdb_id)
-        pdb = pdb_id.split(":")
-        print ("New PDB ID" , pdb)
-        pdb_id = pdb[0]
-        print ("real pdb: " , pdb_id)
-        pdb_hv = pr.parsePDB(pdb_id).getHierView()
-        #if less than 2 chains,  continue
-        numChains = pdb_hv.numChains()
-        if numChains > 1:
-            print ("Num Chains > 1, returning None for: ", pdb_id)
-            none_list = open("NoneFile.txt", "a")
-            none_list.write(pdb_id + "\n")
-            return None
-        for chain in pdb_hv:
-            chain_id = chain.getChid()
-            dihedrals_sequence = get_angles_from_chain(chain, pdb_id)
-            if dihedrals_sequence is None:
-                continue 
-            dihedrals, sequence = dihedrals_sequence
-            pdb_dihedrals.append(dihedrals)
-            pdb_sequences.append(sequence)
-            ids.append(pdb_id + "_" + chain_id)
-    except Exception as e:
-        print("Whoops, returning where I am.", e)
+    # try:
+    print ("PDB ID: " , pdb_id)
+    pdb = pdb_id.split(":")
+    print ("New PDB ID" , pdb)
+    pdb_id = pdb[0]
+    print ("real pdb: " , pdb_id)
+    pdb_hv = pr.parsePDB(pdb_id).getHierView()
+    #if less than 2 chains,  continue
+    numChains = pdb_hv.numChains()
+    if numChains > 1:
+        print ("Num Chains > 1, returning None for: ", pdb_id)
+        none_list = open("NoneFile.txt", "a")
+        none_list.write(pdb_id + "\n")
+        return None
+    for chain in pdb_hv:
+        chain_id = chain.getChid()
+        dihedrals_sequence = get_angles_from_chain(chain, pdb_id)
+        if dihedrals_sequence is None:
+            continue
+        dihedrals, sequence = dihedrals_sequence
+        pdb_dihedrals.append(dihedrals)
+        pdb_sequences.append(sequence)
+        ids.append(pdb_id + "_" + chain_id)
+    # except Exception as e:
+    #     print("Whoops, returning where I am.", e)
     if len(pdb_dihedrals) == 0:
         return None
     else:
@@ -335,7 +340,6 @@ data = {"train": {"seq": X_train,
         "description": {desc}, 
         "date":  {date}}
 #dump data
-#with open("data{0}.pkl".format(suffix), "wb") as f:
-with open(args.out_file.format(suffix), "wb") as f:
+with open(args.out_file, "wb") as f:
      pickle.dump(data, f)
      
