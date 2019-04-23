@@ -9,7 +9,7 @@ def combine_drmsd_mse(d, mse, w=.5):
     """ Returns a combination of drmsd and mse loss that first normalizes their scales, and then computes
         w * drmsd + (1 - w) * mse."""
 
-    d_norm, m_norm = 15, 1
+    d_norm, m_norm = 8, 2
     d = d / d_norm
     mse = mse / m_norm
     return w * d + (1 - w) * mse
