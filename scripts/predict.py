@@ -16,10 +16,9 @@ import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
 from transformer.Structure import generate_coords_with_tuples, nerf, BONDLENS
-from train import cal_loss
+from train import drmsd_loss
 from losses import inverse_trig_transform, copy_padding_from_gold
 from transformer.Sidechains import SC_DATA
-import matplotlib.pyplot as plt
 
 
 def load_model(args):
@@ -84,7 +83,7 @@ def make_predictions(the_model, data_loader):
 
             # forward
             pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss = cal_loss(pred, gold, src_seq, torch.device('cpu'), combined=False)
+            loss = drmsd_loss(pred, gold, src_seq, torch.device('cpu'))
             losses.append(loss)
 
             pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
