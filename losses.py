@@ -63,7 +63,7 @@ def drmsd_loss(pred, gold, input_seq, device):
     return torch.mean(torch.stack(losses))
 
 
-def mse_loss(pred, gold):
+def mse_loss(pred, gold, len_normalized=False):
     """ Computes MSE loss."""
     device = torch.device("cpu")
 
@@ -75,7 +75,10 @@ def mse_loss(pred, gold):
         pad_loc = gold.shape[0]
     mse = F.mse_loss(pred_unpadded, gold_unpadded)
 
-    return mse, mse / float(pad_loc)
+    if len_normalized:
+        return mse / float(pad_loc)
+
+    return mse
 
 
 def pairwise_internal_dist(coords):
