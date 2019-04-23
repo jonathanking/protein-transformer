@@ -4,17 +4,25 @@ import numpy as np
 class ScheduledOptim():
     '''A simple wrapper class for learning rate scheduling'''
 
-    def __init__(self, optimizer, d_model, n_warmup_steps):
+    def __init__(self, optimizer, d_model, n_warmup_steps, simple=True):
         self._optimizer = optimizer
         self.n_warmup_steps = n_warmup_steps
         self.n_current_steps = 0
         self.init_lr = np.power(d_model, -0.5)
         self.cur_lr = self.init_lr
+        self.simple = simple
 
     def step_and_update_lr(self):
         "Step with the inner optimizer"
-        self._update_learning_rate()
         self._optimizer.step()
+        if self.simple:
+            self.n_current_steps += 1
+            if self.n_current_steps % 20 == 0:
+                for param_group in self._optimizer.param_groups:
+                    param_group['lr'] /= 5
+                    self.cur_lr = param_group['lr']
+        else:
+            self._update_learning_rate()
 
     def zero_grad(self):
         "Zero out the gradients by the inner optimizer"
