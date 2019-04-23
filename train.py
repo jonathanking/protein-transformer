@@ -38,7 +38,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
         if opt.combined_loss:
             d_loss = drmsd_loss(pred, gold, src_seq, device)
-            m_loss = mse_loss(pred, gold, len_normalized=True)
+            m_loss = mse_loss(pred, gold)
             combined_loss = combine_drmsd_mse(d_loss, m_loss, w=0.5)
             training_losses.append(float(d_loss))
             combined_loss.backward()

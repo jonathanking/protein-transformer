@@ -63,7 +63,7 @@ def drmsd_loss(pred, gold, input_seq, device):
     return torch.mean(torch.stack(losses))
 
 
-def mse_loss(pred, gold, len_normalized=False):
+def mse_loss(pred, gold):
     """ Computes MSE loss."""
     device = torch.device("cpu")
 
@@ -74,9 +74,6 @@ def mse_loss(pred, gold, len_normalized=False):
     if pad_loc is 0:
         pad_loc = gold.shape[0]
     mse = F.mse_loss(pred_unpadded, gold_unpadded)
-
-    if len_normalized:
-        return mse / float(pad_loc)
 
     return mse
 
