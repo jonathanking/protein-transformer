@@ -5,17 +5,14 @@ import torch.nn.functional as F
 from transformer.Structure import generate_coords
 
 
-def cal_loss(pred, gold, input_seq, device, combined=True):
-    if combined:
-        d_loss = drmsd_loss(pred, gold, input_seq, device)
-        m_loss, mnorm_loss = mse_loss(pred, gold)
+def combine_drmsd_mse(d, mse, w=.5):
+    """ Returns a combination of drmsd and mse loss that first normalizes their scales, and then computes
+        w * drmsd + (1 - w) * mse."""
 
-        def comb(m , d):
-            return (m / 0.04) + (d / 10) # guess at starting values for mse, drmsd losses
-
-        return comb(mnorm_loss, d_loss)
-    else:
-        return drmsd_loss(pred, gold, input_seq, device)
+    d_norm, m_norm = 15, 1
+    d = d / d_norm
+    mse = mse / m_norm
+    return w * d + (1 - w) * mse
 
 
 def inverse_trig_transform(t):
@@ -91,14 +88,14 @@ def pairwise_internal_dist(coords):
     return res
 
 
-def drmsd(a, b):
-    """ Given two coordinate tensors, returns the dRMSD score between them.
-        Both tensors must be the exact same shape. """
-
-    a_ = pairwise_internal_dist(a)
-    b_ = pairwise_internal_dist(b)
-    res =  torch.sqrt(torch.mean((a_ - b_)**2) + 1e-10)
-    return res
+# def drmsd(a, b):
+#     """ Given two coordinate tensors, returns the dRMSD score between them.
+#         Both tensors must be the exact same shape. """
+#
+#     a_ = pairwise_internal_dist(a)
+#     b_ = pairwise_internal_dist(b)
+#     res =  torch.sqrt(torch.mean((a_ - b_)**2) + 1e-10)
+#     return res
 
 
 

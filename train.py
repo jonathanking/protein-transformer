@@ -11,7 +11,7 @@ import torch.utils.data
 from tqdm import tqdm
 
 from dataset import paired_collate_fn, ProteinDataset
-from losses import cal_loss
+from losses import drmsd_loss, mse_loss, combine_drmsd_mse
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 
@@ -36,10 +36,17 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
 
         optimizer.zero_grad()
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-
-        loss = cal_loss(pred, gold, src_seq, device, combined=opt.combined_loss)
-        training_losses.append(float(loss))
-        loss.backward()
+        if opt.combined_loss:
+            d_loss = drmsd_loss(pred, gold, src_seq, device)
+            m_loss = mse_loss(pred, gold)
+            combined_loss = combine_drmsd_mse(d_loss, m_loss, w=0.5)
+            training_losses.append(float(d_loss))
+            combined_loss.backward()
+            loss = d_loss
+        else:
+            loss = drmsd_loss(pred, gold, src_seq, device)
+            training_losses.append(float(loss))
+            loss.backward()
 
         # Clip gradients
         if opt.clip:
@@ -75,7 +82,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     return total_loss / n_batches
 
 
-def eval_epoch(model, validation_data, device):
+def eval_epoch(model, validation_data, device, opt):
     ''' Epoch operation in evaluation phase. '''
 
     model.eval()
@@ -88,7 +95,7 @@ def eval_epoch(model, validation_data, device):
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
             gold = tgt_seq[:]
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss = cal_loss(pred, gold, src_seq, device)
+            loss = drmsd_loss(pred, gold, src_seq, device)  # When evaluating the epoch, only use DRMSD loss
             total_loss += loss.item()
             n_batches += 1
 
@@ -112,7 +119,7 @@ def train(model, training_data, validation_data, optimizer, device, opt, log_wri
                   elapse=(time.time()-start)/60))
 
         start = time.time()
-        valid_loss = eval_epoch(model, validation_data, device)
+        valid_loss = eval_epoch(model, validation_data, device, opt)
         print('  - (Validation) loss: {loss: 8.5f}, '\
                 'elapse: {elapse:3.3f} min'.format(
                     loss=valid_loss,
