@@ -41,10 +41,8 @@ fname = args.query_file
 with open(fname, "r") as qf:
     desc = qf.readline()
     query = qf.read()
-print (desc)
-print (query)
-newfile = open("newfile.txt", "w")
-newfile.write(query)
+
+
 
 
 # Helix Only Dataset
@@ -240,11 +238,8 @@ def work(pdb_id):
     pdb_sequences = []
     ids = []
    try:
-        print ("PDB ID: " , pdb_id)
         pdb = pdb_id.split(":")
-        print ("New PDB ID" , pdb)
         pdb_id = pdb[0]
-        print ("real pdb: " , pdb_id)
         pdb_parse = pr.parsePDB(pdb_id)
         pdb_hv = pr.parsePDB(pdb_id).getHierView()
         #if less than 2 chains,  continue
@@ -305,6 +300,8 @@ def additional_checks(matrix):
     zeros = not np.any(matrix)
     if not np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and not zeros:
         return True
+    else:
+        print ("additional checks not passed")
 # 5a. Remove all one-hot (oh) vectors, angles, and sequence ids from tuples
 all_ohs = []
 all_angs = []
