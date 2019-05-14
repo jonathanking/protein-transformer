@@ -130,7 +130,7 @@ def get_angles_from_chain(chain, pdb_id):
                     res_dihedrals.append(compute_single_dihedral(a))
             return BACKBONE + BONDANGLES + res_dihedrals + (5 - len(res_dihedrals)) * [PAD_CHAR]
 
-        # atom_names2 = ["CA", "C"] + SC_DATA[res.getResname()]
+        # TODO: verify correctness of atom codes
         if res.getResname() == "ARG":
             atom_names = ["CA", "C", "CB", "CG", "CD", "NE", "CZ", "NH1"]
         elif res.getResname() == "HIS":
@@ -173,7 +173,7 @@ def get_angles_from_chain(chain, pdb_id):
             atom_names = ["CA", "C", "CB", "CG", "CD1"]
 
         calculated_dihedrals = compute_all_res_dihedrals(atom_names)
-        if calculated_dihedrals == None:
+        if calculated_dihedrals is None:
             return None
         dihedrals.append(calculated_dihedrals)
 
@@ -181,7 +181,7 @@ def get_angles_from_chain(chain, pdb_id):
     dihedrals_np = np.asarray(dihedrals)
     # Check for NaNs - they shouldn't be here, but certainly should be excluded if they are.
     if np.any(np.isnan(dihedrals_np)):
-        if args.debug:  print("NaNs found")
+        if args.debug: print("NaNs found")
         return None
     return dihedrals_np, sequence
 
