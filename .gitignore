@@ -2,6 +2,11 @@ data/*.pkl
 data/*.torch
 checkpoints/*
 logs/*
+coords/*
+preds/*
+*.pdb
+*.tch
+*.npy
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
