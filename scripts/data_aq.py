@@ -41,10 +41,8 @@ fname = args.query_file
 with open(fname, "r") as qf:
     desc = qf.readline()
     query = qf.read()
-print (desc)
-print (query)
-newfile = open("newfile.txt", "w")
-newfile.write(query)
+
+
 
 
 # Helix Only Dataset
@@ -239,31 +237,36 @@ def work(pdb_id):
     pdb_dihedrals = []
     pdb_sequences = []
     ids = []
-    # try:
-    print ("PDB ID: " , pdb_id)
-    pdb = pdb_id.split(":")
-    print ("New PDB ID" , pdb)
-    pdb_id = pdb[0]
-    print ("real pdb: " , pdb_id)
-    pdb_hv = pr.parsePDB(pdb_id).getHierView()
-    #if less than 2 chains,  continue
-    numChains = pdb_hv.numChains()
-    if numChains > 1:
-        print ("Num Chains > 1, returning None for: ", pdb_id)
-        none_list = open("NoneFile.txt", "a")
-        none_list.write(pdb_id + "\n")
-        return None
-    for chain in pdb_hv:
-        chain_id = chain.getChid()
-        dihedrals_sequence = get_angles_from_chain(chain, pdb_id)
-        if dihedrals_sequence is None:
-            continue
-        dihedrals, sequence = dihedrals_sequence
-        pdb_dihedrals.append(dihedrals)
-        pdb_sequences.append(sequence)
-        ids.append(pdb_id + "_" + chain_id)
-    # except Exception as e:
-    #     print("Whoops, returning where I am.", e)
+   try:
+        pdb = pdb_id.split(":")
+        pdb_id = pdb[0]
+        pdb_parse = pr.parsePDB(pdb_id)
+        pdb_hv = pr.parsePDB(pdb_id).getHierView()
+        #if less than 2 chains,  continue
+        numChains = pdb_hv.numChains()
+        
+        prevchainseq = None
+        for chain in pdb_hv:
+            if prevchainseq == None:
+                prevchainseq = chain.getSequence()
+            elif chain.getSequence() == prevchainseq:
+                #chain sequences are identical
+                print ("identical chain found")
+                continue
+            else:
+                print ("Num Chains > 1 & seq not identical, returning None for: ", pdb_id)
+                return None
+            chain_id = chain.getChid()
+            dihedrals_sequence = get_angles_from_chain(chain, pdb_id)
+            if dihedrals_sequence is None:
+                continue 
+            dihedrals, sequence = dihedrals_sequence
+            pdb_dihedrals.append(dihedrals)
+            pdb_sequences.append(sequence)
+            ids.append(pdb_id + "_" + chain_id)
+       
+    except Exception as e:
+        print("Whoops, returning where I am.", e)
     if len(pdb_dihedrals) == 0:
         return None
     else:
@@ -297,6 +300,8 @@ def additional_checks(matrix):
     zeros = not np.any(matrix)
     if not np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and not zeros:
         return True
+    else:
+        print ("additional checks not passed")
 # 5a. Remove all one-hot (oh) vectors, angles, and sequence ids from tuples
 all_ohs = []
 all_angs = []
