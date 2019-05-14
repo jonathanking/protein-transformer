@@ -1,66 +1,26 @@
+import argparse
 import datetime
+import multiprocessing
+import pickle
+from multiprocessing import Pool
 
+import numpy as np
 import prody as pr
 import requests
 import tqdm
+from sklearn.model_selection import train_test_split
 
 pr.confProDy(verbosity='error')
-import numpy as np
-import pickle
-from sklearn.model_selection import train_test_split
-from multiprocessing import Pool
-import multiprocessing
-import sys
-import argparse
-
-parser = argparse.ArgumentParser(description="Searches through a query of PDBs and parses/downloads chains")
-parser.add_argument('query_file', type=str, help='Path to query file')
-parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.pkl file)')
-args = parser.parse_args()
-
-AA_MAP = {'A': 15, 'C': 0, 'D': 1, 'E': 17, 'F': 8, 'G': 10, 'H': 11, 'I': 5, 'K': 4, 'L': 12, 'M': 19, 'N': 9, 'P': 6,
-          'Q': 3, 'R': 13, 'S': 2, 'T': 7, 'V': 16, 'W': 14, 'Y': 18}
-CUR_DIR = "/home/jok120/pdb/"
-pr.pathPDBFolder(CUR_DIR)
-np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
-np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
-
-today = datetime.datetime.today()
-suffix = today.strftime("%m%d%y")
-print(suffix)
-
-if not args.out_file:
-    args.out_file = "data/data_" + suffix + ".pkl"
-
-print("Num arguments: ", len(sys.argv))
-# obtain query from file
-url = 'http://www.rcsb.org/pdb/rest/search'
-# fname = sys.argv[1] #args.path, path/to/file
-fname = args.query_file
-with open(fname, "r") as qf:
-    desc = qf.readline()
-    query = qf.read()
-
-# Helix Only Dataset
-
-
-header = {'Content-Type': 'application/x-www-form-urlencoded'}
-response = requests.post(url, data=query, headers=header)
-if response.status_code != 200:
-    print("Failed to retrieve results.")
-
-PDB_IDS = response.text.split("\n")
-print("Retrieved {0} PDB IDs.".format(len(PDB_IDS)))
 
 
 # Set amino acid encoding and angle downloading methods
 def angle_list_to_sin_cos(angs, reshape=True):
-    # """ Given a list of angles, returns a new list where those angles have
-    #         been turned into their sines and cosines. If reshape is False, a new dim.
-    #         is added that can hold the sine and cosine of each angle,
-    #         i.e. (len x #angs) -> (len x #angs x 2). If reshape is true, this last
-    #         dim. is squashed so that the list of angles becomes
-    #         [cos sin cos sin ...]. """
+    """ Given a list of angles, returns a new list where those angles have
+        been turned into their sines and cosines. If reshape is False, a new dim.
+        is added that can hold the sine and cosine of each angle,
+        i.e. (len x #angs) -> (len x #angs x 2). If reshape is true, this last
+        dim. is squashed so that the list of angles becomes
+        [cos sin cos sin ...]. """
     new_list = []
     new_pad_char = np.array([1, 0])
     for a in angs:
@@ -76,7 +36,7 @@ def angle_list_to_sin_cos(angs, reshape=True):
 
 
 def seq_to_onehot(seq):
-    # """ Given an AA sequence, returns a vector of one-hot vectors."""
+    """ Given an AA sequence, returns a vector of one-hot vectors."""
     vector_array = []
     for aa in seq:
         one_hot = np.zeros(len(AA_MAP), dtype=bool)
@@ -87,7 +47,7 @@ def seq_to_onehot(seq):
 
 # get bond angles
 def get_bond_angles(res, next_res):
-    #  """ Given 2 residues, returns the ncac, cacn, and cnca bond angles between them."""
+    """ Given 2 residues, returns the ncac, cacn, and cnca bond angles between them."""
     atoms = res.backbone.copy()
     atoms_next = next_res.backbone.copy()
     ncac = pr.calcAngle(atoms[0], atoms[1], atoms[2], radian=True)
@@ -98,10 +58,10 @@ def get_bond_angles(res, next_res):
 
 # get angles from chain
 def get_angles_from_chain(chain, pdb_id):
-    # Given a ProDy Chain object (from a Hierarchical View), return a numpy array of
-    #         angles. Returns None if the PDB should be ignored due to weird artifacts. Also measures
-    #         the bond angles along the peptide backbone, since they account for significat variation.
-    #         i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, chi3, chi4, chi5], [...] ...] """
+    """ Given a ProDy Chain object (from a Hierarchical View), return a numpy array of
+        angles. Returns None if the PDB should be ignored due to weird artifacts. Also measures
+        the bond angles along the peptide backbone, since they account for significat variation.
+        i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, chi3, chi4, chi5], [...] ...] """
     PAD_CHAR = 0
     OUT_OF_BOUNDS_CHAR = 0
     dihedrals = []
@@ -109,24 +69,24 @@ def get_angles_from_chain(chain, pdb_id):
 
     try:
         if chain.nonstdaa:
-            print("Non-standard AAs found.")
+            if args.debug: print("Non-standard AAs found.")
             return None
         sequence = chain.getSequence()
         length = len(sequence)
         chain = chain.select("protein and not hetero").copy()
     except Exception as e:
-        print("Problem loading sequence.", e)
+        if args.debug: print("Problem loading sequence.", e)
         return None
 
     all_residues = list(chain.iterResidues())
     prev = all_residues[0].getResnum()
     for i, res in enumerate(all_residues):
         if (not res.isstdaa):
-            print("Found a non-std AA. Why didn't you catch this?", chain)
-            print(res.getNames())
+            if args.debug: print("Found a non-std AA. Why didn't you catch this?", chain)
+            if args.debug: print(res.getNames())
             return None
         if res.getResnum() != prev:
-            print('\rNon-continuous!!', pdb_id, end="")
+            if args.debug: print('\rNon-continuous!!', pdb_id, end="")
             return None
         else:
             prev = res.getResnum() + 1
@@ -151,7 +111,7 @@ def get_angles_from_chain(chain, pdb_id):
             try:
                 BONDANGLES = list(get_bond_angles(res, all_residues[i + 1]))
             except Exception as e:
-                print("Bond angle issue with", pdb_id, e)
+                if args.debug: print("Bond angle issue with", pdb_id, e)
                 return None
 
         BACKBONE = [phi, psi, omega]
@@ -212,9 +172,6 @@ def get_angles_from_chain(chain, pdb_id):
         elif res.getResname() == "TYR":
             atom_names = ["CA", "C", "CB", "CG", "CD1"]
 
-        # print(atom_names)
-        # print(atom_names2)
-
         calculated_dihedrals = compute_all_res_dihedrals(atom_names)
         if calculated_dihedrals == None:
             return None
@@ -224,19 +181,12 @@ def get_angles_from_chain(chain, pdb_id):
     dihedrals_np = np.asarray(dihedrals)
     # Check for NaNs - they shouldn't be here, but certainly should be excluded if they are.
     if np.any(np.isnan(dihedrals_np)):
-        print("NaNs found")
+        if args.debug:  print("NaNs found")
         return None
     return dihedrals_np, sequence
 
 
-# 3a. Iterate through all chains in PDB_IDs, saving all results to disk
-# Remove empty string PDB ids
-PDB_IDS = list(filter(lambda x: x != "", PDB_IDS))
-print(len(PDB_IDS))
-
-
 # 3b. Parallelized method of downloading data
-# %time
 def work(pdb_id):
     pdb_dihedrals = []
     pdb_sequences = []
@@ -245,21 +195,21 @@ def work(pdb_id):
     try:
         pdb = pdb_id.split(":")
         pdb_id = pdb[0]
-        pdb_parse = pr.parsePDB(pdb_id)
         pdb_hv = pr.parsePDB(pdb_id).getHierView()
         # if less than 2 chains,  continue
         numChains = pdb_hv.numChains()
+        if args.single_chain_only and numChains > 1:
+            return None
 
         prevchainseq = None
         for chain in pdb_hv:
-            if prevchainseq == None:
+            if prevchainseq is None:
                 prevchainseq = chain.getSequence()
-            elif chain.getSequence() == prevchainseq:
-                # chain sequences are identical
-                print("identical chain found")
+            elif chain.getSequence() == prevchainseq:  # chain sequences are identical
+                if args.debug: print("identical chain found")
                 continue
             else:
-                print("Num Chains > 1 & seq not identical, returning None for: ", pdb_id)
+                if args.debug: print("Num Chains > 1 & seq not identical, returning None for: ", pdb_id)
                 return None
             chain_id = chain.getChid()
             dihedrals_sequence = get_angles_from_chain(chain, pdb_id)
@@ -271,35 +221,12 @@ def work(pdb_id):
             ids.append(pdb_id + "_" + chain_id)
 
     except Exception as e:
-        print("Whoops, returning where I am.", e)
+        # print("Whoops, returning where I am.", e)
+        raise e
     if len(pdb_dihedrals) == 0:
         return None
     else:
         return pdb_dihedrals, pdb_sequences, ids
-
-
-def _foo(i):
-    return work(PDB_IDS[i])
-
-
-with Pool(multiprocessing.cpu_count()) as p:
-    results = list(tqdm.tqdm(p.imap(_foo, range(len(PDB_IDS))), total=len(PDB_IDS)))
-
-# 4. Throw out results that are None; unpack results with multiple chains
-MAX_LEN = 500
-results_onehots = []
-c = 0
-for r in results:
-    if not r:
-        # PDB failed to download
-        continue
-    ang, seq, i = r
-    if len(seq[0]) > MAX_LEN:
-        continue
-    for j in range(len(ang)):
-        results_onehots.append((ang[j], seq_to_onehot(seq[j]), i[j]))
-        c += 1
-print(c, "chains successfully parsed and downloaded.")
 
 
 # function for additional checks of matrices
@@ -308,49 +235,120 @@ def additional_checks(matrix):
     if not np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and not zeros:
         return True
     else:
-        print("additional checks not passed")
+        if args.debug: print("additional checks not passed")
 
 
-# 5a. Remove all one-hot (oh) vectors, angles, and sequence ids from tuples
-all_ohs = []
-all_angs = []
-all_ids = []
-for r in results_onehots:
-    a, oh, i = r
-    if additional_checks(oh) and additional_checks(a):
-        all_ohs.append(oh)
-        all_angs.append(a)
-        all_ids.append(i)
-ohs_ids = list(zip(all_ohs, all_ids))
-# need to add various checks to the lists of matrices
-# 5b. Split into train, test and validation sets. Report sizes.
-X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
-X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
-print("{X,y} Train, {X,y} test, {X,y} validation set sizes:\n" + \
-      str(list(map(len, [X_train, y_train, X_test, y_test, X_val, y_val]))))
+def load_query(fname):
+    # obtain query from file
+    with open(fname, "r") as qf:
+        desc = qf.readline()
+        query = qf.read()
+    return query, desc
 
-# 5c. Separate PDB ID/Sequence tuples. 
-X_train_labels = [x[1] for x in X_train]
-X_test_labels = [x[1] for x in X_test]
-X_val_labels = [x[1] for x in X_val]
-X_train = [x[0] for x in X_train]
-X_test = [x[0] for x in X_test]
-X_val = [x[0] for x in X_val]
 
-# 6. Create a dictionary data structure, using the sin/cos transformed angles
-date = datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
-data = {"train": {"seq": X_train,
-                  "ang": angle_list_to_sin_cos(y_train),
-                  "ids": X_train_labels},
-        "valid": {"seq": X_val,
-                  "ang": angle_list_to_sin_cos(y_val),
-                  "ids": X_val_labels},
-        "test": {"seq": X_test,
-                 "ang": angle_list_to_sin_cos(y_test),
-                 "ids": X_test_labels},
-        "settings": {"max_len": max(map(len, all_ohs))},
-        "description": {desc},
-        "date": {date}}
-# dump data
-with open(args.out_file, "wb") as f:
-    pickle.dump(data, f)
+def download_pdbs_from_query(query):
+    url = 'http://www.rcsb.org/pdb/rest/search'
+    header = {'Content-Type': 'application/x-www-form-urlencoded'}
+    response = requests.post(url, data=query, headers=header)
+    if response.status_code != 200:
+        if args.debug: print("Failed to retrieve results.")
+
+    PDB_IDS = response.text.split("\n")
+    PDB_IDS = list(filter(lambda x: x != "", PDB_IDS))
+    print("Retrieved {0} PDB IDs.".format(len(PDB_IDS)))
+    return PDB_IDS
+
+
+if __name__ == "__main__":
+    global args, desc
+    parser = argparse.ArgumentParser(description="Searches through a query of PDBs and parses/downloads chains")
+    parser.add_argument('query_file', type=str, help='Path to query file')
+    parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.pkl file)')
+    parser.add_argument('-sc', '--single_chain_only', action="store_true", help='Only keep PDBs with a single chain.')
+    parser.add_argument('-d', '--debug', action="store_true", help='Print debug print statements.')
+    args = parser.parse_args()
+
+    # Set up
+    AA_MAP = {'A': 15, 'C': 0, 'D': 1, 'E': 17, 'F': 8, 'G': 10, 'H': 11, 'I': 5, 'K': 4, 'L': 12, 'M': 19, 'N': 9,
+              'P': 6, 'Q': 3, 'R': 13, 'S': 2, 'T': 7, 'V': 16, 'W': 14, 'Y': 18}
+    CUR_DIR = "/home/jok120/pdb/"
+    pr.pathPDBFolder(CUR_DIR)
+    np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
+    np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
+    today = datetime.datetime.today()
+    suffix = today.strftime("%m%d%y")
+    if not args.out_file:
+        args.out_file = "../data/data_" + suffix + ".pkl"
+
+    # Load query
+    query, query_description = load_query(args.query_file)
+
+    # Download PDB_IDS associated with query
+    PDB_IDS = download_pdbs_from_query(query)
+
+    # 3a. Iterate through all chains in PDB_IDs, saving all results to disk
+    # Remove empty string PDB ids
+    with Pool(multiprocessing.cpu_count()) as p:
+        results = list(tqdm.tqdm(p.imap(work, PDB_IDS), total=len(PDB_IDS)))
+
+    # 4. Throw out results that are None; unpack results with multiple chains
+    MAX_LEN = 500
+    results_onehots = []
+    c = 0
+    for r in results:
+        if not r:
+            # PDB failed to download
+            continue
+        ang, seq, i = r
+        if len(seq[0]) > MAX_LEN:
+            continue
+        for j in range(len(ang)):
+            results_onehots.append((ang[j], seq_to_onehot(seq[j]), i[j]))
+            c += 1
+    print(c, "chains successfully parsed and downloaded.")
+
+    # 5a. Remove all one-hot (oh) vectors, angles, and sequence ids from tuples
+    all_ohs = []
+    all_angs = []
+    all_ids = []
+    for r in results_onehots:
+        a, oh, i = r
+        if additional_checks(oh) and additional_checks(a):
+            all_ohs.append(oh)
+            all_angs.append(a)
+            all_ids.append(i)
+    ohs_ids = list(zip(all_ohs, all_ids))
+
+    # 5b. Split into train, test and validation sets. Report sizes.
+    X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
+    print("{X,y} Train, {X,y} test, {X,y} validation set sizes:\n" + \
+          str(list(map(len, [X_train, y_train, X_test, y_test, X_val, y_val]))))
+
+    # 5c. Separate PDB ID/Sequence tuples.
+    X_train_labels = [x[1] for x in X_train]
+    X_test_labels = [x[1] for x in X_test]
+    X_val_labels = [x[1] for x in X_val]
+    X_train = [x[0] for x in X_train]
+    X_test = [x[0] for x in X_test]
+    X_val = [x[0] for x in X_val]
+
+    # 6. Create a dictionary data structure, using the sin/cos transformed angles
+    date = datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
+    data = {"train": {"seq": X_train,
+                      "ang": angle_list_to_sin_cos(y_train),
+                      "ids": X_train_labels},
+            "valid": {"seq": X_val,
+                      "ang": angle_list_to_sin_cos(y_val),
+                      "ids": X_val_labels},
+            "test": {"seq": X_test,
+                     "ang": angle_list_to_sin_cos(y_test),
+                     "ids": X_test_labels},
+            "settings": {"max_len": max(map(len, all_ohs))},
+            "description": {query_description},
+            "date": {date}}
+    # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
+
+    # dump data #TODO optionally save with torch
+    with open(args.out_file, "wb") as f:
+        pickle.dump(data, f)
