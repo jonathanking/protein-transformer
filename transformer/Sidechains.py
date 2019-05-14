@@ -120,7 +120,7 @@ SC_DATA = {"ARG": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-n2", "c
            "HIS": {"angles": ["ct-cx-n ", "cc-ct-cx", "ct-cc-cv"],
                    "bonds": ["cx-ct", "cc-ct", "cc-cv"],
                    "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'ND1', 'CD2', 'CE1', 'NE2'],
-                   "pred_atoms": ['CB', 'CG', 'CD2']},  # TODO Should be CG, ND1, need to lookup cc- ??
+                   "pred_atoms": ['CB', 'CG', 'CD2']},  # TODO Should be ND1, need cc- ??; changed other file to CD2
            "LYS": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-c8", "c8-c8-n3"],
                    "bonds": ["cx-c8", "c8-c8", "c8-c8", "c8-c8", "c8-n3"],
                    "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD', 'CE', 'NZ'],
@@ -144,11 +144,11 @@ SC_DATA = {"ARG": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-n2", "c
            "ASN": {"angles": ["n -cx-2c", "cx-2c-c ", "2c-c -o "],
                    "bonds": ["cx-2c", "2c-c ", "c -o "],
                    "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'OD1', 'ND2'],
-                   "pred_atoms": ['CB', 'CG', 'OD1']},  # TODO: should be CG, ND2
+                   "pred_atoms": ['CB', 'CG', 'OD1']},  # TODO: should be CG, ND2; changed other file to OD1
            "GLN": {"angles": ["n -cx-2c", "cx-2c-2c", "2c-2c-c ", "2c-c -o "],
                    "bonds": ["cx-2c", "2c-2c", "2c-c ", "c -o "],
                    "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD', 'OE1', 'NE2'],
-                   "pred_atoms": ['CB', 'CG', 'CD', 'OE1']},  # TODO: should be CG, CD, NE2
+                   "pred_atoms": ['CB', 'CG', 'CD', 'OE1']},  # TODO: should be CG, CD, NE2; changed other file to OE1
            "CYS": {"angles": ["n -cx-2c", "cx-2c-sh"],
                    "bonds": ["cx-2c", "sh-2c"],
                    "all_atoms": ['N', 'CA', 'C', 'O', 'CB', 'SG'],
@@ -193,7 +193,7 @@ SC_DATA = {"ARG": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-n2", "c
            "ALA": {"angles": ["ct-cx-n "],
                    "bonds": ["cx-ct"],
                    "all_atoms": ['N', 'CA', 'C', 'O', 'CB'],
-                   "pred_atoms": []},  # only has beta-carbon
+                   "pred_atoms": ['CB']},  # only has beta-carbon
            }
 
 

@@ -117,9 +117,11 @@ def get_angles_from_chain(chain, pdb_id):
         BACKBONE = [phi, psi, omega]
 
         def compute_single_dihedral(atoms):
-            return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)
+            return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
 
-        def compute_all_res_dihedrals(atom_names):
+        def compute_all_res_dihedrals(atom_names, is_ala=False):
+            if is_ala:
+                atom_names = ["N"] + atom_names
             atoms = [res.select("name " + an) for an in atom_names]
             if None in atoms:
                 return None
@@ -131,10 +133,11 @@ def get_angles_from_chain(chain, pdb_id):
             return BACKBONE + BONDANGLES + res_dihedrals + (5 - len(res_dihedrals)) * [PAD_CHAR]
 
         # TODO: verify correctness of atom codes
+        is_alanine = False
         if res.getResname() == "ARG":
             atom_names = ["CA", "C", "CB", "CG", "CD", "NE", "CZ", "NH1"]
         elif res.getResname() == "HIS":
-            atom_names = ["CA", "C", "CB", "CG", "ND1"]
+            atom_names = ["CA", "C", "CB", "CG", "CD2"]
         elif res.getResname() == "LYS":
             atom_names = ["CA", "C", "CB", "CG", "CD", "CE", "NZ"]
         elif res.getResname() == "ASP":
@@ -146,9 +149,9 @@ def get_angles_from_chain(chain, pdb_id):
         elif res.getResname() == "THR":
             atom_names = ["CA", "C", "CB", "CG2"]
         elif res.getResname() == "ASN":
-            atom_names = ["CA", "C", "CB", "CG", "ND2"]
+            atom_names = ["CA", "C", "CB", "CG", "OD1"]
         elif res.getResname() == "GLN":
-            atom_names = ["CA", "C", "CB", "CG", "CD", "NE2"]
+            atom_names = ["CA", "C", "CB", "CG", "CD", "OE1"]
         elif res.getResname() == "CYS":
             atom_names = ["CA", "C", "CB", "SG"]
         elif res.getResname() == "GLY":
@@ -156,7 +159,8 @@ def get_angles_from_chain(chain, pdb_id):
         elif res.getResname() == "PRO":
             atom_names = []
         elif res.getResname() == "ALA":
-            atom_names = []
+            atom_names = ["CA", "C", "CB"]
+            is_alanine = True
         elif res.getResname() == "VAL":
             atom_names = ["CA", "C", "CB", "CG1"]
         elif res.getResname() == "ILE":
@@ -172,7 +176,7 @@ def get_angles_from_chain(chain, pdb_id):
         elif res.getResname() == "TYR":
             atom_names = ["CA", "C", "CB", "CG", "CD1"]
 
-        calculated_dihedrals = compute_all_res_dihedrals(atom_names)
+        calculated_dihedrals = compute_all_res_dihedrals(atom_names, is_alanine)
         if calculated_dihedrals is None:
             return None
         dihedrals.append(calculated_dihedrals)
