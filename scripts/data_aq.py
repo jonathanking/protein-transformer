@@ -83,7 +83,7 @@ def get_angles_from_chain(chain, pdb_id):
     all_residues = list(chain.iterResidues())
     prev = all_residues[0].getResnum()
     for i, res in enumerate(all_residues):
-        if (not res.isstdaa):
+        if not res.isstdaa:
             if args.debug: print("Found a non-std AA. Why didn't you catch this?", chain)
             if args.debug: print(res.getNames())
             return None
@@ -134,7 +134,6 @@ def get_angles_from_chain(chain, pdb_id):
                     res_dihedrals.append(compute_single_dihedral(a))
             return BACKBONE + BONDANGLES + res_dihedrals + (5 - len(res_dihedrals)) * [PAD_CHAR]
 
-        # TODO: verify correctness of atom codes
         is_alanine = False
         atom_names = ["CA", "C"]
         if res.getResname() == "ARG":
