@@ -10,6 +10,8 @@ import requests
 import tqdm
 from sklearn.model_selection import train_test_split
 
+from transformer.Sidechains import SC_DATA
+
 pr.confProDy(verbosity='error')
 
 
@@ -134,54 +136,55 @@ def get_angles_from_chain(chain, pdb_id):
 
         # TODO: verify correctness of atom codes
         is_alanine = False
+        atom_names = ["CA", "C"]
         if res.getResname() == "ARG":
-            atom_names = ["CA", "C", "CB", "CG", "CD", "NE", "CZ", "NH1"]
+            atom_names += SC_DATA["ARG"]["pred_atoms"]
         elif res.getResname() == "HIS":
-            atom_names = ["CA", "C", "CB", "CG", "CD2"]
+            atom_names += SC_DATA["HIS"]["pred_atoms"]
         elif res.getResname() == "LYS":
-            atom_names = ["CA", "C", "CB", "CG", "CD", "CE", "NZ"]
+            atom_names += SC_DATA["LYS"]["pred_atoms"]
         elif res.getResname() == "ASP":
-            atom_names = ["CA", "C", "CB", "CG", "OD1"]
+            atom_names += SC_DATA["ASP"]["pred_atoms"]
         elif res.getResname() == "GLU":
-            atom_names = ["CA", "C", "CB", "CG", "CD", "OE1"]
+            atom_names += SC_DATA["GLU"]["pred_atoms"]
         elif res.getResname() == "SER":
-            atom_names = ["CA", "C", "CB", "OG"]
+            atom_names += SC_DATA["SER"]["pred_atoms"]
         elif res.getResname() == "THR":
-            atom_names = ["CA", "C", "CB", "CG2"]
+            atom_names += SC_DATA["THR"]["pred_atoms"]
         elif res.getResname() == "ASN":
-            atom_names = ["CA", "C", "CB", "CG", "OD1"]
+            atom_names += SC_DATA["ASN"]["pred_atoms"]
         elif res.getResname() == "GLN":
-            atom_names = ["CA", "C", "CB", "CG", "CD", "OE1"]
+            atom_names += SC_DATA["GLN"]["pred_atoms"]
         elif res.getResname() == "CYS":
-            atom_names = ["CA", "C", "CB", "SG"]
-        elif res.getResname() == "GLY":
-            atom_names = []
-        elif res.getResname() == "PRO":
-            atom_names = []
-        elif res.getResname() == "ALA":
-            atom_names = ["CA", "C", "CB"]
-            is_alanine = True
+            atom_names += SC_DATA["CYS"]["pred_atoms"]
         elif res.getResname() == "VAL":
-            atom_names = ["CA", "C", "CB", "CG1"]
+            atom_names += SC_DATA["VAL"]["pred_atoms"]
         elif res.getResname() == "ILE":
-            atom_names = ["CA", "C", "CB", "CG1", "CD1"]
+            atom_names += SC_DATA["ILE"]["pred_atoms"]
         elif res.getResname() == "LEU":
-            atom_names = ["CA", "C", "CB", "CG", "CD1"]
+            atom_names += SC_DATA["LEU"]["pred_atoms"]
         elif res.getResname() == "MET":
-            atom_names = ["CA", "C", "CB", "CG", "SD", "CE"]
+            atom_names += SC_DATA["MET"]["pred_atoms"]
         elif res.getResname() == "PHE":
-            atom_names = ["CA", "C", "CB", "CG", "CD1"]
+            atom_names += SC_DATA["PHE"]["pred_atoms"]
         elif res.getResname() == "TRP":
-            atom_names = ["CA", "C", "CB", "CG", "CD1"]
+            atom_names += SC_DATA["TRP"]["pred_atoms"]
         elif res.getResname() == "TYR":
-            atom_names = ["CA", "C", "CB", "CG", "CD1"]
+            atom_names += SC_DATA["TYR"]["pred_atoms"]
+        # Special cases
+        elif res.getResname() == "GLY":
+            atom_names = SC_DATA["GLY"]["pred_atoms"]
+        elif res.getResname() == "PRO":
+            atom_names = SC_DATA["PRO"]["pred_atoms"]
+        elif res.getResname() == "ALA":
+            atom_names += SC_DATA["ALA"]["pred_atoms"]
+            is_alanine = True
 
         calculated_dihedrals = compute_all_res_dihedrals(atom_names, is_alanine)
         if calculated_dihedrals is None:
             return None
         dihedrals.append(calculated_dihedrals)
 
-    # No normalization
     dihedrals_np = np.asarray(dihedrals)
     # Check for NaNs - they shouldn't be here, but certainly should be excluded if they are.
     if np.any(np.isnan(dihedrals_np)):
