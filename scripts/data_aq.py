@@ -2,6 +2,7 @@ import argparse
 import datetime
 import multiprocessing
 import pickle
+import sys
 from multiprocessing import Pool
 
 import numpy as np
@@ -10,6 +11,7 @@ import requests
 import tqdm
 from sklearn.model_selection import train_test_split
 
+sys.path.extend("../transformer/")
 from transformer.Sidechains import SC_DATA
 
 pr.confProDy(verbosity='error')
