@@ -290,6 +290,7 @@ if __name__ == "__main__":
 
     # Load query
     query, query_description = load_query(args.query_file)
+    print("Description:", query_description)
 
     # Download PDB_IDS associated with query
     PDB_IDS = download_pdbs_from_query(query)
@@ -330,8 +331,7 @@ if __name__ == "__main__":
     # 5b. Split into train, test and validation sets. Report sizes.
     X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
     X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
-    print("{X,y} Train, {X,y} test, {X,y} validation set sizes:\n" + \
-          str(list(map(len, [X_train, y_train, X_test, y_test, X_val, y_val]))))
+    print("Train, test, validation set sizes:\n" + str(list(map(len, [X_train, X_test, X_val]))))
 
     # 5c. Separate PDB ID/Sequence tuples.
     X_train_labels = [x[1] for x in X_train]
