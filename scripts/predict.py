@@ -98,14 +98,6 @@ def make_predictions(the_model, data_loader):
     return coords_list
 
 
-def get_coords_from_atom_names(atom_names, pred_res, coords):
-    abc = []
-    for an in atom_names:
-        idx = pred_res.index(an)
-        abc.append(coords[idx])
-    return abc
-
-
 def fill_in_residue(resname, coords, bb_cords, atom_names):
     """ Given an amino acid that is partially predicted (only the atoms in ATOM_NAMES are predicted),
         this function returns a list of coords that represents the complete amino acid structure."""
