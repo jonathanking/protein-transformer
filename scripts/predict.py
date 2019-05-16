@@ -101,66 +101,50 @@ def make_predictions(the_model, data_loader):
 def fill_in_residue(resname, coords, bb_cords, atom_names):
     """ Given an amino acid that is partially predicted (only the atoms in ATOM_NAMES are predicted),
         this function returns a list of coords that represents the complete amino acid structure."""
-    all_res_atoms = SC_DATA[resname]["all"][4:]  # ignores N CA C O
-    pred_res_atoms = SC_DATA[resname]["predicted"]
-    missing_atoms = SC_DATA[resname]["missing"]
+    all = SC_DATA[resname]["all"][4:]  # ignores N CA C O
+    predicted = SC_DATA[resname]["predicted"]
+    missing = SC_DATA[resname]["missing"]
+    align_target = SC_DATA[resname]["align_target"]
+    align_mobile = SC_DATA[resname]["align_mobile"]
 
+    if len(missing) == 0:
+        return coords  # There are no missing coords, return predicted coords
 
-    completed_atoms = []
+    if resname is "PRO":
+        coords = bb_cords
+    elif "CA" == align_target[0]:
+        coords = [bb_cords[1]] + coords  # If target requires CA, add it to the list of predicted coords
+    elif "CA" in align_target:
+        raise Exception("CA found in target but not at position 0" + str(align_target) + " " + resname)
 
-    # TODO Add all sidechains here
-    if resname == "ALA":
-        pass
-    elif resname == "ARG":  # NH2
-        need = ['CD', 'NE', 'CZ']
-        a, b, c = get_coords_from_atom_names(need, pred_res_atoms, coords)
-        l = BONDLENS["CZ-NH2"]
-        theta = 120.5
-        chi = None
-        nh2 = nerf(a, b, c, l, theta, chi, device)
-        return coords + [nh2]
-    elif resname == "ASN":
-        # TODO fix CG, ND2
-        need = []
-    elif resname == "ASP":  # Place OD2
-        need = ['CA', 'CB', 'CG']
-    elif resname == "CYS":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "GLU":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "GLN":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "GLY":  # no sidechain
-        return []
-    elif resname == "HIS":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "ILE":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "LEU":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "LYS":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "MET":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "PHE":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "PRO":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "SER":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "THR":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "TRP":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "TYR":  # NH2
-        need = ['CD', 'NE', 'CZ']
-    elif resname == "VAL":  # NH2
-        need = ['CD', 'NE', 'CZ']
+    # Load reference structures
+    complete_target = parsePDB("data/amino_acid_substructures/" + resname.lower() + ".pdb")
+    complete_mobile = parsePDB("data/amino_acid_substructures/" + resname.lower() + ".pdb")
 
-    elif resname == "GLY":
-        return []  # no sidechain
+    # Select relevant subsets of reference structures
+    align_target_struct = complete_target.select("name " + " ".join(align_target))
+    align_mobile_complete_struct = complete_mobile.select("name " + " ".join(align_mobile))
+    align_mobile_struct = complete_mobile.select("name " + " ".join(set(align_mobile).intersection(set(align_target))))
 
-    return [np.zeros(3)]
+    # Initialize target structure with predicted coordinates
+    align_target_struct.setCoords(coords[-3:])
+
+    # Compute and apply transformation from mobile to target
+    t = calcTransformation(align_mobile_struct, align_target_struct)
+    aligned_mobile_struct = t.apply(align_mobile_complete_struct)
+
+    missing_coords = []
+
+    for m in missing:
+        c = aligned_mobile_struct.select("name " + m).getCoords()[0]
+        missing_coords.append(c)
+
+    if resname is "PRO":
+        return missing_coords
+    elif "CA" in align_target:
+        coords = coords[1:]
+
+    return coords + missing_coords
 
 
 def make_pdbs(id_coords_dict, outdir):
@@ -199,10 +183,22 @@ def make_pdbs(id_coords_dict, outdir):
         for sc_atomcoords, ans in zip(sc_tups, atom_names):
             assert len(sc_atomcoords) == len(ans)
 
-        sidechain = prot.select('protein and chain ' + chain_id + ' and sidechain')
-        sidechain.setCoords(predicted_sidechain_coords)
+        prot_sidechains = prot.select('protein and chain ' + chain_id)
+        for res_num, res_code, res_coords, res_bb_coords, res_atom_names in zip(prot_sidechains.ca.getResnums(),
+                                                                                aa_codes, sc_tups, bb_tups,
+                                                                                atom_names):
+            if res_code is "GLY":
+                continue
+            sidechain_coords = fill_in_residue(res_code, res_coords, res_bb_coords, res_atom_names)
+            this_sidechain = prot_sidechains.select('sidechain and resnum ' + str(res_num))
+            if this_sidechain is None:
+                print('this_sidechain is None')
+                raise Exception("The sidechain could not be selected for " + res_code)
+            this_sidechain.setCoords(sidechain_coords)
 
-        writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), sidechain + backbone)
+        all_sidechains = prot.select('protein and chain ' + chain_id + ' and sidechain')
+
+        writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), all_sidechains + backbone)
 
 
 if __name__ == "__main__":
