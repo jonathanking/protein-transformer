@@ -210,7 +210,6 @@ def make_pdbs(id_coords_dict, outdir):
 
 if __name__ == "__main__":
     np.random.seed(11)
-    pathPDBFolder("/home/jok120/build/pdb/")
     parser = argparse.ArgumentParser(description="Loads a model and makes predictions as PDBs.")
     parser.add_argument('model_chkpt', type=str,
                         help="Path to model checkpoint file.")
@@ -223,8 +222,9 @@ if __name__ == "__main__":
                         help="Which dataset within the data file to predict on.")
     parser.add_argument("-n", type=int, default=5, required=False,
                         help="How many items to randomly predict from dataset.")
-
+    parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str, help="Path for ProDy-downloaded PDB files.")
     args = parser.parse_args()
+    pathPDBFolder(args.pdb_dir)
 
     # Load model
     device = torch.device('cpu')

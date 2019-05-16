@@ -274,13 +274,13 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.pkl file)')
     parser.add_argument('-sc', '--single_chain_only', action="store_true", help='Only keep PDBs with a single chain.')
     parser.add_argument('-d', '--debug', action="store_true", help='Print debug print statements.')
+    parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str, help="Path for ProDy-downloaded PDB files.")
     args = parser.parse_args()
 
     # Set up
     AA_MAP = {'A': 15, 'C': 0, 'D': 1, 'E': 17, 'F': 8, 'G': 10, 'H': 11, 'I': 5, 'K': 4, 'L': 12, 'M': 19, 'N': 9,
               'P': 6, 'Q': 3, 'R': 13, 'S': 2, 'T': 7, 'V': 16, 'W': 14, 'Y': 18}
-    CUR_DIR = "/home/jok120/pdb/"
-    pr.pathPDBFolder(CUR_DIR)
+    pr.pathPDBFolder(args.pdb_dir)
     np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
     np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
     today = datetime.datetime.today()
