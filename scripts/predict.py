@@ -107,9 +107,9 @@ def get_coords_from_atom_names(atom_names, pred_res, coords):
 def fill_in_residue(resname, coords, bb_cords, atom_names):
     """ Given an amino acid that is partially predicted (only the atoms in ATOM_NAMES are predicted),
         this function returns a list of coords that represents the complete amino acid structure."""
-    all_res_atoms = SC_DATA[resname]["all_atoms"][4:]  # ignores N CA C O
-    pred_res_atoms = SC_DATA[resname]["pred_atoms"]
-    atoms_not_predicted = set(all_res_atoms) - set(pred_res_atoms)
+    all_res_atoms = SC_DATA[resname]["all"][4:]  # ignores N CA C O
+    pred_res_atoms = SC_DATA[resname]["predicted"]
+    missing_atoms = SC_DATA[resname]["missing"]
 
 
     completed_atoms = []
@@ -168,6 +168,7 @@ def fill_in_residue(resname, coords, bb_cords, atom_names):
 
     return [np.zeros(3)]
 
+
 def make_pdbs(id_coords_dict, outdir):
     """ Given a dictionary that maps PDB_ID -> pred_coordinate_tuple, this function parses the true PDB file and
         assigns coordinates to its atoms so that a PDB file can be generated."""
@@ -194,18 +195,21 @@ def make_pdbs(id_coords_dict, outdir):
         assert backbone.getCoords().shape == bb_coords.shape, "Backbone shape mismatch for " + pdb_chain
         backbone.setCoords(bb_coords)
 
+        if args.backbone_only:
+            writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), backbone)
+            continue
+
+
         # Set sidechain atoms
-        # assert len(aa_codes) == len(sc_tups) and len(sc_tups) == len(
-        #     atom_names), "Shape mismatch for coordinate tuples."
-        # predicted_sidechain_coords = []
-        # for res_code, res_coords, res_bb_coords, res_atom_names in zip(aa_codes, sc_tups, bb_tups, atom_names):
-        #     predicted_sidechain_coords.extend(fill_in_residue(res_code, res_coords, res_bb_coords, res_atom_names))
+        assert len(aa_codes) == len(sc_tups) and len(sc_tups) == len(atom_names), "Shape mismatch for coord tuples."
+        predicted_sidechain_coords = []
+        for res_code, res_coords, res_bb_coords, res_atom_names in zip(aa_codes, sc_tups, bb_tups, atom_names):
+            predicted_sidechain_coords.extend(fill_in_residue(res_code, res_coords, res_bb_coords, res_atom_names))
 
-        # sidechain = prot.select('protein and chain ' + chain_id + ' and sidechain')
-        # sidechain.setCoords(predicted_sidechain_coords)
+        sidechain = prot.select('protein and chain ' + chain_id + ' and sidechain')
+        sidechain.setCoords(predicted_sidechain_coords)
 
-        # writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), sidechain + backbone)
-        writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), backbone)
+        writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), sidechain + backbone)
 
 
 if __name__ == "__main__":
@@ -223,6 +227,7 @@ if __name__ == "__main__":
     parser.add_argument("-n", type=int, default=5, required=False,
                         help="How many items to randomly predict from dataset.")
     parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str, help="Path for ProDy-downloaded PDB files.")
+    parser.add_argument("-bb", "--backbone_only", action="store_true", help="Only predict the protein backbone.")
     args = parser.parse_args()
     pathPDBFolder(args.pdb_dir)
 
