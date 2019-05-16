@@ -171,7 +171,7 @@ def make_pdbs(id_coords_dict, outdir):
         bb_coords, bb_tups, sc_tups, loss, aa_codes, atom_names = data
         pdb_id = pdb_chain.split('_')[0]
         chain_id = pdb_chain.split("_")[-1]
-        print(pdb_id, chain_id)
+        print("Building", pdb_id, chain_id)
 
         prot = parsePDB(pdb_id)
 
@@ -196,9 +196,8 @@ def make_pdbs(id_coords_dict, outdir):
 
         # Set sidechain atoms
         assert len(aa_codes) == len(sc_tups) and len(sc_tups) == len(atom_names), "Shape mismatch for coord tuples."
-        predicted_sidechain_coords = []
-        for res_code, res_coords, res_bb_coords, res_atom_names in zip(aa_codes, sc_tups, bb_tups, atom_names):
-            predicted_sidechain_coords.extend(fill_in_residue(res_code, res_coords, res_bb_coords, res_atom_names))
+        for sc_atomcoords, ans in zip(sc_tups, atom_names):
+            assert len(sc_atomcoords) == len(ans)
 
         sidechain = prot.select('protein and chain ' + chain_id + ' and sidechain')
         sidechain.setCoords(predicted_sidechain_coords)
