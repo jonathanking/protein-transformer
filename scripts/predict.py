@@ -15,7 +15,7 @@ import numpy as np
 import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
-from transformer.Structure import generate_coords_with_tuples, nerf, BONDLENS
+from transformer.Structure import generate_coords_with_tuples
 from train import drmsd_loss
 from losses import inverse_trig_transform, copy_padding_from_gold
 from transformer.Sidechains import SC_DATA
@@ -83,6 +83,8 @@ def make_predictions(the_model, data_loader):
 
             # forward
             pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
+            if args.reconstruct:
+                pred = tgt_seq
             loss = drmsd_loss(pred, gold, src_seq, torch.device('cpu'))
             losses.append(loss)
 
@@ -228,8 +230,12 @@ if __name__ == "__main__":
                         help="How many items to randomly predict from dataset.")
     parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str, help="Path for ProDy-downloaded PDB files.")
     parser.add_argument("-bb", "--backbone_only", action="store_true", help="Only predict the protein backbone.")
+    parser.add_argument("--reconstruct", action="store_true",
+                        help="For debugging structure generation. Try to reconstruct the true protein structure.")
     args = parser.parse_args()
     pathPDBFolder(args.pdb_dir)
+    if args.reconstruct:
+        print("Attempting to reconstruct real structures.")
 
     # Load model
     device = torch.device('cpu')
