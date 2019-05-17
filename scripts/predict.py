@@ -101,8 +101,6 @@ def make_predictions(the_model, data_loader):
 def fill_in_residue(resname, coords, bb_cords, atom_names):
     """ Given an amino acid that is partially predicted (only the atoms in ATOM_NAMES are predicted),
         this function returns a list of coords that represents the complete amino acid structure."""
-    all = SC_DATA[resname]["all"][4:]  # ignores N CA C O
-    predicted = SC_DATA[resname]["predicted"]
     missing = SC_DATA[resname]["missing"]
     align_target = SC_DATA[resname]["align_target"]
     align_mobile = SC_DATA[resname]["align_mobile"]
@@ -194,6 +192,7 @@ def make_pdbs(id_coords_dict, outdir):
             if this_sidechain is None:
                 print('this_sidechain is None')
                 raise Exception("The sidechain could not be selected for " + res_code)
+            # TODO Check names
             this_sidechain.setCoords(sidechain_coords)
 
         all_sidechains = prot.select('protein and chain ' + chain_id + ' and sidechain')
