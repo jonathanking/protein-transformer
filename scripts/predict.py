@@ -105,6 +105,10 @@ def fill_in_residue(resname, coords, bb_cords, atom_names, reference_sidechains)
     align_target = SC_DATA[resname]["align_target"]
     align_mobile = SC_DATA[resname]["align_mobile"]
 
+    if resname in ["ALA", "CYS", "GLY", "LYS", "MET", "SER"]:  # return the predicted atoms if none are missing
+        assert len(missing) == 0, "An atom that is fully predicted by the model has > 0 \"missing\" atoms."
+        return list(zip(atom_names, coords))
+
     if len(missing) == 0:
         return coords  # There are no missing coords, return predicted coords
 
