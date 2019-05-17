@@ -98,28 +98,27 @@ def make_predictions(the_model, data_loader):
     return coords_list
 
 
-def fill_in_residue(resname, coords, bb_cords, atom_names, reference_sidechains):
-    """ Given an amino acid that is partially predicted (only the atoms in ATOM_NAMES are predicted),
+def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidechains):
+    """ Given an amino acid RESNAME that is partially predicted (only the atoms in PRED_NAMES are predicted),
         this function returns a list of coords that represents the complete amino acid structure."""
     missing = SC_DATA[resname]["missing"]
     align_target = SC_DATA[resname]["align_target"]
     align_mobile = SC_DATA[resname]["align_mobile"]
 
-    if resname in ["ALA", "CYS", "GLY", "LYS", "MET", "SER"]:  # return the predicted atoms if none are missing
+    if resname in ["ALA", "CYS", "GLY", "LYS", "MET", "SER"]:  # return the prev. predicted atoms if none are missing
         assert len(missing) == 0, "An atom that is fully predicted by the model has > 0 \"missing\" atoms."
-        return list(zip(atom_names, coords))
-
-    if len(missing) == 0:
-        return coords  # There are no missing coords, return predicted coords
+        return list(zip(pred_names, pred_coords))
 
     if resname is "PRO":
-        coords = bb_cords
+        pred_coords = bb_cords
+        pred_names = ["N", "CA", "C"]
     elif "CA" == align_target[0]:
-        coords = [bb_cords[1]] + coords  # If target requires CA, add it to the list of predicted coords
+        pred_coords = [bb_cords[1]] + pred_coords  # If target requires CA, add it to the list of predicted coords
+        pred_names = ["CA"] + pred_names
     elif "CA" in align_target:
         raise Exception("CA found in target but not at position 0" + str(align_target) + " " + resname)
 
-    # Load reference structuresgit
+    # Load reference structures
     complete_target = reference_sidechains[resname]
     complete_mobile = complete_target.copy()
 
@@ -129,7 +128,9 @@ def fill_in_residue(resname, coords, bb_cords, atom_names, reference_sidechains)
     align_mobile_struct = complete_mobile.select("name " + " ".join(set(align_mobile).intersection(set(align_target))))
 
     # Initialize target structure with predicted coordinates
-    align_target_struct.setCoords(coords[-3:])
+    for an, at in zip(pred_names[-3:], align_target):
+        assert an == at, "Lists are out of order" + resname + str(pred_names + [" "] + align_target)
+    align_target_struct.setCoords(pred_coords[-3:])
 
     # Compute and apply transformation from mobile to target
     t = calcTransformation(align_mobile_struct, align_target_struct)
@@ -139,12 +140,14 @@ def fill_in_residue(resname, coords, bb_cords, atom_names, reference_sidechains)
 
     for m in missing:
         c = aligned_mobile_struct.select("name " + m).getCoords()[0]
-        missing_coords.append(c)
-
+        missing_coords.append((m, c))
     if resname is "PRO":
         return missing_coords
     elif "CA" in align_target:
-        coords = coords[1:]
+        pred_coords = pred_coords[1:]
+        pred_names = pred_names[1:]
+
+    return list(zip(pred_names, pred_coords)) + missing_coords
 
 
 def clean_multiple_coordsets(protein):
@@ -158,16 +161,54 @@ def clean_multiple_coordsets(protein):
     return protein
 
 
+def set_backbone_coords(prot, chain_id, bb_coords, pdb_chain):
+    # Set backbone atoms
+    backbone = prot.select('protein and chain ' + chain_id + ' and name N CA C')
+    assert backbone.getCoords().shape == bb_coords.shape, "Backbone shape mismatch for " + pdb_chain
+    backbone.setCoords(bb_coords)
+    # TODO Fill in oxygen position
+    return backbone
+
+
+def set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains):
+    """ Given a protein PDB selection object and amino acid"""
+    # Set sidechain atoms
+    assert len(aa_codes) == len(sc_tups) and len(sc_tups) == len(atom_names), "Shape mismatch for coord tuples."
+    for sc_atomcoords, ans in zip(sc_tups, atom_names):
+        assert len(sc_atomcoords) == len(ans)
+
+    prot_sidechains = prot.select('protein and chain ' + chain_id)
+    for res_num, res_code, res_coords, res_bb_coords, res_atom_names in zip(prot_sidechains.ca.getResnums(),
+                                                                            aa_codes,
+                                                                            sc_tups,
+                                                                            bb_tups,
+                                                                            atom_names):
+        if res_code is "GLY":
+            continue
+        sidechain_coords = fill_in_residue(res_code, res_coords, res_atom_names, res_bb_coords, ref_sidechains)
+        this_sidechain = prot_sidechains.select('sidechain and resnum ' + str(res_num))
+        if this_sidechain is None:
+            print('this_sidechain is None')
+            raise Exception("The sidechain could not be selected for " + res_code)
+        for name, coord in sidechain_coords:
+            this_sidechain.select("name " + name).setCoords(coord)
+    return prot
+
+
 def make_pdbs(id_coords_dict, outdir):
     """ Given a dictionary that maps PDB_ID -> pred_coordinate_tuple, this function parses the true PDB file and
         assigns coordinates to its atoms so that a PDB file can be generated."""
     os.makedirs(outdir, exist_ok=True)
-    reference_sidechains = {}
+
+    # Load reference sidechain structures
+    ref_sidechains = {}
     for res in SC_DATA.keys():
         try:
-            reference_sidechains[res] = parsePDB("data/amino_acid_substructures/" + res.lower() + ".pdb")
+            ref_sidechains[res] = parsePDB("data/amino_acid_substructures/" + res.lower() + ".pdb")
         except OSError:
             continue
+
+    # Build PDBs
     for pdb_chain, data in id_coords_dict.items():
         bb_coords, bb_tups, sc_tups, loss, aa_codes, atom_names = data
         pdb_id = pdb_chain.split('_')[0]
@@ -176,36 +217,12 @@ def make_pdbs(id_coords_dict, outdir):
 
         prot = clean_multiple_coordsets(parsePDB(pdb_id))
 
-        # Set backbone atoms
-        backbone = prot.select('protein and chain ' + chain_id + ' and name N CA C')
-        assert backbone.getCoords().shape == bb_coords.shape, "Backbone shape mismatch for " + pdb_chain
-        backbone.setCoords(bb_coords)
-
+        backbone = set_backbone_coords(prot, chain_id, bb_coords, pdb_chain)
         if args.backbone_only:
             writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), backbone)
             continue
 
-
-        # Set sidechain atoms
-        assert len(aa_codes) == len(sc_tups) and len(sc_tups) == len(atom_names), "Shape mismatch for coord tuples."
-        for sc_atomcoords, ans in zip(sc_tups, atom_names):
-            assert len(sc_atomcoords) == len(ans)
-
-        prot_sidechains = prot.select('protein and chain ' + chain_id)
-        for res_num, res_code, res_coords, res_bb_coords, res_atom_names in zip(prot_sidechains.ca.getResnums(),
-                                                                                aa_codes, sc_tups, bb_tups,
-                                                                                atom_names):
-            if res_code is "GLY":
-                continue
-            sidechain_coords = fill_in_residue(res_code, res_coords, res_bb_coords, res_atom_names,
-                                               reference_sidechains)
-            this_sidechain = prot_sidechains.select('sidechain and resnum ' + str(res_num))
-            if this_sidechain is None:
-                print('this_sidechain is None')
-                raise Exception("The sidechain could not be selected for " + res_code)
-            # TODO Check names
-            this_sidechain.setCoords(sidechain_coords)
-
+        prot = set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains)
         all_sidechains = prot.select('protein and chain ' + chain_id + ' and sidechain')
 
         writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), all_sidechains + backbone)
