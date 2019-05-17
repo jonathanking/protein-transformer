@@ -146,7 +146,16 @@ def fill_in_residue(resname, coords, bb_cords, atom_names, reference_sidechains)
     elif "CA" in align_target:
         coords = coords[1:]
 
-    return coords + missing_coords
+
+def clean_multiple_coordsets(protein):
+    """ Deletes all but the first coordinate set of a protein. """
+    if len(protein.getCoordsets()) > 1:
+        for i in range(len(protein.getCoordsets())):
+            if i == 0:
+                pass
+            else:
+                protein.delCoordset(-1)
+    return protein
 
 
 def make_pdbs(id_coords_dict, outdir):
@@ -165,17 +174,8 @@ def make_pdbs(id_coords_dict, outdir):
         chain_id = pdb_chain.split("_")[-1]
         print("Building", pdb_id, chain_id)
 
-        prot = parsePDB(pdb_id)
+        prot = clean_multiple_coordsets(parsePDB(pdb_id))
 
-        # dealing with multiple coordinate sets
-        if len(prot.getCoordsets()) > 1:
-            for i in range(len(prot.getCoordsets())):
-                if i == 0:
-                    pass
-                else:
-                    prot.delCoordset(-1)
-
-        # TODO Fill in oxygen position
         # Set backbone atoms
         backbone = prot.select('protein and chain ' + chain_id + ' and name N CA C')
         assert backbone.getCoords().shape == bb_coords.shape, "Backbone shape mismatch for " + pdb_chain
