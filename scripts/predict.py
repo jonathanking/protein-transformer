@@ -98,7 +98,7 @@ def make_predictions(the_model, data_loader):
     return coords_list
 
 
-def fill_in_residue(resname, coords, bb_cords, atom_names):
+def fill_in_residue(resname, coords, bb_cords, atom_names, reference_sidechains):
     """ Given an amino acid that is partially predicted (only the atoms in ATOM_NAMES are predicted),
         this function returns a list of coords that represents the complete amino acid structure."""
     missing = SC_DATA[resname]["missing"]
@@ -115,9 +115,9 @@ def fill_in_residue(resname, coords, bb_cords, atom_names):
     elif "CA" in align_target:
         raise Exception("CA found in target but not at position 0" + str(align_target) + " " + resname)
 
-    # Load reference structures
-    complete_target = parsePDB("data/amino_acid_substructures/" + resname.lower() + ".pdb")
-    complete_mobile = parsePDB("data/amino_acid_substructures/" + resname.lower() + ".pdb")
+    # Load reference structuresgit
+    complete_target = reference_sidechains[resname]
+    complete_mobile = complete_target.copy()
 
     # Select relevant subsets of reference structures
     align_target_struct = complete_target.select("name " + " ".join(align_target))
@@ -149,6 +149,12 @@ def make_pdbs(id_coords_dict, outdir):
     """ Given a dictionary that maps PDB_ID -> pred_coordinate_tuple, this function parses the true PDB file and
         assigns coordinates to its atoms so that a PDB file can be generated."""
     os.makedirs(outdir, exist_ok=True)
+    reference_sidechains = {}
+    for res in SC_DATA.keys():
+        try:
+            reference_sidechains[res] = parsePDB("data/amino_acid_substructures/" + res.lower() + ".pdb")
+        except OSError:
+            continue
     for pdb_chain, data in id_coords_dict.items():
         bb_coords, bb_tups, sc_tups, loss, aa_codes, atom_names = data
         pdb_id = pdb_chain.split('_')[0]
@@ -187,7 +193,8 @@ def make_pdbs(id_coords_dict, outdir):
                                                                                 atom_names):
             if res_code is "GLY":
                 continue
-            sidechain_coords = fill_in_residue(res_code, res_coords, res_bb_coords, res_atom_names)
+            sidechain_coords = fill_in_residue(res_code, res_coords, res_bb_coords, res_atom_names,
+                                               reference_sidechains)
             this_sidechain = prot_sidechains.select('sidechain and resnum ' + str(res_num))
             if this_sidechain is None:
                 print('this_sidechain is None')
