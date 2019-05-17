@@ -93,7 +93,7 @@ def init_backbone(angles, device):
 
 def extend_backbone(i, angles, coords, device):
     """ Returns backbone coordinates for the residue angles[pos]."""
-    bb_pts = []
+    bb_pts = list(coords)
     for j in range(3):
         if j == 0:
             # we are placing N
@@ -110,14 +110,13 @@ def extend_backbone(i, angles, coords, device):
             t = angles[i, 3]  # thetas["n-ca-c"]
             b = BONDLENS["ca-c"]
             dihedral = angles[i, 0]  # phi of current residue
-        p3 = coords[-3]
-        p2 = coords[-2]
-        p1 = coords[-1]
+        p3 = bb_pts[-3]
+        p2 = bb_pts[-2]
+        p1 = bb_pts[-1]
         next_pt = nerf(p3, p2, p1, b, t, dihedral, device)
         bb_pts.append(next_pt)
 
-
-    return bb_pts
+    return bb_pts[-3:]
 
 
 def l2_normalize(t, device, eps=1e-12):
