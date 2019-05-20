@@ -13,8 +13,9 @@ def paired_collate_fn(insts):
     tgt_insts = collate_fn(tgt_insts, is_tgt=True)
     return (*src_insts, *tgt_insts)
 
+
 def collate_fn(insts, is_tgt=False):
-    ''' Pad the instance to the max seq length in batch '''
+    """ Pad the instance to the max seq length in batch """
 
     max_len = max(len(inst) for inst in insts)
 
@@ -36,12 +37,11 @@ def collate_fn(insts, is_tgt=False):
         batch_seq = torch.FloatTensor(batch_seq)
     batch_pos = torch.LongTensor(batch_pos)
 
-
     return batch_seq, batch_pos
 
+
 class ProteinDataset(torch.utils.data.Dataset):
-    def __init__(
-        self, seqs=None, angs=None):
+    def __init__(self, seqs=None, angs=None):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs))
@@ -51,7 +51,7 @@ class ProteinDataset(torch.utils.data.Dataset):
 
     @property
     def n_insts(self):
-        ''' Property for dataset size '''
+        """ Property for dataset size """
         return len(self._seqs)
 
     def __len__(self):

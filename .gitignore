@@ -7,6 +7,7 @@ preds/*
 *.pdb
 *.tch
 *.npy
+console.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -214,7 +214,6 @@ for res in SC_DATA.keys():
     SC_DATA[res]["align_mobile"] = list(set(SC_DATA[res]["align_target"] + SC_DATA[res]["missing"]))
 
 
-
 def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False):
     """ Given an index (i) into an angle tensor (d), builds the requested sidechain and returns it as a list."""
     residue_code = torch.argmax(input_seq[i])
