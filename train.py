@@ -201,7 +201,7 @@ def main():
     parser.add_argument('-d_inner_hid', type=int, default=1024)
     parser.add_argument('-d_k', type=int, default=64)
     parser.add_argument('-d_v', type=int, default=64)
-    parser.add_argument('-n_head', type=int, default=8)
+    parser.add_argument('-n_heads', type=int, default=8)
     parser.add_argument('-n_layers', type=int, default=6)
     parser.add_argument('-dropout', type=float, default=0)
 
@@ -245,7 +245,7 @@ def main():
         d_model=opt.d_model,
         d_inner=opt.d_inner_hid,
         n_layers=opt.n_layers,
-        n_head=opt.n_head,
+        n_head=opt.n_heads,
         dropout=opt.dropout).to(device)
     optimizer = ScheduledOptim(
         optim.Adam(
