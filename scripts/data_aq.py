@@ -8,6 +8,7 @@ from multiprocessing import Pool
 import numpy as np
 import prody as pr
 import requests
+import torch
 import tqdm
 from sklearn.model_selection import train_test_split
 
@@ -275,6 +276,8 @@ if __name__ == "__main__":
     parser.add_argument('-sc', '--single_chain_only', action="store_true", help='Only keep PDBs with a single chain.')
     parser.add_argument('-d', '--debug', action="store_true", help='Print debug print statements.')
     parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str, help="Path for ProDy-downloaded PDB files.")
+    parser.add_argument("-p", "--pickle", action="store_true",
+                        help="Save data as a pickled dictionary instead of a torch-dictionary.")
     args = parser.parse_args()
 
     # Set up
@@ -285,8 +288,10 @@ if __name__ == "__main__":
     np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
     today = datetime.datetime.today()
     suffix = today.strftime("%m%d%y")
-    if not args.out_file:
+    if not args.out_file and args.pickle:
         args.out_file = "../data/data_" + suffix + ".pkl"
+    elif not args.out_file and not args.pickle:
+        args.out_file = "../data/data_" + suffix + ".tch"
 
     # Load query
     query, query_description = load_query(args.query_file)
@@ -357,6 +362,9 @@ if __name__ == "__main__":
             "date": {date}}
     # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
 
-    # dump data #TODO optionally save with torch
-    with open(args.out_file, "wb") as f:
-        pickle.dump(data, f)
+    # dump data
+    if args.pickle:
+        with open(args.out_file, "wb") as f:
+            pickle.dump(data, f)
+    else:
+        torch.save(data, args.out_file)
