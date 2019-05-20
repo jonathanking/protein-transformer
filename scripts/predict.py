@@ -119,8 +119,8 @@ def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidech
         raise Exception("CA found in target but not at position 0" + str(align_target) + " " + resname)
 
     # Load reference structures
-    complete_target = reference_sidechains[resname]
-    complete_mobile = complete_target.copy()
+    complete_target = reference_sidechains[resname].copy()
+    complete_mobile = reference_sidechains[resname].copy()
 
     # Select relevant subsets of reference structures
     align_target_struct = complete_target.select("name " + " ".join(align_target))
@@ -134,12 +134,12 @@ def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidech
 
     # Compute and apply transformation from mobile to target
     t = calcTransformation(align_mobile_struct, align_target_struct)
-    aligned_mobile_struct = t.apply(align_mobile_complete_struct)
+    t.apply(align_mobile_complete_struct)
 
     missing_coords = []
 
     for m in missing:
-        c = aligned_mobile_struct.select("name " + m).getCoords()[0]
+        c = align_mobile_complete_struct.select("name " + m).getCoords()[0]
         missing_coords.append((m, c))
     if resname is "PRO":
         return missing_coords

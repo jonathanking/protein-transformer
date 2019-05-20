@@ -13,10 +13,7 @@ class AminoAcid(object):
     def __init__(self, name):
         self.name = name
         self.predicted = SC_DATA[name]["pred_atoms"]
-        self.missing = []
-        for an in SC_DATA[name]["all_atoms"][4:]: # ignore N CA C O
-            if an not in self.predicted:
-                self.missing.append(an)
+
         self.alignment_frag = self.lookup_alignment_frag(name)
         self.align_to_frag = self.lookup_align_to_frag(name)
 
