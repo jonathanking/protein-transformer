@@ -190,9 +190,10 @@ def main():
     parser.add_argument('-epochs', type=int, default=10)
     parser.add_argument("-b", '--batch_size', type=int, default=8)
     parser.add_argument('-early_stopping', type=int, default=None)
-    parser.add_argument('-n_warmup_steps', type=int, default=200)
+    parser.add_argument('-n_warmup_steps', type=int, default=1000)
     parser.add_argument('-clip', type=float, default=None)
-    parser.add_argument('-combined_loss', action='store_true', help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
+    parser.add_argument('-combined_loss', action='store_true',
+                        help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
 
     # Model parameters
     parser.add_argument('-d_word_vec', type=int, default=20)
@@ -250,7 +251,7 @@ def main():
         optim.Adam(
             filter(lambda x: x.requires_grad, transformer.parameters()),
             betas=(0.9, 0.98), eps=1e-09, lr=opt.learning_rate),
-        opt.d_model, opt.n_warmup_steps)
+        opt.d_model, opt.n_warmup_steps, simple=False)
 
     train(transformer, training_data, validation_data, optimizer, device, opt, log_writer)
     log_f.close()
