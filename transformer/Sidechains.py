@@ -225,7 +225,7 @@ def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False):
 
 def generate_sidechain_dihedrals(angles, i):
     """ Returns a generator that iteratively produces the sidechain dihedral angles for residue (i) in (angles). """
-    first = True # for generating the first atom, cb, which depends on angle 0
+    first = True  # for generating the first atom, cb, which depends on angle 0
     start = 6
     assert len(angles.shape) == 2 and angles.shape[1] == 11
     while start < angles.shape[-1]:
@@ -252,8 +252,8 @@ def extend_any_sc(info, aa_code, return_tuples=False):
     n0 = bb_arr[-2]  # Ca from cur res
 
     for l, a, dihe in zip(lens, angs, dihedrals):
-        next_pt = Structure.nerf(n2, n1, n0, l, a, dihe,device=torch.device("cpu"))
-        n2, n1, n0 = n1, n0, next_pt
+        next_pt = Structure.nerf(n2, n1, n0, l, a, dihe, device=torch.device("cpu"))  # CB
+        n2, n1, n0 = n1, n0, next_pt  # N, CA, CB
         sc_pts.append(next_pt)
 
     if return_tuples:
