@@ -111,9 +111,7 @@ def get_angles_from_chain(chain, pdb_id):
     def compute_single_dihedral(atoms):
         return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
 
-    def compute_all_res_dihedrals(atom_names, residue, backbone, bondanlges, is_ala=False):
-        if is_ala:
-            atom_names = ["N"] + atom_names
+    def compute_all_res_dihedrals(atom_names, residue, backbone, bondangles):
         atoms = [residue.select("name " + an) for an in atom_names]
         if None in atoms:
             return None
@@ -122,7 +120,7 @@ def get_angles_from_chain(chain, pdb_id):
             for i in range(len(atoms) - 3):
                 a = atoms[i:i + 4]
                 res_dihedrals.append(compute_single_dihedral(a))
-        return backbone + bondanlges + res_dihedrals + (5 - len(res_dihedrals)) * [PAD_CHAR]
+        return backbone + bondangles + res_dihedrals + (5 - len(res_dihedrals)) * [PAD_CHAR]
 
 
     try:
@@ -144,22 +142,17 @@ def get_angles_from_chain(chain, pdb_id):
         else:
             prev = res.getResnum() + 1
 
-        phi, psi, omega = measure_phi_psi_omega(res)
+        BACKBONE = list(measure_phi_psi_omega(res))
         BONDANGLES = measure_bond_angles(res, pdb_id, all_residues)
-        BACKBONE = [phi, psi, omega]
 
-        is_alanine = False
-        atom_names = ["C", "CA"]
+        atom_names = ["N", "CA"]
         # Special cases
         if res.getResname() in ["GLY", "PRO"]:
             atom_names = SC_DATA[res.getResname()]["predicted"]
-        elif res.getResname() == "ALA":
-            atom_names += SC_DATA["ALA"]["predicted"]
-            is_alanine = True
         else:
             atom_names += SC_DATA[res.getResname()]["predicted"]
 
-        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, BACKBONE, BONDANGLES, is_alanine)
+        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, BACKBONE, BONDANGLES)
         if calculated_dihedrals is None:
             return None
         dihedrals.append(calculated_dihedrals)
