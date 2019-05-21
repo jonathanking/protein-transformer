@@ -149,49 +149,15 @@ def get_angles_from_chain(chain, pdb_id):
         BACKBONE = [phi, psi, omega]
 
         is_alanine = False
-        atom_names = ["CA", "C"]
-        if res.getResname() == "ARG":
-            atom_names += SC_DATA["ARG"]["predicted"]
-        elif res.getResname() == "HIS":
-            atom_names += SC_DATA["HIS"]["predicted"]
-        elif res.getResname() == "LYS":
-            atom_names += SC_DATA["LYS"]["predicted"]
-        elif res.getResname() == "ASP":
-            atom_names += SC_DATA["ASP"]["predicted"]
-        elif res.getResname() == "GLU":
-            atom_names += SC_DATA["GLU"]["predicted"]
-        elif res.getResname() == "SER":
-            atom_names += SC_DATA["SER"]["predicted"]
-        elif res.getResname() == "THR":
-            atom_names += SC_DATA["THR"]["predicted"]
-        elif res.getResname() == "ASN":
-            atom_names += SC_DATA["ASN"]["predicted"]
-        elif res.getResname() == "GLN":
-            atom_names += SC_DATA["GLN"]["predicted"]
-        elif res.getResname() == "CYS":
-            atom_names += SC_DATA["CYS"]["predicted"]
-        elif res.getResname() == "VAL":
-            atom_names += SC_DATA["VAL"]["predicted"]
-        elif res.getResname() == "ILE":
-            atom_names += SC_DATA["ILE"]["predicted"]
-        elif res.getResname() == "LEU":
-            atom_names += SC_DATA["LEU"]["predicted"]
-        elif res.getResname() == "MET":
-            atom_names += SC_DATA["MET"]["predicted"]
-        elif res.getResname() == "PHE":
-            atom_names += SC_DATA["PHE"]["predicted"]
-        elif res.getResname() == "TRP":
-            atom_names += SC_DATA["TRP"]["predicted"]
-        elif res.getResname() == "TYR":
-            atom_names += SC_DATA["TYR"]["predicted"]
+        atom_names = ["C", "CA"]
         # Special cases
-        elif res.getResname() == "GLY":
-            atom_names = SC_DATA["GLY"]["predicted"]
-        elif res.getResname() == "PRO":
-            atom_names = SC_DATA["PRO"]["predicted"]
+        if res.getResname() in ["GLY", "PRO"]:
+            atom_names = SC_DATA[res.getResname()]["predicted"]
         elif res.getResname() == "ALA":
             atom_names += SC_DATA["ALA"]["predicted"]
             is_alanine = True
+        else:
+            atom_names += SC_DATA[res.getResname()]["predicted"]
 
         calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, BACKBONE, BONDANGLES, is_alanine)
         if calculated_dihedrals is None:
