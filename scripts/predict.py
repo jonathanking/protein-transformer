@@ -56,7 +56,7 @@ def get_data_loader(data_dict, dataset, n):
             seqs.append(data_dict[dataset]["seq"][i])
             angs.append(data_dict[dataset]["ang"][i])
             ids.append(prot)
-    assert len(seqs) == n and len(angs) == n
+    assert len(seqs) == n and len(angs) == n or (len(seqs) == len(angs) and len(seqs) < n)
 
     data_loader = torch.utils.data.DataLoader(
         ProteinDataset(
@@ -82,9 +82,10 @@ def make_predictions(the_model, data_loader):
             gold = tgt_seq[:]
 
             # forward
-            pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
             if args.reconstruct:
                 pred = tgt_seq
+            else:
+                pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
             loss = drmsd_loss(pred, gold, src_seq, torch.device('cpu'))
             losses.append(loss)
 
