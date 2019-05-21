@@ -72,6 +72,59 @@ def get_angles_from_chain(chain, pdb_id):
     dihedrals = []
     sequence = ""
 
+    def check_standard_continuous(residue, prev_res_num):
+        """ Asserts that the residue is standard and that the chain is continuous. """
+        if not residue.isstdaa:
+            if args.debug: print("Found a non-std AA. Why didn't you catch this? " + str(residue.getNames()))
+            return False
+        if residue.getResnum() != prev_res_num:
+            if args.debug: print("Chain is non-continuous")
+            return False
+        return True
+
+    def measure_phi_psi_omega(residue):
+        try:
+            phi = pr.calcPhi(residue, radian=True, dist=None)
+        except:
+            phi = OUT_OF_BOUNDS_CHAR
+        try:
+            psi = pr.calcPsi(residue, radian=True, dist=None)
+        except:
+            psi = OUT_OF_BOUNDS_CHAR
+        try:
+            omega = pr.calcOmega(residue, radian=True, dist=None)
+        except:
+            omega = OUT_OF_BOUNDS_CHAR
+        return phi, psi, omega
+
+    def measure_bond_angles(residue, pdb_id, all_residues):
+        if i == len(all_residues) - 1:
+            BONDANGLES = [0, 0, 0]
+        else:
+            try:
+                BONDANGLES = list(get_bond_angles(residue, all_residues[i + 1]))
+            except Exception as e:
+                if args.debug: print("Bond angle issue with", pdb_id, e)
+                return None
+        return BONDANGLES
+
+    def compute_single_dihedral(atoms):
+        return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
+
+    def compute_all_res_dihedrals(atom_names, residue, backbone, bondanlges, is_ala=False):
+        if is_ala:
+            atom_names = ["N"] + atom_names
+        atoms = [residue.select("name " + an) for an in atom_names]
+        if None in atoms:
+            return None
+        res_dihedrals = []
+        if len(atom_names) > 0:
+            for i in range(len(atoms) - 3):
+                a = atoms[i:i + 4]
+                res_dihedrals.append(compute_single_dihedral(a))
+        return backbone + bondanlges + res_dihedrals + (5 - len(res_dihedrals)) * [PAD_CHAR]
+
+
     try:
         if chain.nonstdaa:
             if args.debug: print("Non-standard AAs found.")
@@ -86,56 +139,14 @@ def get_angles_from_chain(chain, pdb_id):
     all_residues = list(chain.iterResidues())
     prev = all_residues[0].getResnum()
     for i, res in enumerate(all_residues):
-        if not res.isstdaa:
-            if args.debug: print("Found a non-std AA. Why didn't you catch this?", chain)
-            if args.debug: print(res.getNames())
-            return None
-        if res.getResnum() != prev:
-            if args.debug: print('\rNon-continuous!!', pdb_id, end="")
+        if not check_standard_continuous(res, prev):
             return None
         else:
             prev = res.getResnum() + 1
-        try:
-            phi = pr.calcPhi(res, radian=True, dist=None)
-        except:
-            phi = OUT_OF_BOUNDS_CHAR
-        try:
-            psi = pr.calcPsi(res, radian=True, dist=None)
-        except:
-            psi = OUT_OF_BOUNDS_CHAR
-        try:
-            omega = pr.calcOmega(res, radian=True, dist=None)
-        except:
-            omega = OUT_OF_BOUNDS_CHAR
-        #         if phi == 0 and psi == 0 and omega == 0:
-        #             return None
 
-        if i == len(all_residues) - 1:
-            BONDANGLES = [0, 0, 0]
-        else:
-            try:
-                BONDANGLES = list(get_bond_angles(res, all_residues[i + 1]))
-            except Exception as e:
-                if args.debug: print("Bond angle issue with", pdb_id, e)
-                return None
-
+        phi, psi, omega = measure_phi_psi_omega(res)
+        BONDANGLES = measure_bond_angles(res, pdb_id, all_residues)
         BACKBONE = [phi, psi, omega]
-
-        def compute_single_dihedral(atoms):
-            return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
-
-        def compute_all_res_dihedrals(atom_names, is_ala=False):
-            if is_ala:
-                atom_names = ["N"] + atom_names
-            atoms = [res.select("name " + an) for an in atom_names]
-            if None in atoms:
-                return None
-            res_dihedrals = []
-            if len(atom_names) > 0:
-                for i in range(len(atoms) - 3):
-                    a = atoms[i:i + 4]
-                    res_dihedrals.append(compute_single_dihedral(a))
-            return BACKBONE + BONDANGLES + res_dihedrals + (5 - len(res_dihedrals)) * [PAD_CHAR]
 
         is_alanine = False
         atom_names = ["CA", "C"]
@@ -182,7 +193,7 @@ def get_angles_from_chain(chain, pdb_id):
             atom_names += SC_DATA["ALA"]["predicted"]
             is_alanine = True
 
-        calculated_dihedrals = compute_all_res_dihedrals(atom_names, is_alanine)
+        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, BACKBONE, BONDANGLES, is_alanine)
         if calculated_dihedrals is None:
             return None
         dihedrals.append(calculated_dihedrals)
@@ -287,7 +298,7 @@ if __name__ == "__main__":
     np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
     np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
     today = datetime.datetime.today()
-    suffix = today.strftime("%m%d%y")
+    suffix = today.strftime("%y%m%d")
     if not args.out_file and args.pickle:
         args.out_file = "../data/data_" + suffix + ".pkl"
     elif not args.out_file and not args.pickle:
