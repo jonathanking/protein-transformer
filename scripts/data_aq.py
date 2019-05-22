@@ -347,6 +347,7 @@ if __name__ == "__main__":
                      "ids": X_test_labels},
             "settings": {"max_len": max(map(len, all_ohs))},
             "description": {query_description},
+            "query": query,
             "date": {date}}
     # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
 
