@@ -152,14 +152,14 @@ def get_angles_from_chain(chain, pdb_id):
     all_residues = list(chain.iterResidues())
     prev = all_residues[0].getResnum()
     prev_res = None
-    for i, res in enumerate(all_residues):
+    for res_id, res in enumerate(all_residues):
         if not check_standard_continuous(res, prev):
             return None
         else:
             prev = res.getResnum() + 1
 
         res_backbone = measure_phi_psi_omega(res)
-        res_bond_angles = measure_bond_angles(res, i, all_residues)
+        res_bond_angles = measure_bond_angles(res, res_id, all_residues)
 
         atom_names = ["N", "CA"]
         # Special cases
