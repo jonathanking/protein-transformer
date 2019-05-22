@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 
+NUM_PREDICTED_ANGLES = 12
+
 BONDLENS = {'cc-cv': 1.375,
             'c8-cx': 1.526,
             '2c-ca': 1.51,
@@ -231,17 +233,11 @@ def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False):
 
 def generate_sidechain_dihedrals(angles, i):
     """ Returns a generator that iteratively produces the sidechain dihedral angles for residue (i) in (angles). """
-    first = True  # for generating the first atom, cb, which depends on angle 0
-    start = 6
-    assert len(angles.shape) == 2 and angles.shape[1] == 11
-    while start < angles.shape[-1]:
-        if first:
-            yield angles[i, 0]
-            first = False
-            continue
-        if not first:
-            yield angles[i, start]
-            start += 1
+    assert len(angles.shape) == 2 and angles.shape[1] == NUM_PREDICTED_ANGLES
+    angle_idx = 6
+    while angle_idx < angles.shape[-1]:
+        yield angles[i, angle_idx]
+        angle_idx += 1
 
 
 def extend_any_sc(info, aa_code, return_tuples=False):

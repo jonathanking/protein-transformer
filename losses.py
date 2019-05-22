@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from transformer.Sidechains import NUM_PREDICTED_ANGLES
 from transformer.Structure import generate_coords
 
 
@@ -16,9 +17,9 @@ def combine_drmsd_mse(d, mse, w=.5):
 
 
 def inverse_trig_transform(t):
-    """ Given a (BATCH x L X 22) tensor, returns (BATCH X L X 11) tensor.
+    """ Given a (BATCH x L X NUM_PREDICTED_ANGLES ) tensor, returns (BATCH X L X NUM_PREDICTED_ANGLES) tensor.
         Performs atan2 transformation from sin and cos values."""
-    t = t.view(t.shape[0], -1, 11, 2)
+    t = t.view(t.shape[0], -1, NUM_PREDICTED_ANGLES, 2)
     t_cos = t[:, :, :, 0]
     t_sin = t[:, :, :, 1]
     t = torch.atan2(t_sin, t_cos)
@@ -104,7 +105,7 @@ def pairwise_internal_dist(coords):
 ### RNN-made methods ###
 #####################
 def drmsd_loss_RNN(y_pred_, y_true_, sorted_lengths, x):
-    """ Given angle Tensors, return the drmsd loss. (Batch x L x 11 x 2)"""
+    """ Given angle Tensors, return the drmsd loss. (Batch x L x NUM_PREDICTED_ANGLES x 2)"""
 
     y_pred_ = torch.atan2(y_pred_[:, :, :, 1], y_pred_[:, :, :, 0])
     y_true_ = torch.atan2(y_true_[:, :, :, 1], y_true_[:, :, :, 0])

@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.utils.data
 
+from transformer.Sidechains import NUM_PREDICTED_ANGLES
+
 
 def paired_collate_fn(insts):
     """ This function creates mini-batches (4-tuples) of src_seq/pos,
@@ -20,7 +22,7 @@ def collate_fn(insts, is_tgt=False):
     max_len = max(len(inst) for inst in insts)
 
     if is_tgt:
-        pad_dim = 22
+        pad_dim = NUM_PREDICTED_ANGLES * 2
     else:
         pad_dim = 20
     batch_seq = np.array([

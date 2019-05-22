@@ -13,8 +13,9 @@ import tqdm
 from sklearn.model_selection import train_test_split
 
 sys.path.extend("../transformer/")
-from transformer.Sidechains import SC_DATA
+from transformer.Sidechains import SC_DATA, NUM_PREDICTED_ANGLES
 
+from transformer.Structure import FICTITIOUS_C
 pr.confProDy(verbosity='error')
 
 
@@ -34,7 +35,7 @@ def angle_list_to_sin_cos(angs, reshape=True):
         new_mat[:, :, 1] = np.sin(a)
         #         new_mat = (new_mat != new_pad_char) * new_mat
         if reshape:
-            new_list.append(new_mat.reshape(-1, 22))
+            new_list.append(new_mat.reshape(-1, NUM_PREDICTED_ANGLES * 2))
         else:
             new_list.append(new_mat)
     return new_list

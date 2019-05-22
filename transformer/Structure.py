@@ -2,14 +2,20 @@ import numpy as np
 import torch
 
 import transformer.Sidechains as Sidechains
+from transformer.Sidechains import BONDLENS
 
 BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379,
             "CZ-NH2": 1,
             }
+FICTITIOUS_C = np.zeros(3) - 0.5
+
+
+# FICTITIOUS_C[0] = -np.cos(np.pi - np.deg2rad(122)) * BONDLENS["c-n"]
+# FICTITIOUS_C[1] = -np.sin(np.pi - np.deg2rad(122)) * BONDLENS["c-n"]
 
 
 def generate_coords(angles, pad_loc, input_seq, device):
-    """ Given a tensor of angles (L x 11), produces the entire set of cartesian coordinates using the NeRF method,
+    """ Given a tensor of angles (L x NUM_PREDICTED_ANGLES), produces the entire set of cartesian coordinates using the NeRF method,
         (L x A` x 3), where A` is the number of atoms generated (depends on amino acid sequence)."""
     bb_arr = init_backbone(angles, device)
     sc_arr = init_sidechain(angles, bb_arr, input_seq)
@@ -28,7 +34,7 @@ def generate_coords(angles, pad_loc, input_seq, device):
 def generate_coords_with_tuples(angles, pad_loc, input_seq, device):
     """ Identical to generate_cooords, except this function also returns organized tuples of backbone and sidechain
         coordinates to aid in reconstruction.
-        Given a tensor of angles (L x 11), produces the entire set of cartesian coordinates using the NeRF method,
+        Given a tensor of angles (L x NUM_PREDICTED_ANGLES), produces the entire set of cartesian coordinates using the NeRF method,
         (L x A` x 3), where A` is the number of atoms generated (depends on amino acid sequence)."""
     bb_arr = init_backbone(angles, device)
     sc_arr, aa_code, atom_names = init_sidechain(angles, bb_arr, input_seq, return_tuples=True)
@@ -57,9 +63,7 @@ def generate_coords_with_tuples(angles, pad_loc, input_seq, device):
 def init_sidechain(angles, bb_arr, input_seq, return_tuples=False):
     """ Builds the first sidechain based off of the first backbone atoms and a ficticious previous atom.
         This allows us to reuse the extend_sidechain method. Assumes the first atom of the backbone is at (0,0,0). """
-    fake_prev_c = torch.FloatTensor(torch.zeros(3))
-    fake_prev_c[0] = -np.cos(np.pi - 122) * BONDLENS["c-n"]
-    fake_prev_c[1] = -np.sin(np.pi - 122) * BONDLENS["c-n"]
+    fake_prev_c = torch.FloatTensor(FICTITIOUS_C) + bb_arr[0]
     if return_tuples:
         sc, aa_code, atom_names = Sidechains.extend_sidechain(0, angles, [fake_prev_c] + bb_arr, input_seq,
                                                               return_tuples)
@@ -84,7 +88,6 @@ def init_backbone(angles, device):
         a3x = torch.cos(np.pi - angles[0, 3]) * BONDLENS["ca-c"]
         a3y = torch.sin(np.pi - angles[0, 3]) * BONDLENS['ca-c']
         a3 = a2 + torch.FloatTensor([a3x, a3y, 0])
-
 
     starting_coords = [a1, a2, a3]
 
@@ -136,7 +139,7 @@ def nerf(a, b, c, l, theta, chi, device):
         Returns:
         d : tuple of (x, y, z) in cartesian space """
     # calculate unit vectors AB and BC
-    assert theta >= -np.pi and theta <= np.pi, "theta must be in radians and in [-pi, pi]"
+    assert -np.pi <= theta <= np.pi, "theta must be in radians and in [-pi, pi]"
 
     W_hat = l2_normalize(b - a, device)
     x_hat = l2_normalize(c - b, device)

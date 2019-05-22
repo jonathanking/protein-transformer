@@ -1,10 +1,10 @@
 ''' Define the Transformer model '''
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-import transformer.Constants as Constants
-from transformer.Structure import generate_coords
+
 from transformer.Layers import EncoderLayer, DecoderLayer
+from transformer.Sidechains import NUM_PREDICTED_ANGLES
 
 __author__ = "Yu-Hsiang Huang"
 
@@ -154,7 +154,7 @@ class Transformer(nn.Module):
     ''' A sequence to sequence model with attention mechanism. '''
 
     def __init__(
-            self, len_max_seq,  d_angle=22,
+            self, len_max_seq, d_angle=NUM_PREDICTED_ANGLES * 2,
             d_word_vec=20, d_model=512, d_inner=2048,
             n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1):
 
