@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 BONDLENS = {'cc-cv': 1.375,
@@ -214,6 +215,11 @@ for res in SC_DATA.keys():
     SC_DATA[res]["align_mobile"] = list(set(SC_DATA[res]["align_target"] + SC_DATA[res]["missing"]))
 
 
+def deg2rad(angle):
+    """ Converts an angle in degrees to radians."""
+    return angle * np.pi / 180.
+
+
 def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False):
     """ Given an index (i) into an angle tensor (d), builds the requested sidechain and returns it as a list."""
     residue_code = torch.argmax(input_seq[i])
@@ -243,7 +249,7 @@ def extend_any_sc(info, aa_code, return_tuples=False):
         for that specific AA. Returns a pointer to the """
     import transformer.Structure as Structure
     lens = map(lambda bondname: BONDLENS[bondname], SC_DATA[aa_code]["bonds"])
-    angs = map(lambda anglname: torch.tensor(BONDANGS[anglname]), SC_DATA[aa_code]["angles"])
+    angs = map(lambda anglname: torch.tensor(deg2rad(BONDANGS[anglname])), SC_DATA[aa_code]["angles"])
     i, angles, bb_arr = info
     sc_pts = []
     dihedrals = generate_sidechain_dihedrals(angles, i)

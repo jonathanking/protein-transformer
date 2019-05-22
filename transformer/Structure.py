@@ -126,18 +126,17 @@ def l2_normalize(t, device, eps=1e-12):
 
 
 def nerf(a, b, c, l, theta, chi, device):
-    '''
-    Nerf method of finding 4th coord (d)
-    in cartesian space
-    Params:
-    a, b, c : coords of 3 points
-    l : bond length between c and d
-    theta : bond angle between b, c, d (in degrees)
-    chi : dihedral using a, b, c, d (in degrees)
-    Returns:
-    d : tuple of (x, y, z) in cartesian space
-    '''
+    """ Nerf method of finding 4th coord (d)
+        in cartesian space
+        Params:
+        a, b, c : coords of 3 points
+        l : bond length between c and d
+        theta : bond angle between b, c, d (in degrees)
+        chi : dihedral using a, b, c, d (in degrees)
+        Returns:
+        d : tuple of (x, y, z) in cartesian space """
     # calculate unit vectors AB and BC
+    assert theta >= -np.pi and theta <= np.pi, "theta must be in radians and in [-pi, pi]"
 
     W_hat = l2_normalize(b - a, device)
     x_hat = l2_normalize(c - b, device)
@@ -157,9 +156,7 @@ def nerf(a, b, c, l, theta, chi, device):
                      torch.squeeze(l * torch.sin(theta) * torch.sin(chi))])
 
     # calculate with rotation as our final output
-
+    # TODO: is the squeezing necessary?
     d = d.unsqueeze(1)
-
     res = c + torch.mm(M, d).squeeze()
-
     return res.squeeze()
