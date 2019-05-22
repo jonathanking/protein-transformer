@@ -61,74 +61,88 @@ def get_bond_angles(res, next_res):
     return ncac, cacn, cnca
 
 
+def measure_bond_angles(residue, res_idx, all_res):
+    """ Given a residue, measure the ncac, cacn, and cnca bond angles. """
+    if res_idx == len(all_res) - 1:
+        bondangles = [0, 0, 0]
+    else:
+        bondangles = list(get_bond_angles(residue, all_res[res_idx + 1]))
+    return bondangles
+
+
+def measure_phi_psi_omega(residue, outofboundchar=0):
+    """ Returns phi, psi, omega for a residue, replacing out-of-bounds angles with outofboundchar."""
+    try:
+        phi = pr.calcPhi(residue, radian=True, dist=None)
+    except ValueError:
+        phi = outofboundchar
+    try:
+        psi = pr.calcPsi(residue, radian=True, dist=None)
+    except ValueError:
+        psi = outofboundchar
+    try:
+        omega = pr.calcOmega(residue, radian=True, dist=None)
+    except ValueError:
+        omega = outofboundchar
+    return [phi, psi, omega]
+
+
+def compute_single_dihedral(atoms):
+    """ Given an iterable of 4 Atoms, uses Prody to calculate the dihedral angle between them in radians. """
+    return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
+
+
+def check_standard_continuous(residue, prev_res_num):
+    """ Asserts that the residue is standard and that the chain is continuous. """
+    if not residue.isstdaa:
+        if args.debug: print("Found a non-std AA. Why didn't you catch this? " + str(residue.getNames()))
+        return False
+    if residue.getResnum() != prev_res_num:
+        if args.debug: print("Chain is non-continuous")
+        return False
+    return True
+
+
+def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bondangles, pad_char=0):
+    """ Computes all angles to predict for a given residue. If the residue is the first in the protein chain,
+        a fictitious C atom is placed before the first N. This is used to compute a [C-1, N, CA, CB] dihedral
+        angle. If it is not the first residue in the chain, the previous residue's C is used instead.
+        Then, each group of 4 atoms in atom_names is used to generate a list of dihedral angles for this
+        residue. """
+    res_dihedrals = []
+    if len(atom_names) > 0:
+        if prev_residue is None:
+            atoms = [residue.select("name " + an) for an in atom_names]
+            if None in atoms:
+                return None
+            previous_c = FICTITIOUS_C + atoms[0].getCoords()[0]
+            res_dihedrals = [pr.measure.measure.getDihedral(previous_c, atoms[0].getCoords()[0],
+                                                            atoms[1].getCoords()[0], atoms[2].getCoords()[0],
+                                                            radian=True)]
+        elif prev_residue is not None:
+            atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in atom_names]
+            if None in atoms:
+                return None
+        for n in range(len(atoms) - 3):
+            dihe_atoms = atoms[n:n + 4]
+            res_dihedrals.append(compute_single_dihedral(dihe_atoms))
+
+    return backbone + bondangles + res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
+
+
 # get angles from chain
 def get_angles_from_chain(chain, pdb_id):
     """ Given a ProDy Chain object (from a Hierarchical View), return a numpy array of
         angles. Returns None if the PDB should be ignored due to weird artifacts. Also measures
         the bond angles along the peptide backbone, since they account for significat variation.
         i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, chi3, chi4, chi5], [...] ...] """
-    PAD_CHAR = 0
-    OUT_OF_BOUNDS_CHAR = 0
+
     dihedrals = []
-    sequence = ""
-
-    def check_standard_continuous(residue, prev_res_num):
-        """ Asserts that the residue is standard and that the chain is continuous. """
-        if not residue.isstdaa:
-            if args.debug: print("Found a non-std AA. Why didn't you catch this? " + str(residue.getNames()))
-            return False
-        if residue.getResnum() != prev_res_num:
-            if args.debug: print("Chain is non-continuous")
-            return False
-        return True
-
-    def measure_phi_psi_omega(residue):
-        try:
-            phi = pr.calcPhi(residue, radian=True, dist=None)
-        except:
-            phi = OUT_OF_BOUNDS_CHAR
-        try:
-            psi = pr.calcPsi(residue, radian=True, dist=None)
-        except:
-            psi = OUT_OF_BOUNDS_CHAR
-        try:
-            omega = pr.calcOmega(residue, radian=True, dist=None)
-        except:
-            omega = OUT_OF_BOUNDS_CHAR
-        return phi, psi, omega
-
-    def measure_bond_angles(residue, pdb_id, all_residues):
-        if i == len(all_residues) - 1:
-            BONDANGLES = [0, 0, 0]
-        else:
-            try:
-                BONDANGLES = list(get_bond_angles(residue, all_residues[i + 1]))
-            except Exception as e:
-                if args.debug: print("Bond angle issue with", pdb_id, e)
-                return None
-        return BONDANGLES
-
-    def compute_single_dihedral(atoms):
-        return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
-
-    def compute_all_res_dihedrals(atom_names, residue, backbone, bondangles):
-        atoms = [residue.select("name " + an) for an in atom_names]
-        if None in atoms:
-            return None
-        res_dihedrals = []
-        if len(atom_names) > 0:
-            for i in range(len(atoms) - 3):
-                a = atoms[i:i + 4]
-                res_dihedrals.append(compute_single_dihedral(a))
-        return backbone + bondangles + res_dihedrals + (5 - len(res_dihedrals)) * [PAD_CHAR]
-
-
     try:
         if chain.nonstdaa:
             if args.debug: print("Non-standard AAs found.")
             return None
         sequence = chain.getSequence()
-        length = len(sequence)
         chain = chain.select("protein and not hetero").copy()
     except Exception as e:
         if args.debug: print("Problem loading sequence.", e)
@@ -136,26 +150,29 @@ def get_angles_from_chain(chain, pdb_id):
 
     all_residues = list(chain.iterResidues())
     prev = all_residues[0].getResnum()
+    prev_res = None
     for i, res in enumerate(all_residues):
         if not check_standard_continuous(res, prev):
             return None
         else:
             prev = res.getResnum() + 1
 
-        BACKBONE = list(measure_phi_psi_omega(res))
-        BONDANGLES = measure_bond_angles(res, pdb_id, all_residues)
+        res_backbone = measure_phi_psi_omega(res)
+        res_bond_angles = measure_bond_angles(res, i, all_residues)
 
         atom_names = ["N", "CA"]
         # Special cases
+        # TODO verify correctness of GLY, PRO atom_names
         if res.getResname() in ["GLY", "PRO"]:
             atom_names = SC_DATA[res.getResname()]["predicted"]
         else:
             atom_names += SC_DATA[res.getResname()]["predicted"]
 
-        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, BACKBONE, BONDANGLES)
+        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, prev_res, res_backbone, res_bond_angles)
         if calculated_dihedrals is None:
             return None
         dihedrals.append(calculated_dihedrals)
+        prev_res = res
 
     dihedrals_np = np.asarray(dihedrals)
     # Check for NaNs - they shouldn't be here, but certainly should be excluded if they are.
