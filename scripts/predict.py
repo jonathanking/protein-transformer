@@ -47,6 +47,10 @@ def get_data_loader(data_dict, dataset, n):
         this function selects n items at random from that dataset to predict. It then returns a DataLoader for those
         items, along with a list of ids.
         """
+    if dataset == "all":
+        data_dict["all"] = {"ids": data_dict["train"]["ids"] + data_dict["test"]["ids"] + data_dict["valid"]["ids"],
+                            "seq": data_dict["train"]["seq"] + data_dict["test"]["seq"] + data_dict["valid"]["seq"],
+                            "ang": data_dict["train"]["ang"] + data_dict["test"]["ang"] + data_dict["valid"]["ang"]}
     to_predict = np.random.choice(data_dict[dataset]["ids"], n)  # ["2NLP_D", "3ASK_Q", "1SZA_C"]
     ids = []
     seqs = []
@@ -187,7 +191,11 @@ def set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id,
         if res_code is "GLY":
             continue
         sidechain_coords = fill_in_residue(res_code, res_coords, res_atom_names, res_bb_coords, ref_sidechains)
-        this_sidechain = prot_sidechains.select('sidechain and resnum ' + str(res_num))
+        if res_num < 0:
+            res_num_str = "`{0}`".format(str(res_num))
+        else:
+            res_num_str = str(res_num)
+        this_sidechain = prot_sidechains.select('sidechain and resnum ' + res_num_str)
         if this_sidechain is None:
             print('this_sidechain is None')
             raise Exception("The sidechain could not be selected for " + res_code)
