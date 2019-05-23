@@ -69,14 +69,14 @@ def get_data_loader(data_dict, dataset, n):
     return data_loader, ids
 
 
-def make_predictions(the_model, data_loader):
+def make_predictions(the_model, data_loader, pdb_ids):
     """ Given a loaded transformer model, and a dataloader of items to predict, this model returns a list of tuples.
         Each tuple is contains (backbone coord. matrix, sidechain coord. matrix, loss, nloss) for a single item."""
     coords_list = []
     losses = []
 
     with torch.no_grad():
-        for batch in tqdm(data_loader, mininterval=2, desc=' - (Evaluation ', leave=False):
+        for pdb_id, batch in zip(pdb_ids, tqdm(data_loader, mininterval=2, desc=' - (Evaluation ', leave=False)):
             # prepare data
             src_seq, src_pos, tgt_seq, tgt_pos = batch
             gold = tgt_seq[:]
@@ -260,7 +260,7 @@ if __name__ == "__main__":
     data_loader, ids = get_data_loader(torch.load(args.data), args.dataset, n=args.n)
 
     # Make predictions as coordinates
-    coords_list = make_predictions(the_model, data_loader)
+    coords_list = make_predictions(the_model, data_loader, ids)
     id_coords_dict = {k: v for k, v in zip(ids, coords_list)}
 
     # Make PDB files from coords
