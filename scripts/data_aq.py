@@ -64,7 +64,9 @@ def get_bond_angles(res, next_res):
 def measure_bond_angles(residue, res_idx, all_res):
     """ Given a residue, measure the ncac, cacn, and cnca bond angles. """
     if res_idx == len(all_res) - 1:
-        bondangles = [0, 0, 0]
+        atoms = residue.backbone.copy()
+        ncac = pr.calcAngle(atoms[0], atoms[1], atoms[2], radian=True)
+        bondangles = [ncac, 0, 0]
     else:
         bondangles = list(get_bond_angles(residue, all_res[res_idx + 1]))
     return bondangles
