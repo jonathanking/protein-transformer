@@ -313,12 +313,15 @@ if __name__ == "__main__":
     global args, desc
     parser = argparse.ArgumentParser(description="Searches through a query of PDBs and parses/downloads chains")
     parser.add_argument('query_file', type=str, help='Path to query file')
-    parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.pkl file)')
+    parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.tch file)')
     parser.add_argument('-sc', '--single_chain_only', action="store_true", help='Only keep PDBs with a single chain.')
     parser.add_argument('-d', '--debug', action="store_true", help='Print debug print statements.')
     parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str, help="Path for ProDy-downloaded PDB files.")
     parser.add_argument("-p", "--pickle", action="store_true",
                         help="Save data as a pickled dictionary instead of a torch-dictionary.")
+    parser.add_argument("--same_datasets", action="store_true",
+                        help="Copy instead of splitting the dataset into train, test and validation. ")
+    parser.add_argument("--only_pdbs", nargs="+", help="Only predict these PDB IDs.")
     args = parser.parse_args()
 
     # Set up
@@ -340,6 +343,8 @@ if __name__ == "__main__":
 
     # Download PDB_IDS associated with query
     PDB_IDS = download_pdbs_from_query(query)
+    if args.only_pdbs:
+        PDB_IDS = args.only_pdbs
 
     # 3a. Iterate through all chains in PDB_IDs, saving all results to disk
     # Remove empty string PDB ids
@@ -375,8 +380,12 @@ if __name__ == "__main__":
     ohs_ids = list(zip(all_ohs, all_ids))
 
     # 5b. Split into train, test and validation sets. Report sizes.
-    X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
-    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
+    if args.same_datasets:
+        X_train, X_test, y_train, y_test = ohs_ids, ohs_ids, all_angs, all_angs
+        X_val, y_val = ohs_ids, all_angs
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
+        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
     print("Train, test, validation set sizes:\n" + str(list(map(len, [X_train, X_test, X_val]))))
 
     # 5c. Separate PDB ID/Sequence tuples.
