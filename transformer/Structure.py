@@ -100,12 +100,12 @@ def extend_backbone(i, angles, coords, device):
     for j in range(3):
         if j == 0:
             # we are placing N
-            t = angles[i, 4]  # thetas["ca-c-n"]
+            t = angles[i - 1, 4]  # thetas["ca-c-n"]
             b = BONDLENS["c-n"]
             dihedral = angles[i - 1, 1]  # psi of previous residue
         elif j == 1:
             # we are placing Ca
-            t = angles[i, 5]  # thetas["c-n-ca"]
+            t = angles[i - 1, 5]  # thetas["c-n-ca"]
             b = BONDLENS["n-ca"]
             dihedral = angles[i - 1, 2]  # omega of previous residue
         else:
