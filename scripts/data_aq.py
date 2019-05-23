@@ -93,6 +93,39 @@ def compute_single_dihedral(atoms):
     return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
 
 
+def getDihedral(coords1, coords2, coords3, coords4, radian=False):
+    """ Returns the dihedral angle in degrees. Modified from prody.measure.measure to use a numerically safe
+        normalization method. """
+    rad2deg = 180 / np.pi
+    eps = 1e-6
+
+    a1 = coords2 - coords1
+    a2 = coords3 - coords2
+    a3 = coords4 - coords3
+
+    v1 = np.cross(a1, a2)
+    v1 = v1 / (v1 * v1).sum(-1) ** 0.5
+    v2 = np.cross(a2, a3)
+    v2 = v2 / (v2 * v2).sum(-1) ** 0.5
+    porm = np.sign((v1 * a3).sum(-1))
+    arccos_input_raw = (v1 * v2).sum(-1) / ((v1 ** 2).sum(-1) * (v2 ** 2).sum(-1)) ** 0.5
+    if -1 <= arccos_input_raw <= 1:
+        arccos_input = arccos_input_raw
+    elif arccos_input_raw > 1 and arccos_input_raw - 1 < eps:
+        arccos_input = 1
+    elif arccos_input_raw < -1 and np.abs(arccos_input_raw) - 1 < eps:
+        arccos_input = -1
+    else:
+        raise ArithmeticError("Numerical issue with input to arccos.")
+    rad = np.arccos(arccos_input)
+    if not porm == 0:
+        rad = rad * porm
+    if radian:
+        return rad
+    else:
+        return rad * rad2deg
+
+
 def check_standard_continuous(residue, prev_res_num):
     """ Asserts that the residue is standard and that the chain is continuous. """
     if not residue.isstdaa:
@@ -102,6 +135,26 @@ def check_standard_continuous(residue, prev_res_num):
         if args.debug: print("Chain is non-continuous")
         return False
     return True
+
+
+def get_fictitious_c(first_3_atoms):
+    """ Given the first three backbone atoms of a protein, aligns the starting atom positions used when generating
+        the structure later (starting at the origin). The main benefit of this is that we can construct a fictitious
+        Carbon atom that lies before the first Nitrogen atom. This atom is used to measure the [C-1, N, CA, CB]
+        dihedral at the time of data aquisition, and is later used to correctly place the first CB when generating
+        the structure later. This function returns the coordinates of this 'fictitious C'. """
+    mobile_atom_group_complete = [0 for _ in range(4)]
+    mobile_atom_group_complete[0] = np.array(FICTITIOUS_C)
+    mobile_atom_group_complete[1] = np.array([0., 0., 0.])
+    mobile_atom_group_complete[2] = np.array([1.4420, 0, 0])
+    mobile_atom_group_complete[3] = np.array([2.0080, 1.3870, 0])
+    mobile_atom_group_complete = np.array(mobile_atom_group_complete)
+    mobile_atom_group_alignment = mobile_atom_group_complete[1:]
+
+    target_atom_group = np.array([a.getCoords() for a in first_3_atoms]).reshape(3, 3)
+    t = pr.calcTransformation(mobile_atom_group_alignment, target_atom_group)
+    mobile_atom_group_aligned = t.apply(mobile_atom_group_complete)
+    return mobile_atom_group_aligned[0]
 
 
 def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bondangles, pad_char=0):
@@ -116,10 +169,9 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
             atoms = [residue.select("name " + an) for an in atom_names]
             if None in atoms:
                 return None
-            previous_c = FICTITIOUS_C + atoms[0].getCoords()[0]
-            res_dihedrals = [pr.measure.measure.getDihedral(previous_c, atoms[0].getCoords()[0],
-                                                            atoms[1].getCoords()[0], atoms[2].getCoords()[0],
-                                                            radian=True)]
+            previous_c = get_fictitious_c(atoms[:3])
+            res_dihedrals = [getDihedral(previous_c, atoms[0].getCoords()[0], atoms[1].getCoords()[0],
+                                         atoms[2].getCoords()[0], radian=True)]
         elif prev_residue is not None:
             atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in atom_names]
             if None in atoms:
