@@ -166,12 +166,34 @@ def clean_multiple_coordsets(protein):
     return protein
 
 
-def set_backbone_coords(prot, chain_id, bb_coords, pdb_chain):
+def set_backbone_coords(prot, chain_id, bb_coords, pdb_chain, peptide_bond):
     # Set backbone atoms
     backbone = prot.select('protein and chain ' + chain_id + ' and name N CA C')
     assert backbone.getCoords().shape == bb_coords.shape, "Backbone shape mismatch for " + pdb_chain
     backbone.setCoords(bb_coords)
-    # TODO Fill in oxygen position
+    backbone = prot.backbone
+
+    # Position oxygen atoms by aligning a pre-computed peptide bond to each residue.
+    # TODO Nerf is probably more efficient at placing oxygen
+    prev_res = None
+    prev_ca_c = None
+    for res in prot.select('protein and chain ' + chain_id).getHierView().iterResidues():
+        if prev_res is None:
+            prev_ca_c = res.select("name CA").getCoords()[0], res.select("name C").getCoords()[0]
+            prev_res = res
+            continue
+        ca, c, n = prev_ca_c[0], prev_ca_c[1], res.select("name N").getCoords()[0]
+        target_coords = np.array([ca, c, n])
+        mobile_coords_complete = peptide_bond.copy().getCoords()
+        assert list(peptide_bond.getNames()) == ["CA", "C", "O", "N"]
+        mobile_coords_align = peptide_bond.copy().select("name CA C N")
+        t = calcTransformation(mobile_coords_align.getCoords(), target_coords)
+        mobile_coords_aligned = t.apply(mobile_coords_complete)
+        prev_res.select("name O").setCoords(mobile_coords_aligned[2])
+
+        prev_ca_c = res.select("name CA").getCoords()[0], res.select("name C").getCoords()[0]
+        prev_res = res
+
     return backbone
 
 
@@ -216,6 +238,7 @@ def make_pdbs(id_coords_dict, outdir):
             ref_sidechains[res] = parsePDB("data/amino_acid_substructures/" + res.lower() + ".pdb")
         except OSError:
             continue
+    peptide_bond = parsePDB("data/amino_acid_substructures/peptide_bond.pdb")
 
     # Build PDBs
     for pdb_chain, data in id_coords_dict.items():
@@ -226,7 +249,7 @@ def make_pdbs(id_coords_dict, outdir):
 
         prot = clean_multiple_coordsets(parsePDB(pdb_id))
 
-        backbone = set_backbone_coords(prot, chain_id, bb_coords, pdb_chain)
+        backbone = set_backbone_coords(prot, chain_id, bb_coords, pdb_chain, peptide_bond)
         if args.backbone_only:
             writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), backbone)
             continue
