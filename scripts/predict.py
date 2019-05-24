@@ -73,7 +73,7 @@ def get_data_loader(data_dict, dataset, n):
     return data_loader, ids
 
 
-def make_predictions(the_model, data_loader, pdb_ids):
+def make_predictions(the_model, data_loader, pdb_ids, build_true=False):
     """ Given a loaded transformer model, and a dataloader of items to predict, this model returns a list of tuples.
         Each tuple is contains (backbone coord. matrix, sidechain coord. matrix, loss, nloss) for a single item."""
     coords_list = []
@@ -86,7 +86,7 @@ def make_predictions(the_model, data_loader, pdb_ids):
             gold = tgt_seq[:]
 
             # forward
-            if args.reconstruct:
+            if args.reconstruct or build_true:
                 pred = tgt_seq
             else:
                 pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
@@ -221,7 +221,7 @@ def make_pdbs(id_coords_dict, outdir):
     for pdb_chain, data in id_coords_dict.items():
         bb_coords, bb_tups, sc_tups, loss, aa_codes, atom_names = data
         pdb_id = pdb_chain.split('_')[0]
-        chain_id = pdb_chain.split("_")[-1]
+        chain_id = pdb_chain.split("_")[1]
         print("Building", pdb_id, chain_id)
 
         prot = clean_multiple_coordsets(parsePDB(pdb_id))
@@ -255,6 +255,7 @@ if __name__ == "__main__":
     parser.add_argument("-bb", "--backbone_only", action="store_true", help="Only predict the protein backbone.")
     parser.add_argument("--reconstruct", action="store_true",
                         help="For debugging structure generation. Try to reconstruct the true protein structure.")
+    parser.add_argument("--include_truth", action="store_true", help="Include the true structure in the PDB file.")
     args = parser.parse_args()
     pathPDBFolder(args.pdb_dir)
     if args.reconstruct:
@@ -269,6 +270,9 @@ if __name__ == "__main__":
 
     # Make predictions as coordinates
     coords_list = make_predictions(the_model, data_loader, ids)
+    if args.include_truth:
+        coords_list += make_predictions(the_model, data_loader, ids, build_true=True)
+        ids += [i + "_TRUE_" for i in ids]
     id_coords_dict = {k: v for k, v in zip(ids, coords_list)}
 
     # Make PDB files from coords
