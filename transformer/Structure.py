@@ -139,7 +139,7 @@ def nerf(a, b, c, l, theta, chi, device):
         Returns:
         d : tuple of (x, y, z) in cartesian space """
     # calculate unit vectors AB and BC
-    assert -np.pi <= theta <= np.pi, "theta must be in radians and in [-pi, pi]"
+    assert -np.pi <= theta <= np.pi, "theta must be in radians and in [-pi, pi]. theta = " + str(theta)
 
     W_hat = l2_normalize(b - a, device)
     x_hat = l2_normalize(c - b, device)
