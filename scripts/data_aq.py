@@ -152,7 +152,7 @@ def get_fictitious_c(first_3_atoms):
     mobile_atom_group_complete = np.array(mobile_atom_group_complete)
     mobile_atom_group_alignment = mobile_atom_group_complete[1:]
 
-    target_atom_group = np.array([a.getCoords() for a in first_3_atoms]).reshape(3, 3)
+    target_atom_group = first_3_atoms.getCoords()
     t = pr.calcTransformation(mobile_atom_group_alignment, target_atom_group)
     mobile_atom_group_aligned = t.apply(mobile_atom_group_complete)
     return mobile_atom_group_aligned[0]
@@ -170,9 +170,10 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
             atoms = [residue.select("name " + an) for an in atom_names]
             if None in atoms:
                 return None
-            previous_c = get_fictitious_c(atoms[:3])
-            res_dihedrals = [getDihedral(previous_c, atoms[0].getCoords()[0], atoms[1].getCoords()[0],
-                                         atoms[2].getCoords()[0], radian=True)]
+            this_backbone = residue.select("name N CA C")
+            previous_c = get_fictitious_c(this_backbone)
+            res_dihedrals = [getDihedral(previous_c, this_backbone.getCoords()[0], this_backbone.getCoords()[1],
+                                         this_backbone.getCoords()[2], radian=True)]
         elif prev_residue is not None:
             atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in atom_names]
             if None in atoms:
