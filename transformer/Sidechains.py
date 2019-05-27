@@ -224,13 +224,13 @@ def deg2rad(angle):
     return angle * np.pi / 180.
 
 
-def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False):
+def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False, first_sc=False):
     """ Given an index (i) into an angle tensor (d), builds the requested sidechain and returns it as a list."""
     residue_code = torch.argmax(input_seq[i])
     info = (i, d, bb_arr)
     codes = ["CYS","ASP","SER","GLN","LYS","ILE","PRO","THR","PHE","ASN","GLY","HIS","LEU","ARG","TRP",
              "ALA","VAL","GLU","TYR","MET"]
-    return extend_any_sc(info, codes[residue_code], return_tuples)
+    return extend_any_sc(info, codes[residue_code], return_tuples, first_sc)
 
 
 def generate_sidechain_dihedrals(angles, i):
@@ -242,23 +242,27 @@ def generate_sidechain_dihedrals(angles, i):
         angle_idx += 1
 
 
-def extend_any_sc(info, aa_code, return_tuples=False):
+def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
     """ Given a bunch of info (angle tensors, relevant bb and sc coords) and an amino acid code, generates the coords
         for that specific AA. Returns a pointer to the """
+    # TODO: clarify behavior with first sidechain. Here, it must reorganize its input to carefully place the first CB
     import transformer.Structure as Structure
     lens = map(lambda bondname: BONDLENS[bondname], SC_DATA[aa_code]["bonds"])
     angs = map(lambda anglname: torch.tensor(deg2rad(BONDANGS[anglname])), SC_DATA[aa_code]["angles"])
     i, angles, bb_arr = info
     sc_pts = []
     dihedrals = generate_sidechain_dihedrals(angles, i)
-    n2 = bb_arr[-4]  # C from the previous residue
-    n1 = bb_arr[-3]  # N from cur res
-    n0 = bb_arr[-2]  # Ca from cur res
-
+    n2 = bb_arr[-4]  # C from the previous residue, N from next res
+    n1 = bb_arr[-3]  # N from cur res, C from cur res
+    n0 = bb_arr[-2]  # Ca from cur res, Ca from cur
+    swap = True
     for l, a, dihe in zip(lens, angs, dihedrals):
         next_pt = Structure.nerf(n2, n1, n0, l, a, dihe, device=torch.device("cpu"))  # CB
         n2, n1, n0 = n1, n0, next_pt  # N, CA, CB
         sc_pts.append(next_pt)
+        if first_sc and swap:
+            n2, n1, n0 = bb_arr[-1], bb_arr[-2], next_pt
+            swap = False
 
     # The following residues have extra *atoms* that are predicted manually
     if aa_code == "ILE":

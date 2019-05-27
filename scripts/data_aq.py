@@ -14,7 +14,6 @@ from sklearn.model_selection import train_test_split
 
 sys.path.extend("../transformer/")
 from transformer.Sidechains import SC_DATA, NUM_PREDICTED_ANGLES
-from transformer.Structure import FICTITIOUS_C
 pr.confProDy(verbosity='error')
 
 
@@ -138,27 +137,7 @@ def check_standard_continuous(residue, prev_res_num):
     return True
 
 
-def get_fictitious_c(first_3_atoms):
-    """ Given the first three backbone atoms of a protein, aligns the starting atom positions used when generating
-        the structure later (starting at the origin). The main benefit of this is that we can construct a fictitious
-        Carbon atom that lies before the first Nitrogen atom. This atom is used to measure the [C-1, N, CA, CB]
-        dihedral at the time of data aquisition, and is later used to correctly place the first CB when generating
-        the structure later. This function returns the coordinates of this 'fictitious C'. """
-    mobile_atom_group_complete = [0 for _ in range(4)]
-    mobile_atom_group_complete[0] = np.array(FICTITIOUS_C)
-    mobile_atom_group_complete[1] = np.array([0., 0., 0.])
-    mobile_atom_group_complete[2] = np.array([1.4420, 0, 0])
-    mobile_atom_group_complete[3] = np.array([2.0080, 1.3870, 0])
-    mobile_atom_group_complete = np.array(mobile_atom_group_complete)
-    mobile_atom_group_alignment = mobile_atom_group_complete[1:]
-
-    target_atom_group = first_3_atoms.getCoords()
-    t = pr.calcTransformation(mobile_atom_group_alignment, target_atom_group)
-    mobile_atom_group_aligned = t.apply(mobile_atom_group_complete)
-    return mobile_atom_group_aligned[0]
-
-
-def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bondangles, pad_char=0):
+def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bondangles, next_res, pad_char=0):
     """ Computes all angles to predict for a given residue. If the residue is the first in the protein chain,
         a fictitious C atom is placed before the first N. This is used to compute a [C-1, N, CA, CB] dihedral
         angle. If it is not the first residue in the chain, the previous residue's C is used instead.
@@ -170,10 +149,10 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
             atoms = [residue.select("name " + an) for an in atom_names]
             if None in atoms:
                 return None
-            this_backbone = residue.select("name N CA C")
-            previous_c = get_fictitious_c(this_backbone)
-            res_dihedrals = [getDihedral(previous_c, this_backbone.getCoords()[0], this_backbone.getCoords()[1],
-                                         this_backbone.getCoords()[2], radian=True)]
+            res_dihedrals = [getDihedral(next_res.select("name N").getCoords()[0],
+                                         residue.select("name C").getCoords()[0],
+                                         residue.select("name CA").getCoords()[0],
+                                         residue.select("name CB").getCoords()[0], radian=True)]
         elif prev_residue is not None:
             atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in atom_names]
             if None in atoms:
@@ -221,7 +200,7 @@ def get_angles_from_chain(chain, pdb_id):
     except Exception as e:
         if args.debug: print("Problem loading sequence.", e)
         return None
-
+    # TODO remove references to previous residue - not necessary, instead use next residue
     all_residues = list(chain.iterResidues())
     prev = all_residues[0].getResnum()
     prev_res = None
@@ -241,8 +220,12 @@ def get_angles_from_chain(chain, pdb_id):
             atom_names = SC_DATA[res.getResname()]["predicted"]
         else:
             atom_names += SC_DATA[res.getResname()]["predicted"]
-
-        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, prev_res, res_backbone, res_bond_angles)
+        if res_id == 0:
+            next_res = all_residues[1]
+        else:
+            next_res = None
+        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, prev_res, res_backbone, res_bond_angles,
+                                                         next_res)
         if calculated_dihedrals is None:
             return None
         dihedrals.append(calculated_dihedrals)

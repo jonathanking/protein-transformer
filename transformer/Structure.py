@@ -7,18 +7,15 @@ from transformer.Sidechains import BONDLENS
 BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379,
             "CZ-NH2": 1,
             }
-FICTITIOUS_C = np.zeros(3) - 0.5
-
-
-# FICTITIOUS_C[0] = -np.cos(np.pi - np.deg2rad(122)) * BONDLENS["c-n"]
-# FICTITIOUS_C[1] = -np.sin(np.pi - np.deg2rad(122)) * BONDLENS["c-n"]
 
 
 def generate_coords(angles, pad_loc, input_seq, device):
     """ Given a tensor of angles (L x NUM_PREDICTED_ANGLES), produces the entire set of cartesian coordinates using the NeRF method,
         (L x A` x 3), where A` is the number of atoms generated (depends on amino acid sequence)."""
+    # TODO: Make the process of grabbing the next residue's nitrogen more clear
     bb_arr = init_backbone(angles, device)
-    sc_arr = init_sidechain(angles, bb_arr, input_seq)
+    next_bb_pts = extend_backbone(1, angles, bb_arr, device)
+    sc_arr = init_sidechain(angles, [next_bb_pts[0], bb_arr[2], bb_arr[1], bb_arr[0]], input_seq)
 
     for i in range(1, pad_loc):
         bb_pts = extend_backbone(i, angles, bb_arr, device)
@@ -37,7 +34,9 @@ def generate_coords_with_tuples(angles, pad_loc, input_seq, device):
         Given a tensor of angles (L x NUM_PREDICTED_ANGLES), produces the entire set of cartesian coordinates using the NeRF method,
         (L x A` x 3), where A` is the number of atoms generated (depends on amino acid sequence)."""
     bb_arr = init_backbone(angles, device)
-    sc_arr, aa_code, atom_names = init_sidechain(angles, bb_arr, input_seq, return_tuples=True)
+    next_bb_pts = extend_backbone(1, angles, bb_arr, device)
+    sc_arr, aa_code, atom_names = init_sidechain(angles, [next_bb_pts[0], bb_arr[2], bb_arr[1], bb_arr[0]], input_seq,
+                                                 return_tuples=True)
     aa_codes = [aa_code]
     atom_names_list = [atom_names]
     sc_arr_tups = [[np.asarray(x.detach()) for x in sc_arr[:]]]
@@ -63,13 +62,12 @@ def generate_coords_with_tuples(angles, pad_loc, input_seq, device):
 def init_sidechain(angles, bb_arr, input_seq, return_tuples=False):
     """ Builds the first sidechain based off of the first backbone atoms and a ficticious previous atom.
         This allows us to reuse the extend_sidechain method. Assumes the first atom of the backbone is at (0,0,0). """
-    fake_prev_c = torch.FloatTensor(FICTITIOUS_C) + bb_arr[0]
     if return_tuples:
-        sc, aa_code, atom_names = Sidechains.extend_sidechain(0, angles, [fake_prev_c] + bb_arr, input_seq,
-                                                              return_tuples)
+        sc, aa_code, atom_names = Sidechains.extend_sidechain(0, angles, bb_arr, input_seq, return_tuples,
+                                                              first_sc=True)
         return sc, aa_code, atom_names
     else:
-        sc = Sidechains.extend_sidechain(0, angles, [fake_prev_c] + bb_arr, input_seq)
+        sc = Sidechains.extend_sidechain(0, angles, bb_arr, input_seq)
         return sc
 
 
