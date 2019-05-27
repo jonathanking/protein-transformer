@@ -51,7 +51,8 @@ BONDLENS = {'cc-cv': 1.375,
             '2c-co': 1.522,
             'cw-c*': 1.352,
             'ct-cx': 1.526,
-            '3c-cx': 1.526}
+            '3c-cx': 1.526,
+            '3c-oh': 1.4218}  # measured from PyMOL's build feature for THR
 
 BONDANGS = {'c8-cx-n ': 109.7,
             'cx-2c-c ': 111.1,
@@ -114,7 +115,8 @@ BONDANGS = {'c8-cx-n ': 109.7,
             '3c-2c-ct': 109.5,
             's -2c-2c': 114.7,
             'oh-2c-cx': 109.5,
-            'cx-2c-sh': 108.6}
+            'cx-2c-sh': 108.6,
+            'cx-3c-oh': 110.6}  # measured from PyMOL's build feature for THR
 
 SC_DATA = {"ARG": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-n2", "c8-n2-ca", "n2-ca-n2"],
                    "bonds": ["cx-c8", "c8-c8", "c8-c8", "c8-n2", "n2-ca", "ca-n2"],
