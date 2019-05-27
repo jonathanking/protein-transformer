@@ -49,17 +49,27 @@ def drmsd_loss(pred, gold, input_seq, device):
     pred, gold = copy_padding_from_gold(pred, gold, device)
 
     losses = []
-    for pred_item, gold_item, input_item in zip(pred, gold, input_seq):
-        pad_loc = int(np.argmax((gold_item == 0).sum(dim=-1)))
-        if pad_loc is 0:
-            pad_loc = gold_item.shape[0]
-        gold_item = gold_item[:pad_loc]
-        pred_item = pred_item[:pad_loc]
-        input_item = input_item[:pad_loc]
-        true_coords = generate_coords(gold_item, pad_loc, input_item, device)
-        pred_coords = generate_coords(pred_item, pad_loc, input_item, device)
+    # TODO: gracefully handle losses when batchsize is 1.
+    if pred.shape[0] == 1:
+        pred_item = pred[0]
+        gold_item = gold[0]
+        input_item = input_seq[0]
+        true_coords = generate_coords(gold_item, pred_item.shape[0], input_item, device)
+        pred_coords = generate_coords(pred_item, pred_item.shape[0], input_item, device)
         loss = drmsd(pred_coords, true_coords)
         losses.append(loss)
+    else:
+        for pred_item, gold_item, input_item in zip(pred, gold, input_seq):
+            pad_loc = int(np.argmax((gold_item == 0).sum(dim=-1)))
+            if pad_loc is 0:
+                pad_loc = gold_item.shape[0]
+            gold_item = gold_item[:pad_loc]
+            pred_item = pred_item[:pad_loc]
+            input_item = input_item[:pad_loc]
+            true_coords = generate_coords(gold_item, pad_loc, input_item, device)
+            pred_coords = generate_coords(pred_item, pad_loc, input_item, device)
+            loss = drmsd(pred_coords, true_coords)
+            losses.append(loss)
 
     return torch.mean(torch.stack(losses))
 
