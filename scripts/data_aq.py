@@ -197,6 +197,9 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
         first_three = ["N", "CA", "CB"]
         next_atom = "OG1"
     res_dihedrals.append(compute_single_dihedral([residue.select("name " + an) for an in first_three + [next_atom]]))
+    assert len(res_dihedrals) + len(backbone + bondangles) == 10 and resname in ["ILE", "LEU"] or len(res_dihedrals) + \
+           len(backbone + bondangles) == 9 and resname in ["VAL", "THR"], \
+        "Angle position in array must match what is assumed in Sidechains:extend_any_sidechain."
 
     return backbone + bondangles + res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
 

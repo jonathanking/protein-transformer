@@ -260,7 +260,38 @@ def extend_any_sc(info, aa_code, return_tuples=False):
         n2, n1, n0 = n1, n0, next_pt  # N, CA, CB
         sc_pts.append(next_pt)
 
+    # The following residues have extra *atoms* that are predicted manually
+    if aa_code == "ILE":
+        # nerf, N, CA, CB, *CG2*
+        new_pt = Structure.nerf(bb_arr[-3], bb_arr[-2], sc_pts[0],
+                                BONDLENS["ct-3c"], torch.tensor(np.deg2rad(BONDANGS['cx-3c-ct'])),
+                                angles[i, 9], device=torch.device("cpu"))
+        sc_pts.append(new_pt)
+    if aa_code == "LEU":
+        # nerf, CA, CB, CG, *CD2*
+        new_pt = Structure.nerf(bb_arr[-2], sc_pts[0], sc_pts[1],
+                                BONDLENS["ct-3c"], torch.tensor(np.deg2rad(BONDANGS['2c-3c-ct'])),
+                                angles[i, 9], device=torch.device("cpu"))
+        sc_pts.append(new_pt)
+    if aa_code == "THR":
+        # nerf, N, CA, CB, *OG1*
+        new_pt = Structure.nerf(bb_arr[-3], bb_arr[-2], sc_pts[0],
+                                BONDLENS["3c-oh"], torch.tensor(np.deg2rad(BONDANGS['cx-3c-oh'])),
+                                angles[i, 8], device=torch.device("cpu"))
+        sc_pts.append(new_pt)
+    if aa_code == "VAL":
+        # nerf, N, CA, CB, *CG2*
+        new_pt = Structure.nerf(bb_arr[-3], bb_arr[-2], sc_pts[0],
+                                BONDLENS["ct-3c"], torch.tensor(np.deg2rad(BONDANGS['cx-3c-ct'])),
+                                angles[i, 8], device=torch.device("cpu"))
+        sc_pts.append(new_pt)
+
     if return_tuples:
-        return sc_pts, aa_code, SC_DATA[aa_code]["predicted"]
+        special_case_extra_atoms = {"LEU": "CD2", "ILE": 'CG2', 'THR': 'OG1', 'VAL': 'CG2'}
+        if aa_code in special_case_extra_atoms.keys():
+            predicted = SC_DATA[aa_code]["predicted"] + [special_case_extra_atoms[aa_code]]
+        else:
+            predicted = SC_DATA[aa_code]["predicted"]
+        return sc_pts, aa_code, predicted
 
     return sc_pts

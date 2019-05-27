@@ -1,6 +1,0 @@
-python train.py -name 0312A -log -data data/data_031219.torch -batch_size 8 -epoch 5 -clip 1
-python train.py -name 0312B -log -data data/data_031219.torch -batch_size 8 -epoch 5 -clip 1
-python train.py -name 0312C -log -data data/data_031219.torch -batch_size 8 -epoch 10 -clip 1
-python train.py -name 0312D -log -data data/data_031219.torch -batch_size 8 -epoch 10 -clip 1
-python train.py -name 0312E -log -data data/data_031219.torch -batch_size 8 -epoch 10 -clip .5
-python train.py -name 0312F -log -data data/data_031219.torch -batch_size 8 -epoch 100 -clip 1

@@ -15,10 +15,10 @@ import numpy as np
 import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
-from transformer.Structure import generate_coords_with_tuples, nerf
+from transformer.Structure import generate_coords_with_tuples
 from train import drmsd_loss
 from losses import inverse_trig_transform, copy_padding_from_gold
-from transformer.Sidechains import SC_DATA, BONDLENS, BONDANGS
+from transformer.Sidechains import SC_DATA
 
 
 def load_model(args):
@@ -110,34 +110,9 @@ def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidech
     align_target = SC_DATA[resname]["align_target"]
     align_mobile = SC_DATA[resname]["align_mobile"]
 
-    if resname in ["ALA", "CYS", "GLY", "LYS", "MET", "SER"]:  # return the prev. predicted atoms if none are missing
-        assert len(missing) == 0, "An atom that is fully predicted by the model has > 0 \"missing\" atoms."
+    if resname in ["ALA", "CYS", "GLY", "LYS", "MET", "SER"] + ["ILE", "VAL", "LEU", "THR"]:
+        # return the prev. predicted atoms if none are missing
         return list(zip(pred_names, pred_coords))
-    if resname in ["LEU", "THR", "VAL", "ILE"]:  # These have been predicted directly
-        if resname == "ILE":
-            # nerf, N, CA, CB, CG2
-            new_pt = nerf(torch.tensor(bb_cords[0]), torch.tensor(bb_cords[1]), torch.tensor(pred_coords[0]),
-                          torch.tensor(BONDLENS["ct-3c"]), torch.tensor(np.deg2rad(BONDANGS['cx-3c-ct'])),
-                          angles[9], device=torch.device("cpu"))
-            return list(zip(pred_names, pred_coords)) + [("CG2", new_pt)]
-        if resname == "LEU":
-            # nerf, CA, CB, CG, CD2
-            new_pt = nerf(torch.tensor(bb_cords[1]), torch.tensor(pred_coords[0]), torch.tensor(pred_coords[1]),
-                          torch.tensor(BONDLENS["ct-3c"]), torch.tensor(np.deg2rad(BONDANGS['2c-3c-ct'])),
-                          angles[9], device=torch.device("cpu"))
-            return list(zip(pred_names, pred_coords)) + [("CD2", new_pt)]
-        if resname == "THR":
-            # nerf, N, CA, CB, OG1
-            new_pt = nerf(torch.tensor(bb_cords[0]), torch.tensor(bb_cords[1]), torch.tensor(pred_coords[0]),
-                          torch.tensor(BONDLENS["3c-oh"]), torch.tensor(np.deg2rad(BONDANGS['cx-3c-oh'])),
-                          angles[8], device=torch.device("cpu"))
-            return list(zip(pred_names, pred_coords)) + [("OG1", new_pt)]
-        if resname == "VAL":
-            # nerf, N, CA, CB, CG2
-            new_pt = nerf(torch.tensor(bb_cords[0]), torch.tensor(bb_cords[1]), torch.tensor(pred_coords[0]),
-                          torch.tensor(BONDLENS["ct-3c"]), torch.tensor(np.deg2rad(BONDANGS['cx-3c-ct'])),
-                          angles[8], device=torch.device("cpu"))
-            return list(zip(pred_names, pred_coords)) + [("CG2", new_pt)]
 
     if resname is "PRO":
         pred_coords = bb_cords
