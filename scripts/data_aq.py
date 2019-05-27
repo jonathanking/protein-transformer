@@ -181,6 +181,22 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
         for n in range(len(atoms) - 3):
             dihe_atoms = atoms[n:n + 4]
             res_dihedrals.append(compute_single_dihedral(dihe_atoms))
+    resname = residue.getResname()
+    if resname not in ["LEU", "ILE", "VAL", "THR"]:
+        return backbone + bondangles + res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
+    if resname == "LEU":
+        first_three = ["CA", "CB", "CG"]
+        next_atom = "CD2"
+    elif resname == "ILE":
+        first_three = ["N", "CA", "CB"]
+        next_atom = "CG2"
+    elif resname == "VAL":
+        first_three = ["N", "CA", "CB"]
+        next_atom = "CG2"
+    elif resname == "THR":
+        first_three = ["N", "CA", "CB"]
+        next_atom = "OG1"
+    res_dihedrals.append(compute_single_dihedral([residue.select("name " + an) for an in first_three + [next_atom]]))
 
     return backbone + bondangles + res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
 

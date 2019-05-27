@@ -15,10 +15,10 @@ import numpy as np
 import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
-from transformer.Structure import generate_coords_with_tuples
+from transformer.Structure import generate_coords_with_tuples, nerf
 from train import drmsd_loss
 from losses import inverse_trig_transform, copy_padding_from_gold
-from transformer.Sidechains import SC_DATA
+from transformer.Sidechains import SC_DATA, BONDLENS, BONDANGS
 
 
 def load_model(args):
@@ -98,12 +98,12 @@ def make_predictions(the_model, data_loader, pdb_ids, build_true=False):
 
             all, bb, bb_tups, sc, aa_codes, atom_names = generate_coords_with_tuples(pred[0], pred.shape[1], src_seq[0],
                                                                                      torch.device('cpu'))
-            coords_list.append((np.asarray(bb), bb_tups, sc, float(loss), aa_codes, atom_names))
+            coords_list.append((np.asarray(bb), bb_tups, sc, float(loss), aa_codes, atom_names, pred[0]))
     print("Avg Loss = {0:.2f}".format(np.mean(losses)))
     return coords_list
 
 
-def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidechains):
+def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidechains, angles):
     """ Given an amino acid RESNAME that is partially predicted (only the atoms in PRED_NAMES are predicted),
         this function returns a list of coords that represents the complete amino acid structure."""
     missing = SC_DATA[resname]["missing"]
@@ -113,6 +113,31 @@ def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidech
     if resname in ["ALA", "CYS", "GLY", "LYS", "MET", "SER"]:  # return the prev. predicted atoms if none are missing
         assert len(missing) == 0, "An atom that is fully predicted by the model has > 0 \"missing\" atoms."
         return list(zip(pred_names, pred_coords))
+    if resname in ["LEU", "THR", "VAL", "ILE"]:  # These have been predicted directly
+        if resname == "ILE":
+            # nerf, N, CA, CB, CG2
+            new_pt = nerf(torch.tensor(bb_cords[0]), torch.tensor(bb_cords[1]), torch.tensor(pred_coords[0]),
+                          torch.tensor(BONDLENS["ct-3c"]), torch.tensor(np.deg2rad(BONDANGS['cx-3c-ct'])),
+                          angles[9], device=torch.device("cpu"))
+            return list(zip(pred_names, pred_coords)) + [("CG2", new_pt)]
+        if resname == "LEU":
+            # nerf, CA, CB, CG, CD2
+            new_pt = nerf(torch.tensor(bb_cords[1]), torch.tensor(pred_coords[0]), torch.tensor(pred_coords[1]),
+                          torch.tensor(BONDLENS["ct-3c"]), torch.tensor(np.deg2rad(BONDANGS['2c-3c-ct'])),
+                          angles[9], device=torch.device("cpu"))
+            return list(zip(pred_names, pred_coords)) + [("CD2", new_pt)]
+        if resname == "THR":
+            # nerf, N, CA, CB, OG1
+            new_pt = nerf(torch.tensor(bb_cords[0]), torch.tensor(bb_cords[1]), torch.tensor(pred_coords[0]),
+                          torch.tensor(BONDLENS["3c-oh"]), torch.tensor(np.deg2rad(BONDANGS['cx-3c-oh'])),
+                          angles[8], device=torch.device("cpu"))
+            return list(zip(pred_names, pred_coords)) + [("OG1", new_pt)]
+        if resname == "VAL":
+            # nerf, N, CA, CB, CG2
+            new_pt = nerf(torch.tensor(bb_cords[0]), torch.tensor(bb_cords[1]), torch.tensor(pred_coords[0]),
+                          torch.tensor(BONDLENS["ct-3c"]), torch.tensor(np.deg2rad(BONDANGS['cx-3c-ct'])),
+                          angles[8], device=torch.device("cpu"))
+            return list(zip(pred_names, pred_coords)) + [("CG2", new_pt)]
 
     if resname is "PRO":
         pred_coords = bb_cords
@@ -197,7 +222,7 @@ def set_backbone_coords(prot, chain_id, bb_coords, pdb_chain, peptide_bond):
     return backbone
 
 
-def set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains):
+def set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains, angles):
     """ Given a protein PDB selection object and amino acid"""
     # Set sidechain atoms
     assert len(aa_codes) == len(sc_tups) and len(sc_tups) == len(atom_names), "Shape mismatch for coord tuples."
@@ -205,14 +230,14 @@ def set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id,
         assert len(sc_atomcoords) == len(ans)
 
     prot_sidechains = prot.select('protein and chain ' + chain_id)
-    for res_num, res_code, res_coords, res_bb_coords, res_atom_names in zip(prot_sidechains.ca.getResnums(),
-                                                                            aa_codes,
-                                                                            sc_tups,
-                                                                            bb_tups,
-                                                                            atom_names):
+    for res_num, res_code, res_coords, res_bb_coords, res_atom_names, ang in zip(prot_sidechains.ca.getResnums(),
+                                                                                 aa_codes,
+                                                                                 sc_tups,
+                                                                                 bb_tups,
+                                                                                 atom_names, angles):
         if res_code is "GLY":
             continue
-        sidechain_coords = fill_in_residue(res_code, res_coords, res_atom_names, res_bb_coords, ref_sidechains)
+        sidechain_coords = fill_in_residue(res_code, res_coords, res_atom_names, res_bb_coords, ref_sidechains, ang)
         if res_num < 0:
             res_num_str = "`{0}`".format(str(res_num))
         else:
@@ -242,7 +267,7 @@ def make_pdbs(id_coords_dict, outdir):
 
     # Build PDBs
     for pdb_chain, data in id_coords_dict.items():
-        bb_coords, bb_tups, sc_tups, loss, aa_codes, atom_names = data
+        bb_coords, bb_tups, sc_tups, loss, aa_codes, atom_names, angles = data
         pdb_id = pdb_chain.split('_')[0]
         chain_id = pdb_chain.split("_")[1]
         print("Building", pdb_id, chain_id)
@@ -254,7 +279,7 @@ def make_pdbs(id_coords_dict, outdir):
             writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), backbone)
             continue
 
-        prot = set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains)
+        prot = set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains, angles)
         all_sidechains = prot.select('protein and chain ' + chain_id + ' and sidechain')
 
         writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), all_sidechains + backbone)
