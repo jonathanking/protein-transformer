@@ -171,7 +171,7 @@ def set_backbone_coords(prot, chain_id, bb_coords, pdb_chain, peptide_bond):
     backbone = prot.select('protein and chain ' + chain_id + ' and name N CA C')
     assert backbone.getCoords().shape == bb_coords.shape, "Backbone shape mismatch for " + pdb_chain
     backbone.setCoords(bb_coords)
-    backbone = prot.backbone
+    backbone = prot.select('protein and chain ' + chain_id + ' and backbone')
 
     # Position oxygen atoms by aligning a pre-computed peptide bond to each residue.
     # TODO Nerf is probably more efficient at placing oxygen
