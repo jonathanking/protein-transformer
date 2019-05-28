@@ -19,7 +19,7 @@ LOGFILEHEADER = 'drmsd,mse,lr,is_val,is_end_of_epoch,time\n'
 
 
 def train_epoch(model, training_data, optimizer, device, opt, log_writer):
-    ''' Epoch operation in training phase'''
+    """ Epoch operation in training phase"""
 
     model.train()
 
@@ -60,7 +60,6 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
             print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
                 float(loss), np.mean(training_losses), optimizer.cur_lr))
 
-
         # update parameters
         optimizer.step_and_update_lr()
 
@@ -89,7 +88,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
 
 
 def eval_epoch(model, validation_data, device, opt):
-    ''' Epoch operation in evaluation phase. '''
+    """ Epoch operation in evaluation phase. """
 
     model.eval()
 
@@ -112,7 +111,7 @@ def eval_epoch(model, validation_data, device, opt):
 
 
 def train(model, training_data, validation_data, optimizer, device, opt, log_writer):
-    ''' Start training. '''
+    """ Start training. """
 
     valid_drmsd_losses = []
     epoch_last_improved = -1
@@ -122,19 +121,15 @@ def train(model, training_data, validation_data, optimizer, device, opt, log_wri
 
         start = time.time()
         train_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
-        print('  - (Training)   drmsd: {d: 8.5f}, rmse: {m: 8.5f}, ' \
-              'elapse: {elapse:3.3f} min'.format(
-            d=train_drmsd_loss,
-            m=np.sqrt(train_mse_loss),
-            elapse=(time.time() - start) / 60))
+        print('  - (Training)   drmsd: {d: 8.5f}, rmse: {m: 8.5f}, elapse: {elapse:3.3f} min, '
+              'lr: {lr: 8.5f} '.format(d=train_drmsd_loss, m=np.sqrt(train_mse_loss), elapse=(time.time() - start) / 60,
+                                       lr=optimizer.cur_lr))
 
         start = time.time()
         valid_drmsd_loss, valid_mse_loss = eval_epoch(model, validation_data, device, opt)
         print('  - (Validation) drmsd: {d: 8.5f}, rmse: {m: 8.5f}, ' \
-              'elapse: {elapse:3.3f} min'.format(
-            d=valid_drmsd_loss,
-            m=np.sqrt(valid_mse_loss),
-                    elapse=(time.time()-start)/60))
+              'elapse: {elapse:3.3f} min'.format(d=valid_drmsd_loss, m=np.sqrt(valid_mse_loss),
+                                                 elapse=(time.time() - start) / 60))
 
         t = time.time()
         log_batch(log_writer, train_drmsd_loss, train_mse_loss, optimizer.cur_lr, is_val=False, is_end_of_epoch=True,
@@ -156,7 +151,7 @@ def train(model, training_data, validation_data, optimizer, device, opt, log_wri
 
 
 def save_model(opt, model, valid_loss, valid_losses, epoch_i):
-    # Record model state and log training info
+    """ Records model state according to a checkpointing policy. Defaults to best validation set performance. """
     model_state_dict = model.state_dict()
     checkpoint = {
         'model': model_state_dict,
@@ -172,13 +167,13 @@ def save_model(opt, model, valid_loss, valid_losses, epoch_i):
         print('    - [Info] The checkpoint file has been updated.')
 
 
-def log_batch(log_writer, drmsd, mse, cur_lr, is_val=False, is_end_of_epoch=False, time=time.time()):
-    # Record model state and log training info, 'loss,is_val,is_end_of_epoch,time\n'
-    log_writer.writerow([drmsd, mse, cur_lr, is_val, is_end_of_epoch, time])
+def log_batch(log_writer, drmsd, mse, cur_lr, is_val=False, is_end_of_epoch=False, t=time.time()):
+    """ Logs training info to a predetermined log. """
+    log_writer.writerow([drmsd, mse, cur_lr, is_val, is_end_of_epoch, t])
 
 
 def main():
-    ''' Main function '''
+    """ Main function """
     parser = argparse.ArgumentParser()
 
     # Required args
