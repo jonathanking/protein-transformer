@@ -149,10 +149,13 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
             atoms = [residue.select("name " + an) for an in atom_names]
             if None in atoms:
                 return None
-            res_dihedrals = [getDihedral(next_res.select("name N").getCoords()[0],
-                                         residue.select("name C").getCoords()[0],
-                                         residue.select("name CA").getCoords()[0],
-                                         residue.select("name CB").getCoords()[0], radian=True)]
+            try:
+                res_dihedrals = [getDihedral(next_res.select("name N").getCoords()[0],
+                                             residue.select("name C").getCoords()[0],
+                                             residue.select("name CA").getCoords()[0],
+                                             residue.select("name CB").getCoords()[0], radian=True)]
+            except AttributeError:
+                return None
         elif prev_residue is not None:
             atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in atom_names]
             if None in atoms:
