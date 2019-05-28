@@ -210,13 +210,13 @@ def main():
     opt.cuda = not opt.no_cuda
     opt.d_word_vec = opt.d_model
 
-    #========= Loading Dataset =========#
+    # ========= Loading Dataset ========= #
     data = torch.load(opt.data)
     opt.max_token_seq_len = data['settings']["max_len"]
 
     training_data, validation_data = prepare_dataloaders(data, opt)
 
-    # ========= Preparing Log and Checkpoint Files =========#
+    # ========= Preparing Log and Checkpoint Files ========= #
     if not opt.log:
         opt.log_file = "./logs/" + opt.name + '.train'
     else:
@@ -229,7 +229,7 @@ def main():
     opt.chkpt_path = "./checkpoints/" + opt.name
     os.makedirs("./checkpoints", exist_ok=True)
 
-    #========= Preparing Model =========#
+    # ========= Preparing Model ========= #
 
     print(opt)
     device = torch.device('cuda' if opt.cuda else 'cpu')
