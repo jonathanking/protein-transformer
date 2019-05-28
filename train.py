@@ -78,7 +78,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
                                                                                                            m_loss))))
 
         log_batch(log_writer, d_loss.item(), m_loss.item(), optimizer.cur_lr, is_val=False, is_end_of_epoch=False,
-                  time=time.time())
+                  t=time.time())
 
         if np.isnan(loss.item()):
             print("A nan loss has occurred. Exiting training.")
@@ -133,9 +133,9 @@ def train(model, training_data, validation_data, optimizer, device, opt, log_wri
 
         t = time.time()
         log_batch(log_writer, train_drmsd_loss, train_mse_loss, optimizer.cur_lr, is_val=False, is_end_of_epoch=True,
-                  time=t)
+                  t=t)
         log_batch(log_writer, valid_drmsd_loss, valid_mse_loss, optimizer.cur_lr, is_val=True, is_end_of_epoch=True,
-                  time=t)
+                  t=t)
 
         valid_drmsd_losses.append(valid_drmsd_loss)
 
