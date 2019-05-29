@@ -9,7 +9,6 @@ from transformer.Structure import generate_coords
 def combine_drmsd_mse(d, mse, w=.5):
     """ Returns a combination of drmsd and mse loss that first normalizes their scales, and then computes
         w * drmsd + (1 - w) * mse."""
-
     d_norm, m_norm = 8, 2
     d = d / d_norm
     mse = mse / m_norm
@@ -62,7 +61,7 @@ def determine_pad_loc_test():
 
 
 def drmsd_loss(pred, gold, input_seq, device):
-    ''' Calculate DRMSD loss. '''
+    """ Calculate DRMSD loss. """
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
 
@@ -96,13 +95,11 @@ def drmsd_loss(pred, gold, input_seq, device):
 def mse_loss(pred, gold):
     """ Computes MSE loss."""
     device = torch.device("cpu")
-
     pred, gold = pred.to(device), gold.to(device)
     pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
-    pred_unpadded, gold_unpadded = copy_padding_from_gold(pred, gold, device)
-    pad_loc = int(np.argmax((gold == 0).sum(dim=-1)))
-    if pad_loc is 0:
-        pad_loc = gold.shape[0]
+    pred, gold = copy_padding_from_gold(pred, gold, device)
+    pad_loc = determine_pad_loc(gold)
+    pred_unpadded, gold_unpadded = pred[:pad_loc], gold[:pad_loc]
     mse = F.mse_loss(pred_unpadded, gold_unpadded)
 
     return mse
@@ -110,30 +107,36 @@ def mse_loss(pred, gold):
 
 def pairwise_internal_dist(coords):
     """ Returns a tensor of the pairwise distances between all points in coords. """
-
     c1 = coords.unsqueeze(1)
     c2 = coords.unsqueeze(0)
     z = c1 - c2 + 1e-10        # (L x L x 3)
-    res = torch.norm(z,dim=2)  # (L x L)
+    res = torch.norm(z, dim=2)  # (L x L)
     return res
 
 
-# def drmsd(a, b):
-#     """ Given two coordinate tensors, returns the dRMSD score between them.
-#         Both tensors must be the exact same shape. """
-#
-#     a_ = pairwise_internal_dist(a)
-#     b_ = pairwise_internal_dist(b)
-#     res =  torch.sqrt(torch.mean((a_ - b_)**2) + 1e-10)
-#     return res
+def drmsd(a, b):
+    """ Given two coordinate tensors, returns the dRMSD score between them.
+        Both tensors must be the exact same shape. """
+    mask = a.ne(0).any(1)
+    a = a[mask]
+    mask = b.ne(0).any(1)
+    b = b[mask]
+
+    a_ = pairwise_internal_dist(a)
+    b_ = pairwise_internal_dist(b)
+
+    num_elems = a_.shape[0]
+    num_elems = num_elems * (num_elems - 1)
+
+    sq_diff = (a_ - b_) ** 2
+    summed = sq_diff.sum()
+    mean = summed / num_elems
+    res = mean.sqrt()
+
+    return res
 
 
-
-
-########################
-### RNN-made methods ###
-#####################
-def drmsd_loss_RNN(y_pred_, y_true_, sorted_lengths, x):
+def drmsd_loss_rnn(y_pred_, y_true_, sorted_lengths, x):
     """ Given angle Tensors, return the drmsd loss. (Batch x L x NUM_PREDICTED_ANGLES x 2)"""
 
     y_pred_ = torch.atan2(y_pred_[:, :, :, 1], y_pred_[:, :, :, 0])
@@ -152,7 +155,6 @@ def drmsd_loss_RNN(y_pred_, y_true_, sorted_lengths, x):
         """ Curries the work function for use in python map statement. """
         return work(p_t_l_i[0], p_t_l_i[1], p_t_l_i[2], p_t_l_i[3])
 
-
     drmsds = list(map(curry_work, zip(y_pred_, y_true_, sorted_lengths, x)))
     drmsds = torch.stack(drmsds)
 
@@ -161,29 +163,6 @@ def drmsd_loss_RNN(y_pred_, y_true_, sorted_lengths, x):
     # drmsds = torch.stack(p.map(curry_work, zip(y_pred_, y_true_, sorted_lengths)))
 
     return drmsds.mean()
-
-
-def drmsd(a, b):
-    """ Given two coordinate tensors, returns the dRMSD score between them.
-        Both tensors must be the exact same shape. """
-
-    mask = a.ne(0).any(1)
-    a = a[mask]
-    mask = b.ne(0).any(1)
-    b = b[mask]
-
-    a_ = pairwise_internal_dist(a)
-    b_ = pairwise_internal_dist(b)
-
-    num_elems = a_.shape[0]
-    num_elems = num_elems * (num_elems - 1)
-
-    sq_diff = (a_ - b_) ** 2
-    summed = sq_diff.sum()
-    mean = summed / num_elems
-    res = mean.sqrt()
-
-    return res
 
 
 if __name__ == "__main__":
