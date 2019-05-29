@@ -40,6 +40,27 @@ def copy_padding_from_gold(pred, gold, device):
     return pred_unpadded, gold_unpadded
 
 
+def determine_pad_loc(padded_tensor):
+    """ Returns the position where the tensor becomes padded with all 0s across the first dimension. """
+    paddings = torch.all(padded_tensor == 0, dim=1)
+    if torch.all(paddings == 0).item() == 1:
+        return padded_tensor.shape[0]
+    else:
+        return torch.argmin(paddings) + 1
+
+
+def determine_pad_loc_test():
+    """ Test for determin_pad_loc. """
+    a = np.random.rand(54, 12)
+    b = np.random.rand(63, 12)
+    a[11:] = np.zeros(shape=(a.shape[0] - 11, 12))
+    b[33:] = np.zeros(shape=(b.shape[0] - 33, 12))
+    at = torch.tensor(a)
+    bt = torch.tensor(b)
+    assert determine_pad_loc(at).item() == 11
+    assert determine_pad_loc(bt).item() == 33
+
+
 def drmsd_loss(pred, gold, input_seq, device):
     ''' Calculate DRMSD loss. '''
     device = torch.device("cpu")
@@ -60,9 +81,7 @@ def drmsd_loss(pred, gold, input_seq, device):
         losses.append(loss)
     else:
         for pred_item, gold_item, input_item in zip(pred, gold, input_seq):
-            pad_loc = int(np.argmax((gold_item == 0).sum(dim=-1)))
-            if pad_loc is 0:
-                pad_loc = gold_item.shape[0]
+            pad_loc = determine_pad_loc(gold_item)
             gold_item = gold_item[:pad_loc]
             pred_item = pred_item[:pad_loc]
             input_item = input_item[:pad_loc]
@@ -166,3 +185,6 @@ def drmsd(a, b):
 
     return res
 
+
+if __name__ == "__main__":
+    determine_pad_loc_test()
