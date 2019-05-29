@@ -115,12 +115,12 @@ def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidech
         return list(zip(pred_names, pred_coords))
 
     if resname is "PRO":
-        pred_coords = bb_cords
-        pred_names = ["N", "CA", "C"]
+        pred_coords = bb_cords[:2] + pred_coords
+        pred_names = ["N", "CA", "CB"]
     elif "CA" == align_target[0]:
         pred_coords = [bb_cords[1]] + pred_coords  # If target requires CA, add it to the list of predicted coords
         pred_names = ["CA"] + pred_names
-    elif "CA" in align_target:
+    elif "CA" in align_target and resname is not "PRO":
         raise Exception("CA found in target but not at position 0" + str(align_target) + " " + resname)
 
     # Load reference structures
@@ -147,7 +147,8 @@ def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidech
         c = align_mobile_complete_struct.select("name " + m).getCoords()[0]
         missing_coords.append((m, c))
     if resname is "PRO":
-        return missing_coords
+        pred_coords = [pred_coords[2]]
+        pred_names = [pred_names[2]]
     elif "CA" in align_target:
         pred_coords = pred_coords[1:]
         pred_names = pred_names[1:]

@@ -52,7 +52,9 @@ BONDLENS = {'cc-cv': 1.375,
             'cw-c*': 1.352,
             'ct-cx': 1.526,
             '3c-cx': 1.526,
-            '3c-oh': 1.4218}  # measured from PyMOL's build feature for THR
+            '3c-oh': 1.4218,  # measured from PyMOL's build feature for THR
+            'cx-2c-proline': 1.5361,  # measured from PyMOL for PRO
+            }
 
 BONDANGS = {'c8-cx-n ': 109.7,
             'cx-2c-c ': 111.1,
@@ -116,7 +118,9 @@ BONDANGS = {'c8-cx-n ': 109.7,
             's -2c-2c': 114.7,
             'oh-2c-cx': 109.5,
             'cx-2c-sh': 108.6,
-            'cx-3c-oh': 110.6}  # measured from PyMOL's build feature for THR
+            'cx-3c-oh': 110.6,  # measured from PyMOL's build feature for THR
+            'n -cx-2c-proline': 101.88  # measured from PyMOL for PRO
+            }
 
 SC_DATA = {"ARG": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-n2", "c8-n2-ca", "n2-ca-n2"],
                    "bonds": ["cx-c8", "c8-c8", "c8-c8", "c8-n2", "n2-ca", "ca-n2"],
@@ -190,10 +194,10 @@ SC_DATA = {"ARG": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-n2", "c
                    "bonds": [],
                    "all": ['N', 'CA', 'C', 'O'],
                    "predicted": []},  # no sidechain
-           "PRO": {"angles": [],
-                   "bonds": [],
+           "PRO": {"angles": ["n -cx-2c-proline"],
+                   "bonds": ["cx-2c-proline"],
                    "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD'],
-                   "predicted": []},  # special case
+                   "predicted": ['CB']},  # special case
            "ALA": {"angles": ["ct-cx-n "],
                    "bonds": ["cx-ct"],
                    "all": ['N', 'CA', 'C', 'O', 'CB'],
@@ -209,7 +213,7 @@ for res in SC_DATA.keys():
     # Align target atoms are the last 3 predicted, used to align the mobile part of the sidechain to be constructed
     SC_DATA[res]["align_target"] = SC_DATA[res]["predicted"][-3:] if len(SC_DATA[res]["predicted"]) >= 3 else []
     if res == "PRO":
-        SC_DATA[res]["align_target"] = ["N", "CA", "C"]
+        SC_DATA[res]["align_target"] = ["N", "CA", "CB"]
     elif res == "THR":
         SC_DATA[res]["align_target"] = ["CA", "CB", "CG2"]
     elif res == "VAL":

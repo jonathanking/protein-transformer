@@ -219,7 +219,7 @@ def get_angles_from_chain(chain, pdb_id):
         atom_names = ["N", "CA"]
         # Special cases
         # TODO verify correctness of GLY, PRO atom_names
-        if res.getResname() in ["GLY", "PRO"]:
+        if res.getResname() is "GLY":
             atom_names = SC_DATA[res.getResname()]["predicted"]
         else:
             atom_names += SC_DATA[res.getResname()]["predicted"]
