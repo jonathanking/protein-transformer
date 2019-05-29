@@ -269,27 +269,60 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
             swap = False
 
     # The following residues have extra *atoms* that are predicted manually
+    # TODO clean up cases for the first SC, clarify ordering of bb_arr, which does not always refer to the right atoms
     if aa_code == "ILE":
         # nerf, N, CA, CB, *CG2*
-        new_pt = Structure.nerf(bb_arr[-3], bb_arr[-2], sc_pts[0],
+        if first_sc:
+            n = bb_arr[-1]
+            ca = bb_arr[-2]
+            cb = sc_pts[0]
+        else:
+            n = bb_arr[-3]
+            ca = bb_arr[-2]
+            cb = sc_pts[0]
+        new_pt = Structure.nerf(n, ca, cb,
                                 BONDLENS["ct-3c"], torch.tensor(np.deg2rad(BONDANGS['cx-3c-ct'])),
                                 angles[i, 9], device=torch.device("cpu"))
         sc_pts.append(new_pt)
     if aa_code == "LEU":
         # nerf, CA, CB, CG, *CD2*
-        new_pt = Structure.nerf(bb_arr[-2], sc_pts[0], sc_pts[1],
+        if first_sc:
+            ca = bb_arr[-2]
+            cb = sc_pts[0]
+            cg = sc_pts[1]
+        else:
+            ca = bb_arr[-2]
+            cb = sc_pts[0]
+            cg = sc_pts[1]
+        new_pt = Structure.nerf(ca, cb, cg,
                                 BONDLENS["ct-3c"], torch.tensor(np.deg2rad(BONDANGS['2c-3c-ct'])),
                                 angles[i, 9], device=torch.device("cpu"))
         sc_pts.append(new_pt)
     if aa_code == "THR":
         # nerf, N, CA, CB, *OG1*
-        new_pt = Structure.nerf(bb_arr[-3], bb_arr[-2], sc_pts[0],
+        if first_sc:
+            n = bb_arr[-1]
+            ca = bb_arr[-2]
+            cb = sc_pts[0]
+        else:
+            n = bb_arr[-3]
+            ca = bb_arr[-2]
+            cb = sc_pts[0]
+        new_pt = Structure.nerf(n, ca, cb,
                                 BONDLENS["3c-oh"], torch.tensor(np.deg2rad(BONDANGS['cx-3c-oh'])),
                                 angles[i, 8], device=torch.device("cpu"))
         sc_pts.append(new_pt)
     if aa_code == "VAL":
         # nerf, N, CA, CB, *CG2*
-        new_pt = Structure.nerf(bb_arr[-3], bb_arr[-2], sc_pts[0],
+        if first_sc:
+            n = bb_arr[-1]
+            ca = bb_arr[-2]
+            cb = sc_pts[0]
+        else:
+            n = bb_arr[-3]
+            ca = bb_arr[-2]
+            cb = sc_pts[0]
+        new_pt = Structure.nerf(n, ca, cb,
                                 BONDLENS["ct-3c"], torch.tensor(np.deg2rad(BONDANGS['cx-3c-ct'])),
                                 angles[i, 8], device=torch.device("cpu"))
         sc_pts.append(new_pt)
