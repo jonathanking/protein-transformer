@@ -218,8 +218,8 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Required args
-    parser.add_argument('-data', required=True, help="Path to training data.")
-    parser.add_argument("-name", type=str, required=True, help="The model name.")
+    parser.add_argument('data', help="Path to training data.")
+    parser.add_argument("name", type=str, help="The model name.")
 
     # Training parameters
     parser.add_argument("-lr", "--learning_rate", type=float, default=1 * (10 ** -3))
@@ -264,6 +264,7 @@ def main():
         opt.log_file = "./logs/" + opt.name + '.train'
     else:
         opt.log_file = "./logs/" + opt.log + '.train'
+    print(opt, "\n")
     print('[Info] Training performance will be written to file: {}'.format(opt.log_file))
     os.makedirs(os.path.dirname(opt.log_file), exist_ok=True)
     log_f = open(opt.log_file, 'w', buffering=1)
@@ -274,7 +275,6 @@ def main():
 
     # ========= Preparing Model ========= #
 
-    print(opt)
     device = torch.device('cuda' if opt.cuda else 'cpu')
     transformer = Transformer(
         opt.max_token_seq_len,
