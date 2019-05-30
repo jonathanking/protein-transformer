@@ -223,13 +223,13 @@ def main():
 
     # Training parameters
     parser.add_argument("-lr", "--learning_rate", type=float, default=1 * (10 ** -3))
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('-e', '--epochs', type=int, default=10)
     parser.add_argument("-b", '--batch_size', type=int, default=8)
-    parser.add_argument('--early_stopping', type=int, default=None,
+    parser.add_argument('-es', '--early_stopping', type=int, default=None,
                         help="Stops if training hasn't improved in X epochs")
-    parser.add_argument('--n_warmup_steps', type=int, default=1000)
-    parser.add_argument('--clip', type=float, default=None)
-    parser.add_argument('--combined_loss', action='store_true',
+    parser.add_argument('-dwv', '--n_warmup_steps', type=int, default=1000)
+    parser.add_argument('-cg', '--clip', type=float, default=None)
+    parser.add_argument('-cl', '--combined_loss', action='store_true',
                         help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
 
     # Model parameters
