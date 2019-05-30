@@ -155,6 +155,16 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
 
         save_model(opt, model, valid_drmsd_loss, valid_drmsd_losses, epoch_i)
 
+    # Evaluate model on test set
+    t = time.time()
+    test_drmsd_loss, test_mse_loss, test_rmsd_loss = eval_epoch(model, test_data, device, opt)
+    print('  - (Test) drmsd: {d: 8.5f}, rmse: {m: 8.5f}, rmsd: {rmsd: 8.5f}, ' \
+          'elapse: {elapse:3.3f} min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
+                                             elapse=(time.time() - t) / 60), rmsd=test_rmsd_loss)
+    log_batch(log_writer, test_drmsd_loss, test_mse_loss, test_rmsd_loss, optimizer.cur_lr, is_val=True,
+              is_end_of_epoch=True,
+              t=t)
+
 
 def save_model(opt, model, valid_loss, valid_losses, epoch_i):
     """ Records model state according to a checkpointing policy. Defaults to best validation set performance. """
@@ -220,7 +230,7 @@ def main():
     data = torch.load(opt.data)
     opt.max_token_seq_len = data['settings']["max_len"]
 
-    training_data, validation_data = prepare_dataloaders(data, opt)
+    training_data, validation_data, test_data = prepare_dataloaders(data, opt)
 
     # ========= Preparing Log and Checkpoint Files ========= #
     if not opt.log:
@@ -254,7 +264,7 @@ def main():
             betas=(0.9, 0.98), eps=1e-09, lr=opt.learning_rate),
         opt.d_model, opt.n_warmup_steps, simple=False)
 
-    train(transformer, training_data, validation_data, optimizer, device, opt, log_writer)
+    train(transformer, training_data, validation_data, test_data, optimizer, device, opt, log_writer)
     log_f.close()
     # TODO: Add test data evaluation
 
@@ -278,7 +288,15 @@ def prepare_dataloaders(data, opt):
         num_workers=2,
         batch_size=opt.batch_size,
         collate_fn=paired_collate_fn)
-    return train_loader, valid_loader
+
+    test_loader = torch.utils.data.DataLoader(
+        ProteinDataset(
+            seqs=data['test']['seq'],
+            angs=data['test']['ang']),
+        num_workers=2,
+        batch_size=opt.batch_size,
+        collate_fn=paired_collate_fn)
+    return train_loader, valid_loader, test_loader
 
 
 if __name__ == '__main__':
