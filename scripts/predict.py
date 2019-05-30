@@ -51,15 +51,18 @@ def get_data_loader(data_dict, dataset, n):
         data_dict["all"] = {"ids": data_dict["train"]["ids"] + data_dict["test"]["ids"] + data_dict["valid"]["ids"],
                             "seq": data_dict["train"]["seq"] + data_dict["test"]["seq"] + data_dict["valid"]["seq"],
                             "ang": data_dict["train"]["ang"] + data_dict["test"]["ang"] + data_dict["valid"]["ang"]}
-    to_predict = np.random.choice(data_dict[dataset]["ids"], n)  # ["2NLP_D", "3ASK_Q", "1SZA_C"]
+    to_predict = set(
+        [s.upper() for s in np.random.choice(data_dict[dataset]["ids"], n)])  # ["2NLP_D", "3ASK_Q", "1SZA_C"]
+    will_predict = []
     ids = []
     seqs = []
     angs = []
     for i, prot in enumerate(data_dict[dataset]["ids"]):
-        if prot.upper() in to_predict:
+        if prot.upper() in to_predict and prot.upper() not in will_predict:
             seqs.append(data_dict[dataset]["seq"][i])
             angs.append(data_dict[dataset]["ang"][i])
             ids.append(prot)
+            will_predict.append(prot.upper())
     assert len(seqs) == n and len(angs) == n or (len(seqs) == len(angs) and len(seqs) < n)
 
     data_loader = torch.utils.data.DataLoader(
