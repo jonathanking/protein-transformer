@@ -15,7 +15,7 @@ from losses import drmsd_loss, mse_loss, combine_drmsd_mse
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 
-LOGFILEHEADER = 'drmsd,mse,lr,is_val,is_end_of_epoch,time\n'
+LOGFILEHEADER = 'drmsd,mse,rmsd,lr,is_val,is_end_of_epoch,time\n'
 
 
 def train_epoch(model, training_data, optimizer, device, opt, log_writer):
@@ -77,7 +77,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
                                                                                                        np.sqrt(float(
                                                                                                            m_loss))))
 
-        log_batch(log_writer, d_loss.item(), m_loss.item(), optimizer.cur_lr, is_val=False, is_end_of_epoch=False,
+        log_batch(log_writer, d_loss.item(), m_loss.item(), None, optimizer.cur_lr, is_val=False, is_end_of_epoch=False,
                   t=time.time())
 
         if np.isnan(loss.item()):
@@ -94,6 +94,7 @@ def eval_epoch(model, validation_data, device, opt):
 
     total_drmsd_loss = 0
     total_mse_loss = 0
+    total_rmsd_loss = 0
     n_batches = 0.0
 
     with torch.no_grad():
@@ -101,16 +102,18 @@ def eval_epoch(model, validation_data, device, opt):
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
             gold = tgt_seq[:]
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            d_loss = drmsd_loss(pred, gold, src_seq, device)  # When evaluating the epoch, only use DRMSD loss
+            d_loss, r_loss = drmsd_loss(pred, gold, src_seq, device,
+                                        return_rmsd=True)  # When evaluating the epoch, only use DRMSD loss
             m_loss = mse_loss(pred, gold)
             total_drmsd_loss += d_loss.item()
             total_mse_loss += m_loss.item()
+            total_rmsd_loss += r_loss
             n_batches += 1
 
-    return total_drmsd_loss / n_batches, total_mse_loss / n_batches
+    return total_drmsd_loss / n_batches, total_mse_loss / n_batches, total_rmsd_loss / n_batches
 
 
-def train(model, training_data, validation_data, optimizer, device, opt, log_writer):
+def train(model, training_data, validation_data, test_data, optimizer, device, opt, log_writer):
     """ Start training. """
 
     valid_drmsd_losses = []
@@ -121,20 +124,23 @@ def train(model, training_data, validation_data, optimizer, device, opt, log_wri
 
         start = time.time()
         train_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
-        print('  - (Training)   drmsd: {d: 8.5f}, rmse: {m: 8.5f}, elapse: {elapse:3.3f} min, '
+        train_drmsd_loss, train_mse_loss, train_rmsd_loss = eval_epoch(model, training_data, device, opt)
+        print('  - (Training)   drmsd: {d: 8.5f}, rmse: {m: 8.5f}, rmsd: {rmsd: 8.5f}, elapse: {elapse:3.3f} min, '
               'lr: {lr: 8.5f} '.format(d=train_drmsd_loss, m=np.sqrt(train_mse_loss), elapse=(time.time() - start) / 60,
-                                       lr=optimizer.cur_lr))
+                                       lr=optimizer.cur_lr, rmsd=train_rmsd_loss))
 
         start = time.time()
-        valid_drmsd_loss, valid_mse_loss = eval_epoch(model, validation_data, device, opt)
-        print('  - (Validation) drmsd: {d: 8.5f}, rmse: {m: 8.5f}, ' \
+        valid_drmsd_loss, valid_mse_loss, valid_rmsd_loss = eval_epoch(model, validation_data, device, opt)
+        print('  - (Validation) drmsd: {d: 8.5f}, rmse: {m: 8.5f}, rmsd: {rmsd: 8.5f}, ' \
               'elapse: {elapse:3.3f} min'.format(d=valid_drmsd_loss, m=np.sqrt(valid_mse_loss),
-                                                 elapse=(time.time() - start) / 60))
+                                                 elapse=(time.time() - start) / 60, rmsd=valid_rmsd_loss))
 
         t = time.time()
-        log_batch(log_writer, train_drmsd_loss, train_mse_loss, optimizer.cur_lr, is_val=False, is_end_of_epoch=True,
+        log_batch(log_writer, train_drmsd_loss, train_mse_loss, train_rmsd_loss, optimizer.cur_lr, is_val=False,
+                  is_end_of_epoch=True,
                   t=t)
-        log_batch(log_writer, valid_drmsd_loss, valid_mse_loss, optimizer.cur_lr, is_val=True, is_end_of_epoch=True,
+        log_batch(log_writer, valid_drmsd_loss, valid_mse_loss, valid_rmsd_loss, optimizer.cur_lr, is_val=True,
+                  is_end_of_epoch=True,
                   t=t)
 
         valid_drmsd_losses.append(valid_drmsd_loss)
@@ -167,9 +173,9 @@ def save_model(opt, model, valid_loss, valid_losses, epoch_i):
         print('    - [Info] The checkpoint file has been updated.')
 
 
-def log_batch(log_writer, drmsd, mse, cur_lr, is_val=False, is_end_of_epoch=False, t=time.time()):
+def log_batch(log_writer, drmsd, mse, rmsd, cur_lr, is_val=False, is_end_of_epoch=False, t=time.time()):
     """ Logs training info to a predetermined log. """
-    log_writer.writerow([drmsd, mse, cur_lr, is_val, is_end_of_epoch, t])
+    log_writer.writerow([drmsd, mse, rmsd, cur_lr, is_val, is_end_of_epoch, t])
 
 
 def main():
@@ -201,7 +207,7 @@ def main():
     parser.add_argument('-dropout', type=float, default=0)
 
     # Saving args
-    parser.add_argument('-log', default=None, nargs="?")
+    parser.add_argument('-log', default=None, nargs=1)
     parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='best')
     parser.add_argument('-print_loss', action='store_true')
     parser.add_argument('-no_cuda', action='store_true')

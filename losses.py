@@ -1,4 +1,5 @@
 import numpy as np
+import prody as pr
 import torch
 import torch.nn.functional as F
 
@@ -60,7 +61,7 @@ def determine_pad_loc_test():
     assert determine_pad_loc(bt).item() == 33
 
 
-def drmsd_loss(pred, gold, input_seq, device):
+def drmsd_loss(pred, gold, input_seq, device, return_rmsd=False):
     """ Calculate DRMSD loss. """
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
@@ -69,6 +70,7 @@ def drmsd_loss(pred, gold, input_seq, device):
     pred, gold = copy_padding_from_gold(pred, gold, device)
 
     losses = []
+    rmsds = []
     # TODO: gracefully handle losses when batchsize is 1.
     if pred.shape[0] == 1:
         pred_item = pred[0]
@@ -78,6 +80,8 @@ def drmsd_loss(pred, gold, input_seq, device):
         pred_coords = generate_coords(pred_item, pred_item.shape[0], input_item, device)
         loss = drmsd(pred_coords, true_coords)
         losses.append(loss)
+        if return_rmsd:
+            rmsds.append(rmsd(pred_coords.data.numpy(), true_coords.data.numpy()))
     else:
         for pred_item, gold_item, input_item in zip(pred, gold, input_seq):
             pad_loc = determine_pad_loc(gold_item)
@@ -88,8 +92,12 @@ def drmsd_loss(pred, gold, input_seq, device):
             pred_coords = generate_coords(pred_item, pad_loc, input_item, device)
             loss = drmsd(pred_coords, true_coords)
             losses.append(loss)
-
-    return torch.mean(torch.stack(losses))
+            if return_rmsd:
+                rmsds.append(rmsd(pred_coords.data.numpy(), true_coords.data.numpy()))
+    if return_rmsd:
+        return torch.mean(torch.stack(losses)), np.mean(rmsds)
+    else:
+        return torch.mean(torch.stack(losses))
 
 
 def mse_loss(pred, gold):
@@ -135,6 +143,12 @@ def drmsd(a, b):
 
     return res
 
+
+def rmsd(a, b):
+    """ Returns the RMSD between two sets of coordinates."""
+    t = pr.calcTransformation(a, b)
+    return pr.calcRMSD(t.apply(a), b)
+    
 
 def drmsd_loss_rnn(y_pred_, y_true_, sorted_lengths, x):
     """ Given angle Tensors, return the drmsd loss. (Batch x L x NUM_PREDICTED_ANGLES x 2)"""
