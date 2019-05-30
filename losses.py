@@ -51,6 +51,7 @@ def determine_pad_loc(padded_tensor):
 
 def determine_pad_loc_test():
     """ Test for determin_pad_loc. """
+    # TODO use more official test suite
     a = np.random.rand(54, 12)
     b = np.random.rand(63, 12)
     a[11:] = np.zeros(shape=(a.shape[0] - 11, 12))
