@@ -78,7 +78,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
                                                                                                        np.sqrt(float(
                                                                                                            m_loss))))
 
-        log_batch(log_writer, d_loss.item(), m_loss.item(), None, c_loss, optimizer.cur_lr, is_val=False,
+        log_batch(log_writer, d_loss.item(), m_loss.item(), None, c_loss.item(), optimizer.cur_lr, is_val=False,
                   end_of_epoch=False, t=time.time())
 
         if np.isnan(loss.item()):
