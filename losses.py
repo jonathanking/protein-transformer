@@ -107,9 +107,7 @@ def mse_loss(pred, gold):
     pred, gold = pred.to(device), gold.to(device)
     pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
     pred, gold = copy_padding_from_gold(pred, gold, device)
-    pad_loc = determine_pad_loc(gold)
-    pred_unpadded, gold_unpadded = pred[:pad_loc], gold[:pad_loc]
-    mse = F.mse_loss(pred_unpadded, gold_unpadded)
+    mse = F.mse_loss(pred, gold)
 
     return mse
 
