@@ -1,7 +1,6 @@
 import numpy as np
 import prody as pr
 import torch
-import torch.nn.functional as F
 
 from transformer.Sidechains import NUM_PREDICTED_ANGLES
 from transformer.Structure import generate_coords
@@ -102,13 +101,12 @@ def drmsd_loss(pred, gold, input_seq, device, return_rmsd=False):
 
 
 def mse_loss(pred, gold):
-    """ Computes MSE loss."""
+    """ Computes MSE loss over non-zero elements only."""
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
     pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
     pred, gold = copy_padding_from_gold(pred, gold, device)
-    mse = F.mse_loss(pred, gold)
-
+    mse = ((pred - gold) ** 2).sum() / torch.nonzero(gold).size(0)
     return mse
 
 
