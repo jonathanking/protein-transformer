@@ -122,6 +122,8 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
 
     valid_drmsd_losses = []
     valid_combined_losses = []
+    train_combined_losses = []
+    train_drmsd_losses = []
     epoch_last_improved = -1
     best_valid_loss_so_far = np.inf
     for epoch_i in range(opt.epochs):
@@ -129,8 +131,10 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
 
         start = time.time()
         train_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
-        train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model, training_data, device,
-                                                                                        opt)
+        train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model, training_data,
+                                                                                        device, opt)
+        train_combined_losses.append(train_comb_loss)
+        train_drmsd_losses.append(train_drmsd_loss)
         print('  - (Training)   drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
               'elapse: {elapse:3.3f} min, lr: {lr: {lr_precision}} '.format(d=train_drmsd_loss,
                                                                             m=np.sqrt(train_mse_loss),
@@ -140,27 +144,34 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
                                                                             lr_precision="5.2e"
                                                                             if optimizer.cur_lr < .001 else "5.3f"))
 
-        start = time.time()
-        val_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss = eval_epoch(model, validation_data, device, opt)
-        print('  - (Validation) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
-              'elapse: {elapse:3.3f} min'.format(d=val_drmsd_loss, m=np.sqrt(val_mse_loss),
-                                                 elapse=(time.time() - start) / 60, rmsd=val_rmsd_loss,
-                                                 comb=val_comb_loss))
+        if not opt.train_only:
+            start = time.time()
+            val_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss = eval_epoch(model, validation_data, device, opt)
+            print('  - (Validation) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
+                  'elapse: {elapse:3.3f} min'.format(d=val_drmsd_loss, m=np.sqrt(val_mse_loss),
+                                                     elapse=(time.time() - start) / 60, rmsd=val_rmsd_loss,
+                                                     comb=val_comb_loss))
+            log_batch(log_writer, val_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss, optimizer.cur_lr,
+                      is_val=True, end_of_epoch=True, t=t)
+            valid_drmsd_losses.append(val_drmsd_loss)
+            valid_combined_losses.append(val_comb_loss)
 
         t = time.time()
         log_batch(log_writer, train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss, optimizer.cur_lr,
                   is_val=False, end_of_epoch=True, t=t)
-        log_batch(log_writer, val_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss, optimizer.cur_lr,
-                  is_val=True, end_of_epoch=True, t=t)
 
-        valid_drmsd_losses.append(val_drmsd_loss)
-        valid_combined_losses.append(val_comb_loss)
-        if opt.combined_loss:
+        if opt.combined_loss and not opt.train_only:
             loss_to_compare = val_comb_loss
             losses_to_compare = valid_combined_losses
-        else:
+        elif opt.combined_loss and opt.train_only:
+            loss_to_compare = train_comb_loss
+            losses_to_compare = train_combined_losses
+        elif not opt.combined_loss and not opt.train_only:
             loss_to_compare = val_drmsd_loss
             losses_to_compare = valid_drmsd_losses
+        elif not opt.combined_loss and opt.train_only:
+            loss_to_compare = train_drmsd_loss
+            losses_to_compare = train_drmsd_losses
 
         if opt.early_stopping and loss_to_compare < best_valid_loss_so_far:
             best_valid_loss_so_far = loss_to_compare
@@ -171,24 +182,28 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
             break
         save_model(opt, optimizer, model, loss_to_compare, losses_to_compare, epoch_i)
 
-    # Evaluate model on test set
-    t = time.time()
-    test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss = eval_epoch(model, test_data, device, opt)
-    print('  - (Test) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
-          'elapse: {elapse:3.3f} min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
-                                             elapse=(time.time() - t) / 60, comb=test_comb_loss, rmsd=test_rmsd_loss))
-    log_batch(log_writer, test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss, optimizer.cur_lr, is_val=True,
-              end_of_epoch=True, t=t)
+    if not opt.train_only:
+        # Evaluate model on test set
+        t = time.time()
+        test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss = eval_epoch(model, test_data, device, opt)
+        print('  - (Test) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
+              'elapse: {elapse:3.3f} min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
+                                                 elapse=(time.time() - t) / 60, comb=test_comb_loss,
+                                                 rmsd=test_rmsd_loss))
+        log_batch(log_writer, test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss, optimizer.cur_lr,
+                  is_val=True,
+                  end_of_epoch=True, t=t)
 
 
 def save_model(opt, optimizer, model, valid_loss, valid_losses, epoch_i):
     """ Records model state according to a checkpointing policy. Defaults to best validation set performance. """
     model_state_dict = model.state_dict()
     checkpoint = {
-        'model': model_state_dict,
+        'model_state_dict': model_state_dict,
         'settings': opt,
         'epoch': epoch_i,
-        'optimizer': optimizer}
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': valid_loss}
 
     if opt.save_mode == 'all':
         chkpt_file_name = opt.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, valid_loss)
@@ -231,6 +246,8 @@ def main():
     parser.add_argument('-cg', '--clip', type=float, default=None)
     parser.add_argument('-cl', '--combined_loss', action='store_true',
                         help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
+    parser.add_argument('--train_only', action='store_true',
+                        help="Train, validation, and testing sets are the same. Only report train accuracy.")
 
     # Model parameters
     parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
