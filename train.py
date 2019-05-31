@@ -152,13 +152,12 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
                                                      elapse=(time.time() - start) / 60, rmsd=val_rmsd_loss,
                                                      comb=val_comb_loss))
             log_batch(log_writer, val_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss, optimizer.cur_lr,
-                      is_val=True, end_of_epoch=True, t=t)
+                      is_val=True, end_of_epoch=True)
             valid_drmsd_losses.append(val_drmsd_loss)
             valid_combined_losses.append(val_comb_loss)
 
-        t = time.time()
         log_batch(log_writer, train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss, optimizer.cur_lr,
-                  is_val=False, end_of_epoch=True, t=t)
+                  is_val=False, end_of_epoch=True)
 
         if opt.combined_loss and not opt.train_only:
             loss_to_compare = val_comb_loss
@@ -192,7 +191,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
                                                  rmsd=test_rmsd_loss))
         log_batch(log_writer, test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss, optimizer.cur_lr,
                   is_val=True,
-                  end_of_epoch=True, t=t)
+                  end_of_epoch=True)
 
 
 def save_model(opt, optimizer, model, valid_loss, valid_losses, epoch_i):
@@ -216,15 +215,15 @@ def save_model(opt, optimizer, model, valid_loss, valid_losses, epoch_i):
 
 def log_batch(log_writer, drmsd, mse, rmsd, combined, cur_lr, is_val=False, end_of_epoch=False, t=time.time()):
     """ Logs training info to a predetermined log. """
-    log_writer.writerow([drmsd, mse, rmsd, combined, cur_lr, is_val, end_of_epoch, t])
+    log_writer.writerow([drmsd, np.sqrt(mse), rmsd, combined, cur_lr, is_val, end_of_epoch, t])
 
 
 def prepare_log_header(opt):
     """ Returns the column ordering for the logfile. """
     if opt.combined_loss:
-        return 'drmsd,mse,rmsd,combined,lr,is_val,is_end_of_epoch,time\n'
+        return 'drmsd,rmse,rmsd,combined,lr,is_val,is_end_of_epoch,time\n'
     else:
-        return 'drmsd,mse,rmsd,lr,is_val,is_end_of_epoch,time\n'
+        return 'drmsd,rmse,rmsd,lr,is_val,is_end_of_epoch,time\n'
 
 
 def main():
