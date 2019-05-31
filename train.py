@@ -48,7 +48,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         else:
             loss = d_loss
         loss.backward()
-        training_losses.append(float(d_loss))
+        training_losses.append(float(loss))
 
         # Clip gradients
         if opt.clip:
