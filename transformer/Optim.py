@@ -13,7 +13,7 @@ class ScheduledOptim():
         self.cur_lr = self.init_lr
         self.simple = simple
 
-    def step_and_update_lr(self):
+    def step(self):
         "Step with the inner optimizer"
         self._optimizer.step()
         if self.simple:

@@ -42,7 +42,6 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         d_loss = drmsd_loss(pred, gold, src_seq, device)
         m_loss = mse_loss(pred, gold)
         c_loss = combine_drmsd_mse(d_loss, m_loss, w=0.5)
-
         if opt.combined_loss:
             loss = c_loss
         else:
@@ -54,31 +53,34 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         if opt.clip:
             torch.nn.utils.clip_grad_norm_(model.parameters(), opt.clip)
 
-        if opt.print_loss and len(training_losses) > 32:
-            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
-                float(loss), np.mean(training_losses[-32:]), optimizer.cur_lr))
-        elif opt.print_loss and len(training_losses) <= 32:
-            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
-                float(loss), np.mean(training_losses), optimizer.cur_lr))
-
         # update parameters
-        optimizer.step_and_update_lr()
+        optimizer.step()
+        if opt.lr_scheduling:
+            cur_lr = optimizer.cur_lr
+        else:
+            cur_lr = 0
 
         # note keeping
         total_drmsd_loss += d_loss.item()
         total_mse_loss += m_loss.item()
         n_batches += 1
-
         if not opt.print_loss and len(training_losses) > 32:
-            pbar.set_description('  - (Training) drmsd = {0:.6f}, rmse = {3:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
-                float(d_loss), np.mean(training_losses[-32:]), optimizer.cur_lr, np.sqrt(float(m_loss))))
+            pbar.set_description('  - (Training) drmsd = {0:.6f}, rmse = {3:.6f}, 32avg = {1:.6f}, comb = {4:.6f}, LR = {2:.7f}'.format(
+                float(d_loss), np.mean(training_losses[-32:]), cur_lr, np.sqrt(float(m_loss)), float(c_loss)))
         elif not opt.print_loss:
-            pbar.set_description('  - (Training) drmsd = {0:.6f}, rmse = {2:.6f}, LR = {1:.7f}'.format(float(d_loss),
-                                                                                                       optimizer.cur_lr,
+            pbar.set_description('  - (Training) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}, LR = {1:.7f}'.format(float(d_loss),
+                                                                                                       cur_lr,
                                                                                                        np.sqrt(float(
-                                                                                                           m_loss))))
+                                                                                                           m_loss)), float(c_loss)))
+        if opt.print_loss and len(training_losses) > 32:
+            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
+                float(loss), np.mean(training_losses[-32:]), cur_lr))
+        elif opt.print_loss and len(training_losses) <= 32:
+            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
+                float(loss), np.mean(training_losses), cur_lr))
 
-        log_batch(log_writer, d_loss.item(), m_loss.item(), None, c_loss.item(), optimizer.cur_lr, is_val=False,
+
+        log_batch(log_writer, d_loss.item(), m_loss.item(), None, c_loss.item(), cur_lr, is_val=False,
                   end_of_epoch=False, t=time.time())
 
         if np.isnan(loss.item()):
@@ -135,14 +137,18 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
                                                                                         device, opt)
         train_combined_losses.append(train_comb_loss)
         train_drmsd_losses.append(train_drmsd_loss)
+        if opt.lr_scheduling:
+            cur_lr = optimizer.cur_lr
+        else:
+            cur_lr = 0
         print('  - (Training)   drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
               'elapse: {elapse:3.3f} min, lr: {lr: {lr_precision}} '.format(d=train_drmsd_loss,
                                                                             m=np.sqrt(train_mse_loss),
                                                                             elapse=(time.time() - start) / 60,
-                                                                            lr=optimizer.cur_lr, rmsd=train_rmsd_loss,
+                                                                            lr=cur_lr, rmsd=train_rmsd_loss,
                                                                             comb=train_comb_loss,
                                                                             lr_precision="5.2e"
-                                                                            if optimizer.cur_lr < .001 else "5.3f"))
+                                                                            if (cur_lr < .001 and cur_lr != 0) else "5.3f"))
 
         if not opt.train_only:
             start = time.time()
@@ -156,7 +162,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
             valid_drmsd_losses.append(val_drmsd_loss)
             valid_combined_losses.append(val_comb_loss)
 
-        log_batch(log_writer, train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss, optimizer.cur_lr,
+        log_batch(log_writer, train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss, cur_lr,
                   is_val=False, end_of_epoch=True)
 
         if opt.combined_loss and not opt.train_only:
@@ -189,7 +195,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
               'elapse: {elapse:3.3f} min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
                                                  elapse=(time.time() - t) / 60, comb=test_comb_loss,
                                                  rmsd=test_rmsd_loss))
-        log_batch(log_writer, test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss, optimizer.cur_lr,
+        log_batch(log_writer, test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss, cur_lr,
                   is_val=True,
                   end_of_epoch=True)
 
@@ -247,6 +253,7 @@ def main():
                         help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
     parser.add_argument('--train_only', action='store_true',
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
+    parser.add_argument('--lr_scheduling', action='store_true', help='Use learning rate scheduling as described in original paper.')
 
     # Model parameters
     parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
@@ -301,11 +308,10 @@ def main():
         n_layers=opt.n_layers,
         n_head=opt.n_head,
         dropout=opt.dropout).to(device)
-    optimizer = ScheduledOptim(
-        optim.Adam(
-            filter(lambda x: x.requires_grad, transformer.parameters()),
-            betas=(0.9, 0.98), eps=1e-09),
-        opt.d_model, opt.n_warmup_steps, simple=False)
+    optimizer = optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
+                           betas=(0.9, 0.98), eps=1e-09)
+    if opt.lr_scheduling:
+        optimizer = ScheduledOptim(optimizer, opt.d_model, opt.n_warmup_steps, simple=False)
 
     train(transformer, training_data, validation_data, test_data, optimizer, device, opt, log_writer)
     log_f.close()
