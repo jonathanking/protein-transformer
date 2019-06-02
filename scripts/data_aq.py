@@ -278,7 +278,7 @@ def work(pdb_id):
 
     except Exception as e:
         # print("Whoops, returning where I am.", e)
-        raise e
+        return None
     if len(pdb_dihedrals) == 0:
         return None
     else:
