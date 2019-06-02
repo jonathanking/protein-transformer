@@ -24,9 +24,13 @@ from transformer.Sidechains import SC_DATA
 def load_model(args):
     """ Given user-supplied arguments such as a model checkpoint, loads and returns the specified transformer model.
         If the data to predict is not specified, the original file used during training will be re-used. """
+    # TODO remove try/except clause for loading model
     chkpt = torch.load(args.model_chkpt, map_location=device)
     model_args = chkpt['settings']
-    model_state = chkpt['model']
+    try:
+        model_state = chkpt['model']
+    except KeyError:
+        model_state = chkpt['model_state_dict']
     if args.data is None:
         args.data = model_args.data
 
@@ -76,7 +80,7 @@ def get_data_loader(data_dict, dataset, n):
     return data_loader, ids
 
 
-def make_predictions(the_model, data_loader, pdb_ids, build_true=False):
+def make_predictions(args, the_model, data_loader, pdb_ids, build_true=False):
     """ Given a loaded transformer model, and a dataloader of items to predict, this model returns a list of tuples.
         Each tuple is contains (backbone coord. matrix, sidechain coord. matrix, loss, nloss) for a single item."""
     coords_list = []
@@ -95,6 +99,8 @@ def make_predictions(the_model, data_loader, pdb_ids, build_true=False):
                 pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
             loss = drmsd_loss(pred, gold, src_seq, torch.device('cpu'))
             losses.append(loss)
+
+            np.save(os.path.join(args.outdir, pdb_id + '_l{0:.2f}.npy'.format(loss)),pred.numpy()[0] )   
 
             pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
             pred, gold = copy_padding_from_gold(pred, gold, torch.device('cpu'))
@@ -296,9 +302,9 @@ if __name__ == "__main__":
     data_loader, ids = get_data_loader(torch.load(args.data), args.dataset, n=args.n)
 
     # Make predictions as coordinates
-    coords_list = make_predictions(the_model, data_loader, ids)
+    coords_list = make_predictions(args, the_model, data_loader, ids)
     if args.include_truth:
-        coords_list += make_predictions(the_model, data_loader, ids, build_true=True)
+        coords_list += make_predictions(args, the_model, data_loader, ids, build_true=True)
         ids += [i + "_TRUE_" for i in ids]
     id_coords_dict = {k: v for k, v in zip(ids, coords_list)}
 
