@@ -20,8 +20,8 @@ LOGFILEHEADER = ''
 
 def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     """ Epoch operation in training phase"""
-
-    model.train()
+    # TODO evaluate model on train/val once before any training 
+     model.train()
 
     total_drmsd_loss = 0
     total_mse_loss = 0
