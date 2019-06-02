@@ -239,8 +239,7 @@ def set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id,
 def make_pdbs(id_coords_dict, outdir):
     """ Given a dictionary that maps PDB_ID -> pred_coordinate_tuple, this function parses the true PDB file and
         assigns coordinates to its atoms so that a PDB file can be generated."""
-    os.makedirs(outdir, exist_ok=True)
-
+    
     # Load reference sidechain structures
     ref_sidechains = {}
     for res in SC_DATA.keys():
@@ -249,6 +248,7 @@ def make_pdbs(id_coords_dict, outdir):
         except OSError:
             continue
     peptide_bond = parsePDB("data/amino_acid_substructures/peptide_bond.pdb")
+    coords_complete = {}
 
     # Build PDBs
     for pdb_chain, data in id_coords_dict.items():
@@ -266,8 +266,15 @@ def make_pdbs(id_coords_dict, outdir):
 
         prot = set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains, angles)
         all_sidechains = prot.select('protein and chain ' + chain_id + ' and sidechain')
+        all_atoms = all_sidechains + backbone
+        for k in coords_complete.keys():
+           if pdb_chain[:6] in k and "TRUE" in pdb_chain:
+               t = calcTransformation(all_atoms, coords_complete[k])
+               all_atoms = t.apply(all_atoms)
+               break
+        coords_complete[pdb_chain] = all_atoms
 
-        writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), all_sidechains + backbone)
+        writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), all_atoms)
 
 
 if __name__ == "__main__":
@@ -291,6 +298,8 @@ if __name__ == "__main__":
     parser.add_argument("--include_truth", action="store_true", help="Include the true structure in the PDB file.")
     args = parser.parse_args()
     pathPDBFolder(args.pdb_dir)
+    os.makedirs(args.outdir, exist_ok=True)
+
     if args.reconstruct:
         print("Attempting to reconstruct real structures.")
 
