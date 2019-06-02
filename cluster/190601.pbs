@@ -22,7 +22,7 @@ source activate pytorch_conda
 ############################
 cmd_file=$(basename -- "$0")
 cmd_file="${cmd_file%%.*}.txt"
-cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch_conda/bin/$(sed -n "${PBS_ARRAYID}p" cluster/${cmd_file})"
+cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch_conda/bin/$(sed -n "${PBS_ARRAYID}p" cluster/190601.txt)"
 echo $cmd
 eval $cmd
 
