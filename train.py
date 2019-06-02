@@ -20,8 +20,7 @@ LOGFILEHEADER = ''
 
 def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     """ Epoch operation in training phase"""
-    # TODO evaluate model on train/val once before any training 
-     model.train()
+    model.train()
 
     total_drmsd_loss = 0
     total_mse_loss = 0
@@ -132,7 +131,8 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
         print('[ Epoch', epoch_i, ']')
 
         start = time.time()
-        train_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
+        if epoch_i != 0:
+            train_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
         train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model, training_data,
                                                                                         device, opt)
         train_combined_losses.append(train_comb_loss)
@@ -157,7 +157,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
                   'elapse: {elapse:3.3f} min'.format(d=val_drmsd_loss, m=np.sqrt(val_mse_loss),
                                                      elapse=(time.time() - start) / 60, rmsd=val_rmsd_loss,
                                                      comb=val_comb_loss))
-            log_batch(log_writer, val_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss, optimizer.cur_lr,
+            log_batch(log_writer, val_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss, cur_lr,
                       is_val=True, end_of_epoch=True)
             valid_drmsd_losses.append(val_drmsd_loss)
             valid_combined_losses.append(val_comb_loss)
