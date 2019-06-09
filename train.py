@@ -309,7 +309,7 @@ def main():
         n_head=opt.n_head,
         dropout=opt.dropout).to(device)
     optimizer = optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
-                           betas=(0.9, 0.98), eps=1e-09)
+                           betas=(0.9, 0.98), eps=1e-09, lr=opt.learning_rate)
     if opt.lr_scheduling:
         optimizer = ScheduledOptim(optimizer, opt.d_model, opt.n_warmup_steps, simple=False)
 
