@@ -8,6 +8,7 @@ preds/*
 *.tch
 *.npy
 console.txt
+*.o*-*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
