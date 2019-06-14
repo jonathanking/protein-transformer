@@ -11,13 +11,13 @@ import torch
 from tqdm import tqdm
 from prody import *
 import numpy as np
+from os.path import basename, splitext
 
 import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
 from transformer.Structure import generate_coords_with_tuples
-from train import drmsd_loss
-from losses import inverse_trig_transform, copy_padding_from_gold
+from losses import inverse_trig_transform, copy_padding_from_gold, drmsd_loss, mse_loss, combine_drmsd_mse
 from transformer.Sidechains import SC_DATA
 
 
@@ -84,7 +84,12 @@ def make_predictions(args, the_model, data_loader, pdb_ids, build_true=False):
     """ Given a loaded transformer model, and a dataloader of items to predict, this model returns a list of tuples.
         Each tuple is contains (backbone coord. matrix, sidechain coord. matrix, loss, nloss) for a single item."""
     coords_list = []
-    losses = []
+    losses = {"drmsd": [],
+              "mse": [],
+              "rmsd": [],
+              "combined": [],
+              "rmsd-backbone": [],
+              "rmsd-allatom": []}
 
     with torch.no_grad():
         for pdb_id, batch in zip(pdb_ids, tqdm(data_loader, mininterval=2, desc=' - (Evaluation ', leave=False)):
@@ -97,18 +102,27 @@ def make_predictions(args, the_model, data_loader, pdb_ids, build_true=False):
                 pred = tgt_seq
             else:
                 pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
-            loss = drmsd_loss(pred, gold, src_seq, torch.device('cpu'))
-            losses.append(loss)
+            # TODO return backbone vs sidechain losses
+            d_loss, r_loss = drmsd_loss(pred, gold, src_seq, torch.device('cpu'),
+                                        return_rmsd=True)  # When evaluating the epoch, only use DRMSD loss
+            m_loss = mse_loss(pred, gold)
+            c_loss = combine_drmsd_mse(d_loss, m_loss)
+            losses["drmsd"].append(d_loss.item())
+            losses["mse"].append(m_loss.item())
+            losses["rmsd"].append(r_loss)
+            losses["combined"].append(c_loss.item())
 
-            np.save(os.path.join(args.outdir, pdb_id + '_l{0:.2f}.npy'.format(loss)),pred.numpy()[0] )   
+            np.save(os.path.join(args.outdir, pdb_id + '_l{0:.2f}.npy'.format(r_loss)), pred.numpy()[0])
 
             pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
             pred, gold = copy_padding_from_gold(pred, gold, torch.device('cpu'))
 
             all, bb, bb_tups, sc, aa_codes, atom_names = generate_coords_with_tuples(pred[0], pred.shape[1], src_seq[0],
                                                                                      torch.device('cpu'))
-            coords_list.append((np.asarray(bb), bb_tups, sc, float(loss), aa_codes, atom_names, pred[0]))
-    print("Avg Loss = {0:.2f}".format(np.mean(losses)))
+            coords_list.append((np.asarray(bb), bb_tups, sc, float(r_loss), aa_codes, atom_names, pred[0]))
+    print("Avg Loss = {0:.2f}".format(np.mean(losses["drmsd"])))
+    if not build_true:
+        torch.save(losses, f"{splitext(basename(args.model_chkpt))[0]}_trans-evalution.tch")
     return coords_list
 
 
@@ -263,8 +277,10 @@ def make_pdbs(id_coords_dict, outdir):
         if args.backbone_only:
             writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), backbone)
             continue
-
-        prot = set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains, angles)
+        try:
+            prot = set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains, angles)
+        except AttributeError:
+            continue
         all_sidechains = prot.select('protein and chain ' + chain_id + ' and sidechain')
         all_atoms = all_sidechains + backbone
         for k in coords_complete.keys():
