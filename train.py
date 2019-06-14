@@ -27,7 +27,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     n_batches = 0.0
     loss = ""
     training_losses = []
-    if not opt.print_loss:
+    if not opt.cluster:
         pbar = tqdm(training_data, mininterval=2, desc='  - (Training) Loss = {0}   '.format(loss), leave=False)
     else:
         pbar = training_data
@@ -63,21 +63,20 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         total_drmsd_loss += d_loss.item()
         total_mse_loss += m_loss.item()
         n_batches += 1
-        if not opt.print_loss and len(training_losses) > 32:
+        if not opt.cluster and len(training_losses) > 32:
             pbar.set_description('  - (Training) drmsd = {0:.6f}, rmse = {3:.6f}, 32avg = {1:.6f}, comb = {4:.6f}, LR = {2:.7f}'.format(
                 float(d_loss), np.mean(training_losses[-32:]), cur_lr, np.sqrt(float(m_loss)), float(c_loss)))
-        elif not opt.print_loss:
+        elif not opt.cluster:
             pbar.set_description('  - (Training) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}, LR = {1:.7f}'.format(float(d_loss),
                                                                                                        cur_lr,
                                                                                                        np.sqrt(float(
                                                                                                            m_loss)), float(c_loss)))
-        if opt.print_loss and len(training_losses) > 32:
+        if opt.cluster and len(training_losses) > 32:
             print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
                 float(loss), np.mean(training_losses[-32:]), cur_lr))
-        elif opt.print_loss and len(training_losses) <= 32:
+        elif opt.cluster and len(training_losses) <= 32:
             print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
                 float(loss), np.mean(training_losses), cur_lr))
-
 
         log_batch(log_writer, d_loss.item(), m_loss.item(), None, c_loss.item(), cur_lr, is_val=False,
                   end_of_epoch=False, t=time.time())
@@ -253,7 +252,8 @@ def main():
                         help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
     parser.add_argument('--train_only', action='store_true',
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
-    parser.add_argument('--lr_scheduling', action='store_true', help='Use learning rate scheduling as described in original paper.')
+    parser.add_argument('--lr_scheduling', action='store_true', help='Use learning rate scheduling as described in" + '
+                                                                     '"original paper.')
 
     # Model parameters
     parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
@@ -268,12 +268,14 @@ def main():
     # Saving args
     parser.add_argument('--log', default=None, nargs=1)
     parser.add_argument('--save_mode', type=str, choices=['all', 'best'], default='best')
-    parser.add_argument('--print_loss', action='store_true')
     parser.add_argument('--no_cuda', action='store_true')
+    parser.add_argument('--cluster', action='store_true', help="Set of parameters to facilitate training on a remote" +
+                                                               " cluster. Limited I/O, etc.")
 
     opt = parser.parse_args()
     opt.cuda = not opt.no_cuda
     opt.d_word_vec = opt.d_model
+    opt.buffering_mode = None if opt.cluster else 1
     LOGFILEHEADER = prepare_log_header(opt)
 
     # ========= Loading Dataset ========= #
@@ -283,6 +285,7 @@ def main():
     training_data, validation_data, test_data = prepare_dataloaders(data, opt)
 
     # ========= Preparing Log and Checkpoint Files ========= #
+    
     if not opt.log:
         opt.log_file = "./logs/" + opt.name + '.train'
     else:
@@ -290,7 +293,7 @@ def main():
     print(opt, "\n")
     print('[Info] Training performance will be written to file: {}'.format(opt.log_file))
     os.makedirs(os.path.dirname(opt.log_file), exist_ok=True)
-    log_f = open(opt.log_file, 'w', buffering=1)
+    log_f = open(opt.log_file, 'w', buffering=opt.buffering_mode)
     log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
     opt.chkpt_path = "./checkpoints/" + opt.name
