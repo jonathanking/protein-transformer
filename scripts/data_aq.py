@@ -26,12 +26,10 @@ def angle_list_to_sin_cos(angs, reshape=True):
         dim. is squashed so that the list of angles becomes
         [cos sin cos sin ...]. """
     new_list = []
-    new_pad_char = np.array([1, 0])
     for a in angs:
         new_mat = np.zeros((a.shape[0], a.shape[1], 2))
         new_mat[:, :, 0] = np.cos(a)
         new_mat[:, :, 1] = np.sin(a)
-        #         new_mat = (new_mat != new_pad_char) * new_mat
         if reshape:
             new_list.append(new_mat.reshape(-1, NUM_PREDICTED_ANGLES * 2))
         else:
