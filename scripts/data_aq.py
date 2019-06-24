@@ -442,7 +442,7 @@ if __name__ == "__main__":
                         help="Save data as a pickled dictionary instead of a torch-dictionary.")
     parser.add_argument("--overfit", action="store_true",
                         help="Use all samples of the dataset for train, test and validation. ")
-    parser.add_argument("--only_pdbs", nargs="+", help="Only predict these PDB IDs.")
+    parser.add_argument("--only_pdbs", nargs="+", help="Only download these PDB IDs.")
     parser.add_argument("-ml", "--max_len", default=10000, type=int, help="Only predict these PDB IDs.")
     args = parser.parse_args()
 
