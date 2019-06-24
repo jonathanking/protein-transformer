@@ -344,7 +344,7 @@ def save_data(X_train, X_val, X_test, y_train, y_val, y_test):
                      "ang": angle_list_to_sin_cos(y_test),
                      "ids": X_test_ids},
             "settings": {"max_len": max(map(len, X_train + X_val + X_test))},
-            "description": {"ProteinNet"}, # TODO add more informative description
+            "description": {"ProteinNet"},  # TODO add more informative description
             "query": "ProteinNet",
             "date": {date}}
     # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
