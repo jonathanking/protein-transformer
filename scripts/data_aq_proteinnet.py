@@ -166,7 +166,8 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
         elif prev_residue is not None:
             atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in atom_names]
 
-        if len(atoms) != len(atom_names) + 1 or None in atoms:
+        if (prev_residue is not None and len(atoms) != len(atom_names) + 1) \
+            or (prev_residue is None and len(atoms) != len(atom_names)) or None in atoms:
             raise IncompleteStructureError(f'Missing atoms in residue {residue}.')
         for n in range(len(atoms) - 3):
             dihe_atoms = atoms[n:n + 4]
@@ -186,7 +187,10 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
     elif resname == "THR":
         first_three = ["N", "CA", "CB"]
         next_atom = "OG1"
-    res_dihedrals.append(compute_single_dihedral([residue.select("name " + an) for an in first_three + [next_atom]]))
+    atom_selections = [residue.select("name " + an) for an in first_three + [next_atom]]
+    if len(atom_selections) != 4 or None in atom_selections:
+        raise IncompleteStructureError('Missing sidechain atoms.')
+    res_dihedrals.append(compute_single_dihedral(atom_selections))
     assert len(res_dihedrals) + len(backbone + bondangles) == 10 and resname in ["ILE", "LEU"] or len(res_dihedrals) + \
            len(backbone + bondangles) == 9 and resname in ["VAL", "THR"], \
         "Angle position in array must match what is assumed in Sidechains:extend_any_sidechain."
@@ -212,6 +216,8 @@ def get_angles_from_chain(chain):
     prev_res = None
     for res_id, res in enumerate(all_residues):
         check_standard_continuous(res, prev)
+        if len(res.backbone) < 3:
+            raise IncompleteStructureError(f"Incomplete backbone for residue {res}.")
         prev = res.getResnum() + 1
 
         res_backbone = measure_phi_psi_omega(res)
@@ -229,8 +235,6 @@ def get_angles_from_chain(chain):
             next_res = None
         calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, prev_res, res_backbone, res_bond_angles,
                                                          next_res)
-        # if calculated_dihedrals is None:
-        #     return None
         dihedrals.append(calculated_dihedrals)
         prev_res = res
 
@@ -244,29 +248,32 @@ def work(pdbid_chain):
     For a single PDB ID with chain, i.e. ('1A9U_A'), fetches that PDB chain from the PDB and computes its angles.
     """
     pdbid, chid = pdbid_chain.split("_")
-    pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
+    try:
+        pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
+    except AttributeError:
+        print("Error parsing", pdbid_chain)
+        ERROR_FILE.write(f"{pdbid_chain}\n")
+        return None
     assert pdb_hv.numChains() == 1, "Only a single chain should be parsed from the PDB."
-
     chain = pdb_hv[chid]
     assert chain.getChid() == chid, "The chain ID was not as expected."
     try:
         dihedrals_sequence = get_angles_from_chain(chain)
     except (IncompleteStructureError, NonStandardAminoAcidError):
         return None
-    if dihedrals_sequence is not None:
-        dihedrals, sequence = dihedrals_sequence
-    else:
-        return None
+
+    dihedrals, sequence = dihedrals_sequence
 
     return dihedrals, sequence, pdbid_chain
 
 
 def additional_checks(matrix):
+    """ Returns true if a matrix contains NaNs, infs, or all 0s."""
     zeros = not np.any(matrix)
     if not np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and not zeros:
         return True
     else:
-        if args.debug: print("additional checks not passed")
+        return False
 
 
 def unpack_processed_results(results):
@@ -309,7 +316,7 @@ def save_data(X_train, X_val, X_test, y_train, y_val, y_test):
     X_test = [x[0] for x in X_test]
     X_val = [x[0] for x in X_val]
 
-    train_proteinnet_dict = torch.load(os.path.join(args.input_dir, "training_30.pt"))
+    train_proteinnet_dict = torch.load(os.path.join(args.input_dir, TRAIN_FILE))
     valid_proteinnet_dict = torch.load(os.path.join(args.input_dir, "validation.pt"))
     test_proteinnet_dict = torch.load(os.path.join(args.input_dir, "testing.pt"))
 
@@ -339,7 +346,6 @@ def save_data(X_train, X_val, X_test, y_train, y_val, y_test):
             "date": {date}}
     # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
 
-    # dump data
     if args.pickle:
         with open(args.out_file, "wb") as f:
             pickle.dump(data, f)
@@ -355,12 +361,8 @@ def split_data(all_ohs, all_angs, all_ids):
     If the script is run in ProteinNet mode, the script will follow ProteinNet's guidelines for splits.
     """
     ohs_ids = list(zip(all_ohs, all_ids))
-    if args.overfit:
-        X_train, X_test, y_train, y_test = ohs_ids, ohs_ids, all_angs, all_angs
-        X_val, y_val = ohs_ids, all_angs
-    else:
-        X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
-        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
     print("Train, test, validation set sizes:\n" + str(list(map(len, [X_train, X_test, X_val]))))
     return X_train, X_val, X_test, y_train, y_val, y_test
 
@@ -397,12 +399,13 @@ def fetch_pdb_ids(filename):
 
 def main():
     # Load query and fetch PDB IDs
-    train_pdb_ids = fetch_pdb_ids("training_30.pt")
+    train_pdb_ids = fetch_pdb_ids(TRAIN_FILE)
     # validation_pdb_ids = fetch_pdb_ids("validation.pt")
 
     # Download and preprocess all data from PDB IDs
     with Pool(multiprocessing.cpu_count()) as p:
         results = list(tqdm.tqdm(p.imap(work, train_pdb_ids), total=len(train_pdb_ids)))
+    ERROR_FILE.close()
 
     # Unpack results, throwing out malformed data
     all_ohs, all_angs, all_ids = unpack_processed_results(results)
@@ -421,7 +424,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--pickle", action="store_true",
                         help="Save data as a pickled dictionary instead of a torch-dictionary.")
     args = parser.parse_args()
-
+    TRAIN_FILE = "training_100.pt"
     AA_MAP = {'A': 0,  'C': 1,  'D': 2,  'E': 3,
               'F': 4,  'G': 5,  'H': 6,  'I': 7,
               'K': 8,  'L': 9,  'M': 10, 'N': 11,
@@ -436,5 +439,6 @@ if __name__ == "__main__":
         args.out_file = "../data/proteinnet/" + suffix + ".pkl"
     elif not args.out_file and not args.pickle:
         args.out_file = "../data/proteinnet/" + suffix + ".pt"
+    ERROR_FILE = open("error.log", "w")
     main()
 
