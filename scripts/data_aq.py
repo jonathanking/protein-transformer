@@ -12,7 +12,7 @@ import torch
 import tqdm
 from sklearn.model_selection import train_test_split
 
-sys.path.extend("../transformer/")
+sys.path.extend("../protein/")
 from protein.Sidechains import SC_DATA, NUM_PREDICTED_ANGLES
 pr.confProDy(verbosity='error')
 
@@ -293,125 +293,86 @@ def additional_checks(matrix):
 
 
 def load_query(fname):
+    """
+    Loads a PDB database API query from a text file.
+    """
     # obtain query from file
     with open(fname, "r") as qf:
         desc = qf.readline()
         query = qf.read()
+    print("Description:", desc)
     return query, desc
 
 
 def download_pdbs_from_query(query):
+    """
+    Given a text-based query for the PDB database, performs an API HTTP request to obtain a list of PDB IDs that match
+    the query.
+    """
     url = 'http://www.rcsb.org/pdb/rest/search'
     header = {'Content-Type': 'application/x-www-form-urlencoded'}
     response = requests.post(url, data=query, headers=header)
     if response.status_code != 200:
         if args.debug: print("Failed to retrieve results.")
 
-    PDB_IDS = response.text.split("\n")
-    PDB_IDS = list(filter(lambda x: x != "", PDB_IDS))
-    print("Retrieved {0} PDB IDs.".format(len(PDB_IDS)))
-    return PDB_IDS
+    pdb_ids = response.text.split("\n")
+    pdb_ids = list(filter(lambda x: x != "", pdb_ids))
+    print("Retrieved {0} PDB IDs.".format(len(pdb_ids)))
+    return pdb_ids
 
 
-if __name__ == "__main__":
-    global args, desc
-    parser = argparse.ArgumentParser(description="Searches through a query of PDBs and parses/downloads chains")
-    parser.add_argument('query_file', type=str, help='Path to query file')
-    parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.tch file)')
-    parser.add_argument('-sc', '--single_chain_only', action="store_true", help='Only keep PDBs with a single chain.')
-    parser.add_argument('-d', '--debug', action="store_true", help='Print debug print statements.')
-    parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str, help="Path for ProDy-downloaded PDB files.")
-    parser.add_argument("-p", "--pickle", action="store_true",
-                        help="Save data as a pickled dictionary instead of a torch-dictionary.")
-    parser.add_argument("--overfit", action="store_true",
-                        help="Use all samples of the dataset for train, test and validation. ")
-    parser.add_argument("--only_pdbs", nargs="+", help="Only predict these PDB IDs.")
-    args = parser.parse_args()
-
-    # Set up
-    AA_MAP = {'A': 15, 'C': 0, 'D': 1, 'E': 17, 'F': 8, 'G': 10, 'H': 11, 'I': 5, 'K': 4, 'L': 12, 'M': 19, 'N': 9,
-              'P': 6, 'Q': 3, 'R': 13, 'S': 2, 'T': 7, 'V': 16, 'W': 14, 'Y': 18}
-    pr.pathPDBFolder(args.pdb_dir)
-    np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
-    np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
-    today = datetime.datetime.today()
-    suffix = today.strftime("%y%m%d")
-    if not args.out_file and args.pickle:
-        args.out_file = "../data/data_" + suffix + ".pkl"
-    elif not args.out_file and not args.pickle:
-        args.out_file = "../data/data_" + suffix + ".tch"
-
-    # Load query
-    query, query_description = load_query(args.query_file)
-    print("Description:", query_description)
-
-    # Download PDB_IDS associated with query
-    PDB_IDS = download_pdbs_from_query(query)
-    if args.only_pdbs:
-        PDB_IDS = args.only_pdbs
-
-    # 3a. Iterate through all chains in PDB_IDs, saving all results to disk
-    # Remove empty string PDB ids
-    with Pool(multiprocessing.cpu_count()) as p:
-        results = list(tqdm.tqdm(p.imap(work, PDB_IDS), total=len(PDB_IDS)))
-
-    # 4. Throw out results that are None; unpack results with multiple chains
-    MAX_LEN = 500
-    results_onehots = []
+def unpack_processed_results(results):
+    """
+    Given an iterable of processed results containing angles, sequences, and PDB IDs, this function separates out
+    the components (sequences as one-hot vectors, angle matrices, and PDB IDs) iff all were successfully preprocessed.
+    """
+    all_ohs = []
+    all_angs = []
+    all_ids = []
     c = 0
     for r in results:
         if not r:
             # PDB failed to download
             continue
         ang, seq, i = r
-        if len(seq[0]) > MAX_LEN:
+        if len(seq[0]) > args.max_len:
             continue
         for j in range(len(ang)):
-            results_onehots.append((ang[j], seq_to_onehot(seq[j]), i[j]))
-            c += 1
+            a, oh, _i = ang[j], seq_to_onehot(seq[j]), i[j]
+            if additional_checks(oh) and additional_checks(a):
+                all_ohs.append(oh)
+                all_angs.append(a)
+                all_ids.append(_i)
+                c += 1
     print(c, "chains successfully parsed and downloaded.")
+    return all_ohs, all_angs, all_ids
 
-    # 5a. Remove all one-hot (oh) vectors, angles, and sequence ids from tuples
-    all_ohs = []
-    all_angs = []
-    all_ids = []
-    for r in results_onehots:
-        a, oh, i = r
-        if additional_checks(oh) and additional_checks(a):
-            all_ohs.append(oh)
-            all_angs.append(a)
-            all_ids.append(i)
-    ohs_ids = list(zip(all_ohs, all_ids))
 
-    # 5b. Split into train, test and validation sets. Report sizes.
-    if args.overfit:
-        X_train, X_test, y_train, y_test = ohs_ids, ohs_ids, all_angs, all_angs
-        X_val, y_val = ohs_ids, all_angs
-    else:
-        X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
-        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
-    print("Train, test, validation set sizes:\n" + str(list(map(len, [X_train, X_test, X_val]))))
-
-    # 5c. Separate PDB ID/Sequence tuples.
-    X_train_labels = [x[1] for x in X_train]
-    X_test_labels = [x[1] for x in X_test]
-    X_val_labels = [x[1] for x in X_val]
+def save_data(X_train, X_val, X_test, y_train, y_val, y_test, query_description, query):
+    """
+    Given split data along with the query information that generated it, this function saves the data as a Python
+    dictionary, which is then saved to disk using torch.save.
+    """
+    # Separate PDB ID/Sequence tuples.
+    X_train_ids = [x[1] for x in X_train]
+    X_test_ids = [x[1] for x in X_test]
+    X_val_ids = [x[1] for x in X_val]
     X_train = [x[0] for x in X_train]
     X_test = [x[0] for x in X_test]
     X_val = [x[0] for x in X_val]
 
-    # 6. Create a dictionary data structure, using the sin/cos transformed angles
+    # Create a dictionary data structure, using the sin/cos transformed angles
     date = datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
     data = {"train": {"seq": X_train,
                       "ang": angle_list_to_sin_cos(y_train),
-                      "ids": X_train_labels},
+                      "ids": X_train_ids},
             "valid": {"seq": X_val,
                       "ang": angle_list_to_sin_cos(y_val),
-                      "ids": X_val_labels},
+                      "ids": X_val_ids},
             "test": {"seq": X_test,
                      "ang": angle_list_to_sin_cos(y_test),
-                     "ids": X_test_labels},
-            "settings": {"max_len": max(map(len, all_ohs))},
+                     "ids": X_test_ids},
+            "settings": {"max_len": max(map(len, X_train + X_val + X_test))},
             "description": {query_description},
             "query": query,
             "date": {date}}
@@ -423,3 +384,82 @@ if __name__ == "__main__":
             pickle.dump(data, f)
     else:
         torch.save(data, args.out_file)
+
+
+def split_data(all_ohs, all_angs, all_ids):
+    """
+    Given the entire dataset as 3 lists (one-hot sequences, angles, and IDs), this functions splits it into training,
+    validation, and testing sets.
+    """
+    ohs_ids = list(zip(all_ohs, all_ids))
+    if args.overfit:
+        X_train, X_test, y_train, y_test = ohs_ids, ohs_ids, all_angs, all_angs
+        X_val, y_val = ohs_ids, all_angs
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
+        X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
+    print("Train, test, validation set sizes:\n" + str(list(map(len, [X_train, X_test, X_val]))))
+    return X_train, X_val, X_test, y_train, y_val, y_test
+
+
+def fetch_pdb_ids(query_path):
+    """
+    Given a query file, loads the query + description and performs a fetch for the relevant PDB IDs.
+    """
+    query, description = load_query(query_path)
+    if args.only_pdbs:
+        pdb_ids = args.only_pdbs
+    else:
+        pdb_ids = download_pdbs_from_query(query)
+
+    return pdb_ids, query, description
+
+
+def main():
+    # Load query and fetch PDB IDs
+    pdb_ids, query, query_description = fetch_pdb_ids(args.query_file)
+
+    # Download and preprocess all data from PDB IDs
+    with Pool(multiprocessing.cpu_count()) as p:
+        results = list(tqdm.tqdm(p.imap(work, pdb_ids), total=len(pdb_ids)))
+
+    # Unpack results, throwing out malformed data
+    all_ohs, all_angs, all_ids = unpack_processed_results(results)
+
+    # Split into train, test and validation sets. Report sizes.
+    x_train, x_val, x_test, y_train, y_val, y_test = split_data(all_ohs, all_angs, all_ids)
+    save_data(x_train, x_val, x_test, y_train, y_val, y_test, query_description, query)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Searches through a query of PDBs and parses/downloads chains")
+    parser.add_argument('query_file', type=str, help='Path to query file')
+    parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.tch file)')
+    parser.add_argument('-sc', '--single_chain_only', action="store_true", help='Only keep PDBs with a single chain.')
+    parser.add_argument('-d', '--debug', action="store_true", help='Print debug print statements.')
+    parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str, help="Path for ProDy-downloaded PDB files.")
+    parser.add_argument("-p", "--pickle", action="store_true",
+                        help="Save data as a pickled dictionary instead of a torch-dictionary.")
+    parser.add_argument("--overfit", action="store_true",
+                        help="Use all samples of the dataset for train, test and validation. ")
+    parser.add_argument("--only_pdbs", nargs="+", help="Only predict these PDB IDs.")
+    parser.add_argument("-ml", "--max_len", default=10000, type=int, help="Only predict these PDB IDs.")
+    args = parser.parse_args()
+
+    # Set up
+    AA_MAP = {'A': 0,  'C': 1,  'D': 2,  'E': 3,
+              'F': 4,  'G': 5,  'H': 6,  'I': 7,
+              'K': 8,  'L': 9,  'M': 10, 'N': 11,
+              'P': 12, 'Q': 13, 'R': 14, 'S': 15,
+              'T': 16, 'V': 17, 'W': 18, 'Y': 19}
+    pr.pathPDBFolder(args.pdb_dir)
+    np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
+    np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
+    today = datetime.datetime.today()
+    suffix = today.strftime("%y%m%d")
+    if not args.out_file and args.pickle:
+        args.out_file = "../data/" + suffix + ".pkl"
+    elif not args.out_file and not args.pickle:
+        args.out_file = "../data/" + suffix + ".tch"
+
+
