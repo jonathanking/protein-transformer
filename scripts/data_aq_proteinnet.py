@@ -48,7 +48,6 @@ def seq_to_onehot(seq):
     return np.asarray(vector_array)
 
 
-# get bond angles
 def get_bond_angles(res, next_res):
     """ Given 2 residues, returns the ncac, cacn, and cnca bond angles between them."""
     atoms = res.backbone.copy()
@@ -276,7 +275,7 @@ def work(pdb_id):
             ids.append(pdb_id + "_" + chain_id)
 
     except Exception as e:
-        # print("Whoops, returning where I am.", e)
+        # TODO manage exceptions intelligently
         return None
     if len(pdb_dihedrals) == 0:
         return None
@@ -291,41 +290,6 @@ def additional_checks(matrix):
         return True
     else:
         if args.debug: print("additional checks not passed")
-
-
-def load_query(fname):
-    """
-    Loads a PDB database API query from a text file. If run in ProteinNet mode, the ProteinNet file is not parsed,
-    but a message is printed.
-    """
-    if args.proteinnet:
-        print("Running in ProteinNet mode.")
-        desc = f"ProteinNet file:{fname}"
-        query = ""
-    else:
-        # obtain query from file
-        with open(fname, "r") as qf:
-            desc = qf.readline()
-            query = qf.read()
-        print("Description:", desc)
-    return query, desc
-
-
-def download_pdbs_from_query(query):
-    """
-    Given a text-based query for the PDB database, performs an API HTTP request to obtain a list of PDB IDs that match
-    the query.
-    """
-    url = 'http://www.rcsb.org/pdb/rest/search'
-    header = {'Content-Type': 'application/x-www-form-urlencoded'}
-    response = requests.post(url, data=query, headers=header)
-    if response.status_code != 200:
-        if args.debug: print("Failed to retrieve results.")
-
-    pdb_ids = response.text.split("\n")
-    pdb_ids = list(filter(lambda x: x != "", pdb_ids))
-    print("Retrieved {0} PDB IDs.".format(len(pdb_ids)))
-    return pdb_ids
 
 
 def unpack_processed_results(results):
@@ -355,7 +319,7 @@ def unpack_processed_results(results):
     return all_ohs, all_angs, all_ids
 
 
-def save_data(X_train, X_val, X_test, y_train, y_val, y_test, query_description, query):
+def save_data(X_train, X_val, X_test, y_train, y_val, y_test):
     """
     Given split data along with the query information that generated it, this function saves the data as a Python
     dictionary, which is then saved to disk using torch.save.
@@ -380,8 +344,8 @@ def save_data(X_train, X_val, X_test, y_train, y_val, y_test, query_description,
                      "ang": angle_list_to_sin_cos(y_test),
                      "ids": X_test_ids},
             "settings": {"max_len": max(map(len, X_train + X_val + X_test))},
-            "description": {query_description},
-            "query": query,
+            "description": {"ProteinNet"}, # TODO add more informative description
+            "query": "ProteinNet",
             "date": {date}}
     # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
 
@@ -411,35 +375,29 @@ def split_data(all_ohs, all_angs, all_ids):
     return X_train, X_val, X_test, y_train, y_val, y_test
 
 
-def fetch_pdb_ids(query_path):
+def fetch_pdb_ids():
     """
     Given a query file or ProteinNet directory, loads the query + description and performs a fetch for the relevant PDB IDs.
     """
-    query, description = load_query(query_path)
-    if args.only_pdbs:
-        pdb_ids = args.only_pdbs
-    elif args.proteinnet:
-        pdb_ids = []
-        for pn_file in glob(query_path + "/*.pt"):
-            d = torch.load(pn_file)
-            for pnid, data in d.items():
-                try:
-                    pdb_id, model_id, chain_id = pnid.split("_")
-                except ValueError:
-                    # TODO Implement support for ASTRAL data
-                    # ASTRAL data points have only "PDBID_domain" and are currently ignored
-                    continue
-                print(pdb_id, model_id, chain_id)
-                pdb_ids.append(f"{pdb_id}_{chain_id}")
-    else:
-        pdb_ids = download_pdbs_from_query(query)
+    pdb_ids = []
+    for pn_file in glob(args.input_dir + "/*.pt"):
+        d = torch.load(pn_file)
+        for pnid, data in d.items():
+            try:
+                pdb_id, model_id, chain_id = pnid.split("_")
+            except ValueError:
+                # TODO Implement support for ASTRAL data
+                # ASTRAL data points have only "PDBID_domain" and are currently ignored
+                continue
+            print(pdb_id, model_id, chain_id)
+            pdb_ids.append(f"{pdb_id}_{chain_id}")
 
-    return pdb_ids, query, description
+    return pdb_ids
 
 
 def main():
     # Load query and fetch PDB IDs
-    pdb_ids, query, query_description = fetch_pdb_ids(args.query_file)
+    pdb_ids = fetch_pdb_ids()
 
     # Download and preprocess all data from PDB IDs
     with Pool(multiprocessing.cpu_count()) as p:
@@ -450,7 +408,7 @@ def main():
 
     # Split into train, test and validation sets. Report sizes.
     x_train, x_val, x_test, y_train, y_val, y_test = split_data(all_ohs, all_angs, all_ids)
-    save_data(x_train, x_val, x_test, y_train, y_val, y_test, query_description, query)
+    save_data(x_train, x_val, x_test, y_train, y_val, y_test)
 
 
 if __name__ == "__main__":
@@ -467,12 +425,7 @@ if __name__ == "__main__":
                         help="Use all samples of the dataset for train, test and validation. ")
     parser.add_argument("--only_pdbs", nargs="+", help="Only download these PDB IDs.")
     parser.add_argument("-ml", "--max_len", default=10000, type=int, help="Only predict these PDB IDs.")
-    parser.add_argument("-pn", "--proteinnet", action="store_true", help="Instead of obtaining PDB IDs from a PDB"
-                                                                         "query, this runs the same data aq. procedure"
-                                                                         "but starts with the PDB IDs given from"
-                                                                         "Mohammed AlQuraishi's ProteinNet. The query"
-                                                                         "file should point to a raw text formatted"
-                                                                         "ProteinNet file.")
+
     args = parser.parse_args()
 
     # Set up
