@@ -13,7 +13,7 @@ import tqdm
 from sklearn.model_selection import train_test_split
 
 sys.path.extend("../transformer/")
-from transformer.Sidechains import SC_DATA, NUM_PREDICTED_ANGLES
+from protein.Sidechains import SC_DATA, NUM_PREDICTED_ANGLES
 pr.confProDy(verbosity='error')
 
 

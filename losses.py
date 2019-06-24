@@ -2,8 +2,8 @@ import numpy as np
 import prody as pr
 import torch
 
-from transformer.Sidechains import NUM_PREDICTED_ANGLES
-from transformer.Structure import generate_coords
+from protein.Sidechains import NUM_PREDICTED_ANGLES
+from protein.Structure import generate_coords
 
 
 def combine_drmsd_mse(d, mse, w=.5):

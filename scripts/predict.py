@@ -16,9 +16,9 @@ from os.path import basename, splitext
 import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
-from transformer.Structure import generate_coords_with_tuples
+from protein.Structure import generate_coords_with_tuples
 from losses import inverse_trig_transform, copy_padding_from_gold, drmsd_loss, mse_loss, combine_drmsd_mse
-from transformer.Sidechains import SC_DATA
+from protein.Sidechains import SC_DATA
 
 
 def load_model(args):

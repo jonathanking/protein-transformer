@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 
-import transformer.Sidechains as Sidechains
-from transformer.Sidechains import BONDLENS
+import protein.Sidechains as Sidechains
+from protein.Sidechains import BONDLENS
 
 BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379,
             "CZ-NH2": 1,

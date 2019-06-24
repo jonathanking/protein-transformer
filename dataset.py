@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.utils.data
 
-from transformer.Sidechains import NUM_PREDICTED_ANGLES
+from protein.Sidechains import NUM_PREDICTED_ANGLES
 
 
 def paired_collate_fn(insts):

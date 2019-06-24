@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from transformer.Layers import EncoderLayer, DecoderLayer
-from transformer.Sidechains import NUM_PREDICTED_ANGLES
+from protein.Sidechains import NUM_PREDICTED_ANGLES
 
 __author__ = "Yu-Hsiang Huang"
 

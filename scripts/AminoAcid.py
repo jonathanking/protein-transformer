@@ -1,4 +1,4 @@
-from transformer.Sidechains import SC_DATA
+from protein.Sidechains import SC_DATA
 
 
 

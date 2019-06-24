@@ -250,7 +250,7 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
     """ Given a bunch of info (angle tensors, relevant bb and sc coords) and an amino acid code, generates the coords
         for that specific AA. Returns a pointer to the """
     # TODO: clarify behavior with first sidechain. Here, it must reorganize its input to carefully place the first CB
-    import transformer.Structure as Structure
+    import protein.Structure as Structure
     lens = map(lambda bondname: BONDLENS[bondname], SC_DATA[aa_code]["bonds"])
     angs = map(lambda anglname: torch.tensor(deg2rad(BONDANGS[anglname])), SC_DATA[aa_code]["angles"])
     i, angles, bb_arr = info

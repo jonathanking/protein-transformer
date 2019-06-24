@@ -25,7 +25,7 @@ model_state = chkpt['model']
 import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
-import transformer.Structure as struct
+import protein.Structure as struct
 from train import cal_loss
 from losses import inverse_trig_transform, copy_padding_from_gold
 
