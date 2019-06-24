@@ -1,14 +1,13 @@
 import argparse
 import datetime
-from glob import glob
 import multiprocessing
+import os
 import pickle
 import sys
 from multiprocessing import Pool
 
 import numpy as np
 import prody as pr
-import requests
 import torch
 import tqdm
 from sklearn.model_selection import train_test_split
@@ -18,7 +17,18 @@ from protein.Sidechains import SC_DATA, NUM_PREDICTED_ANGLES
 pr.confProDy(verbosity='error')
 
 
-# Set amino acid encoding and angle downloading methods
+class IncompleteStructureError(Exception):
+    """An exception to raise when a structure is incomplete."""
+    def __init__(self, message):
+        self.message = message
+
+
+class NonStandardAminoAcidError(Exception):
+    """An exception to raise when a structure contains a Non-standard amino acid."""
+    def __init__(self, *args):
+        super().__init__(*args)
+
+
 def angle_list_to_sin_cos(angs, reshape=True):
     """ Given a list of angles, returns a new list where those angles have
         been turned into their sines and cosines. If reshape is False, a new dim.
@@ -51,6 +61,8 @@ def seq_to_onehot(seq):
 def get_bond_angles(res, next_res):
     """ Given 2 residues, returns the ncac, cacn, and cnca bond angles between them."""
     atoms = res.backbone.copy()
+    if len(atoms) < 3:
+        raise IncompleteStructureError('Missing backbone atoms.')
     atoms_next = next_res.backbone.copy()
     ncac = pr.calcAngle(atoms[0], atoms[1], atoms[2], radian=True)
     cacn = pr.calcAngle(atoms[1], atoms[2], atoms_next[0], radian=True)
@@ -91,7 +103,7 @@ def compute_single_dihedral(atoms):
     return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
 
 
-def getDihedral(coords1, coords2, coords3, coords4, radian=False):
+def get_dihedral(coords1, coords2, coords3, coords4, radian=False):
     """ Returns the dihedral angle in degrees. Modified from prody.measure.measure to use a numerically safe
         normalization method. """
     rad2deg = 180 / np.pi
@@ -127,11 +139,9 @@ def getDihedral(coords1, coords2, coords3, coords4, radian=False):
 def check_standard_continuous(residue, prev_res_num):
     """ Asserts that the residue is standard and that the chain is continuous. """
     if not residue.isstdaa:
-        if args.debug: print("Found a non-std AA. Why didn't you catch this? " + str(residue.getNames()))
-        return False
+        raise NonStandardAminoAcidError("Found a non-std AA. This should have been handled previously.")
     if residue.getResnum() != prev_res_num:
-        if args.debug: print("Chain is non-continuous")
-        return False
+        raise IncompleteStructureError("Chain is missing residues.")
     return True
 
 
@@ -145,19 +155,19 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
     if len(atom_names) > 0:
         if prev_residue is None:
             atoms = [residue.select("name " + an) for an in atom_names]
-            if None in atoms:
-                return None
+
             try:
-                res_dihedrals = [getDihedral(next_res.select("name N").getCoords()[0],
-                                             residue.select("name C").getCoords()[0],
-                                             residue.select("name CA").getCoords()[0],
-                                             residue.select("name CB").getCoords()[0], radian=True)]
+                res_dihedrals = [get_dihedral(next_res.select("name N").getCoords()[0],
+                                              residue.select("name C").getCoords()[0],
+                                              residue.select("name CA").getCoords()[0],
+                                              residue.select("name CB").getCoords()[0], radian=True)]
             except AttributeError:
-                return None
+                raise IncompleteStructureError(f'Mising atoms at start of residue {residue} or {next_res}.')
         elif prev_residue is not None:
             atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in atom_names]
-            if None in atoms:
-                return None
+
+        if len(atoms) != len(atom_names) + 1 or None in atoms:
+            raise IncompleteStructureError(f'Missing atoms in residue {residue}.')
         for n in range(len(atoms) - 3):
             dihe_atoms = atoms[n:n + 4]
             res_dihedrals.append(compute_single_dihedral(dihe_atoms))
@@ -185,37 +195,29 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
 
 
 # get angles from chain
-def get_angles_from_chain(chain, pdb_id):
+def get_angles_from_chain(chain):
     """ Given a ProDy Chain object (from a Hierarchical View), return a numpy array of
         angles. Returns None if the PDB should be ignored due to weird artifacts. Also measures
         the bond angles along the peptide backbone, since they account for significat variation.
         i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, chi3, chi4, chi5], [...] ...] """
 
     dihedrals = []
-    try:
-        if chain.nonstdaa:
-            if args.debug: print("Non-standard AAs found.")
-            return None
-        sequence = chain.getSequence()
-        chain = chain.select("protein and not hetero").copy()
-    except Exception as e:
-        if args.debug: print("Problem loading sequence.", e)
-        return None
+    if chain.nonstdaa:
+        raise NonStandardAminoAcidError
+    sequence = chain.getSequence()
+    chain = chain.select("protein and not hetero").copy()
     # TODO remove references to previous residue - not necessary, instead use next residue
     all_residues = list(chain.iterResidues())
     prev = all_residues[0].getResnum()
     prev_res = None
     for res_id, res in enumerate(all_residues):
-        if not check_standard_continuous(res, prev):
-            return None
-        else:
-            prev = res.getResnum() + 1
+        check_standard_continuous(res, prev)
+        prev = res.getResnum() + 1
 
         res_backbone = measure_phi_psi_omega(res)
         res_bond_angles = measure_bond_angles(res, res_id, all_residues)
 
         atom_names = ["N", "CA"]
-        # Special cases
         # TODO verify correctness of GLY, PRO atom_names
         if res.getResname() is "GLY":
             atom_names = SC_DATA[res.getResname()]["predicted"]
@@ -227,63 +229,38 @@ def get_angles_from_chain(chain, pdb_id):
             next_res = None
         calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, prev_res, res_backbone, res_bond_angles,
                                                          next_res)
-        if calculated_dihedrals is None:
-            return None
+        # if calculated_dihedrals is None:
+        #     return None
         dihedrals.append(calculated_dihedrals)
         prev_res = res
 
     dihedrals_np = np.asarray(dihedrals)
-    # Check for NaNs - they shouldn't be here, but certainly should be excluded if they are.
-    if np.any(np.isnan(dihedrals_np)):
-        if args.debug: print("NaNs found")
-        return None
+    assert not np.any(np.isnan(dihedrals_np)), "NaNs are present in the dihedral array."
     return dihedrals_np, sequence
 
 
-# 3b. Parallelized method of downloading data
-def work(pdb_id):
-    pdb_dihedrals = []
-    pdb_sequences = []
-    ids = []
+def work(pdbid_chain):
+    """
+    For a single PDB ID with chain, i.e. ('1A9U_A'), fetches that PDB chain from the PDB and computes its angles.
+    """
+    pdbid, chid = pdbid_chain.split("_")
+    pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
+    assert pdb_hv.numChains() == 1, "Only a single chain should be parsed from the PDB."
 
+    chain = pdb_hv[chid]
+    assert chain.getChid() == chid, "The chain ID was not as expected."
     try:
-        pdb = pdb_id.split(":")
-        pdb_id = pdb[0]
-        pdb_hv = pr.parsePDB(pdb_id).getHierView()
-        # if less than 2 chains,  continue
-        numChains = pdb_hv.numChains()
-        if args.single_chain_only and numChains > 1:
-            return None
-
-        prevchainseq = None
-        for chain in pdb_hv:
-            if prevchainseq is None:
-                prevchainseq = chain.getSequence()
-            elif chain.getSequence() == prevchainseq:  # chain sequences are identical
-                if args.debug: print("identical chain found")
-                continue
-            else:
-                if args.debug: print("Num Chains > 1 & seq not identical, returning None for: ", pdb_id)
-                return None
-            chain_id = chain.getChid()
-            dihedrals_sequence = get_angles_from_chain(chain, pdb_id)
-            if dihedrals_sequence is None:
-                continue
-            dihedrals, sequence = dihedrals_sequence
-            pdb_dihedrals.append(dihedrals)
-            pdb_sequences.append(sequence)
-            ids.append(pdb_id + "_" + chain_id)
-
-    except Exception as e:
-        # TODO manage exceptions intelligently
+        dihedrals_sequence = get_angles_from_chain(chain)
+    except (IncompleteStructureError, NonStandardAminoAcidError):
         return None
-    if len(pdb_dihedrals) == 0:
-        return None
+    if dihedrals_sequence is not None:
+        dihedrals, sequence = dihedrals_sequence
     else:
-        return pdb_dihedrals, pdb_sequences, ids
+        return None
+
+    return dihedrals, sequence, pdbid_chain
 
 
-# function for additional checks of matrices
 def additional_checks(matrix):
     zeros = not np.any(matrix)
     if not np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and not zeros:
@@ -332,17 +309,30 @@ def save_data(X_train, X_val, X_test, y_train, y_val, y_test):
     X_test = [x[0] for x in X_test]
     X_val = [x[0] for x in X_val]
 
+    train_proteinnet_dict = torch.load(os.path.join(args.input_dir, "training_30.pt"))
+    valid_proteinnet_dict = torch.load(os.path.join(args.input_dir, "validation.pt"))
+    test_proteinnet_dict = torch.load(os.path.join(args.input_dir, "testing.pt"))
+
     # Create a dictionary data structure, using the sin/cos transformed angles
     date = datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
     data = {"train": {"seq": X_train,
                       "ang": angle_list_to_sin_cos(y_train),
-                      "ids": X_train_ids},
+                      "ids": X_train_ids,
+                      "mask": [train_proteinnet_dict[_id]["mask"] for _id in X_train_ids],
+                      "evolutionary": [train_proteinnet_dict[_id]["evolutionary"] for _id in X_train_ids],
+                      "secondary": [train_proteinnet_dict[_id]["secondary"] for _id in X_train_ids]},
             "valid": {"seq": X_val,
                       "ang": angle_list_to_sin_cos(y_val),
-                      "ids": X_val_ids},
+                      "ids": X_val_ids,
+                      "mask": [valid_proteinnet_dict[_id]["mask"] for _id in X_val_ids],
+                      "evolutionary": [valid_proteinnet_dict[_id]["evolutionary"] for _id in X_val_ids],
+                      "secondary": [valid_proteinnet_dict[_id]["secondary"] for _id in X_val_ids]},
             "test": {"seq": X_test,
                      "ang": angle_list_to_sin_cos(y_test),
-                     "ids": X_test_ids},
+                     "ids": X_test_ids,
+                     "mask": [test_proteinnet_dict[_id]["mask"] for _id in X_test_ids],
+                     "evolutionary": [test_proteinnet_dict[_id]["evolutionary"] for _id in X_test_ids],
+                     "secondary": [test_proteinnet_dict[_id]["secondary"] for _id in X_test_ids]},
             "settings": {"max_len": max(map(len, X_train + X_val + X_test))},
             "description": {"ProteinNet"},  # TODO add more informative description
             "query": "ProteinNet",
@@ -375,12 +365,21 @@ def split_data(all_ohs, all_angs, all_ids):
     return X_train, X_val, X_test, y_train, y_val, y_test
 
 
-def fetch_pdb_ids():
+def fetch_pdb_ids(filename):
     """
-    Given a query file or ProteinNet directory, loads the query + description and performs a fetch for the relevant PDB IDs.
+    Given a ProteinNet file, loads the query + description and performs a fetch for the relevant PDB IDs.
     """
     pdb_ids = []
-    for pn_file in glob(args.input_dir + "/*.pt"):
+    pn_file = os.path.join(args.input_dir, filename)
+    text_file = pn_file.replace('.pt', '.ids')
+    if os.path.exists(text_file):
+        with open(text_file, "r") as f:
+            line = f.readline().strip()
+            while line != "":
+                pdb_ids.append(line)
+                line = f.readline().strip()
+    else:
+        text_file_open = open(text_file, "w")
         d = torch.load(pn_file)
         for pnid, data in d.items():
             try:
@@ -389,19 +388,21 @@ def fetch_pdb_ids():
                 # TODO Implement support for ASTRAL data
                 # ASTRAL data points have only "PDBID_domain" and are currently ignored
                 continue
-            print(pdb_id, model_id, chain_id)
             pdb_ids.append(f"{pdb_id}_{chain_id}")
+            text_file_open.write(f"{pdb_id}_{chain_id}\n")
+        text_file_open.close()
 
     return pdb_ids
 
 
 def main():
     # Load query and fetch PDB IDs
-    pdb_ids = fetch_pdb_ids()
+    train_pdb_ids = fetch_pdb_ids("training_30.pt")
+    # validation_pdb_ids = fetch_pdb_ids("validation.pt")
 
     # Download and preprocess all data from PDB IDs
     with Pool(multiprocessing.cpu_count()) as p:
-        results = list(tqdm.tqdm(p.imap(work, pdb_ids), total=len(pdb_ids)))
+        results = list(tqdm.tqdm(p.imap(work, train_pdb_ids), total=len(train_pdb_ids)))
 
     # Unpack results, throwing out malformed data
     all_ohs, all_angs, all_ids = unpack_processed_results(results)
@@ -416,19 +417,11 @@ if __name__ == "__main__":
                                                  "atom protein structure prediction.")
     parser.add_argument('input_dir', type=str, help='Path to ProteinNet raw records directory.')
     parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.tch file)')
-    parser.add_argument('-sc', '--single_chain_only', action="store_true", help='Only keep PDBs with a single chain.')
-    parser.add_argument('-d', '--debug', action="store_true", help='Print debug print statements.')
     parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str, help="Path for ProDy-downloaded PDB files.")
     parser.add_argument("-p", "--pickle", action="store_true",
                         help="Save data as a pickled dictionary instead of a torch-dictionary.")
-    parser.add_argument("--overfit", action="store_true",
-                        help="Use all samples of the dataset for train, test and validation. ")
-    parser.add_argument("--only_pdbs", nargs="+", help="Only download these PDB IDs.")
-    parser.add_argument("-ml", "--max_len", default=10000, type=int, help="Only predict these PDB IDs.")
-
     args = parser.parse_args()
 
-    # Set up
     AA_MAP = {'A': 0,  'C': 1,  'D': 2,  'E': 3,
               'F': 4,  'G': 5,  'H': 6,  'I': 7,
               'K': 8,  'L': 9,  'M': 10, 'N': 11,
@@ -440,8 +433,8 @@ if __name__ == "__main__":
     today = datetime.datetime.today()
     suffix = today.strftime("%y%m%d")
     if not args.out_file and args.pickle:
-        args.out_file = "../data/" + suffix + ".pkl"
+        args.out_file = "../data/proteinnet/" + suffix + ".pkl"
     elif not args.out_file and not args.pickle:
-        args.out_file = "../data/" + suffix + ".tch"
-
+        args.out_file = "../data/proteinnet/" + suffix + ".pt"
+    main()
 
