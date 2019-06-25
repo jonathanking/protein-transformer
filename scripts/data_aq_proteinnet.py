@@ -3,6 +3,7 @@ import datetime
 import multiprocessing
 import os
 import pickle
+import re
 import sys
 from multiprocessing import Pool
 
@@ -239,7 +240,6 @@ def get_angles_from_chain(chain):
         prev_res = res
 
     dihedrals_np = np.asarray(dihedrals)
-    assert not np.any(np.isnan(dihedrals_np)), "NaNs are present in the dihedral array."
     return dihedrals_np, sequence
 
 
@@ -247,7 +247,14 @@ def work(pdbid_chain):
     """
     For a single PDB ID with chain, i.e. ('1A9U_A'), fetches that PDB chain from the PDB and computes its angles.
     """
-    pdbid, chid = pdbid_chain.split("_")
+    try:
+        pdbid, model_id, chid = pdbid_chain.split("_")
+        if "#" in pdbid:
+            pdbid = pdbid.split("#")[1]
+    except ValueError:
+        # TODO Implement support for ASTRAL data
+        # ASTRAL data points have only "PDBID_domain" and are currently ignored
+        return None
     try:
         pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
     except AttributeError:
@@ -265,6 +272,30 @@ def work(pdbid_chain):
     dihedrals, sequence = dihedrals_sequence
 
     return dihedrals, sequence, pdbid_chain
+
+
+def work_test(category_caspid):
+    """
+    For a single CASP target entry with category label, i.e. ('TBM#T0234'), fetches that PDB file from disk and
+    computes its angles.
+    """
+    category, caspid = category_caspid.split("#")
+    try:
+        pdb_hv = pr.parsePDB(os.path.join(args.input_dir, "targets", caspid + ".pdb")).getHierView()
+    except AttributeError:
+        print("Error parsing", category_caspid)
+        ERROR_FILE.write(f"{category_caspid}\n")
+        return None
+    assert pdb_hv.numChains() == 1, "Only a single chain should be parsed from the CASP Target PDB."
+    chain = next(iter(pdb_hv))
+    try:
+        dihedrals_sequence = get_angles_from_chain(chain)
+    except (IncompleteStructureError, NonStandardAminoAcidError):
+        return None
+
+    dihedrals, sequence = dihedrals_sequence
+
+    return dihedrals, sequence, category_caspid
 
 
 def additional_checks(matrix):
@@ -290,60 +321,79 @@ def unpack_processed_results(results):
             # PDB failed to download
             continue
         ang, seq, i = r
-        if len(seq[0]) > args.max_len:
-            continue
-        for j in range(len(ang)):
-            a, oh, _i = ang[j], seq_to_onehot(seq[j]), i[j]
-            if additional_checks(oh) and additional_checks(a):
-                all_ohs.append(oh)
-                all_angs.append(a)
-                all_ids.append(_i)
-                c += 1
-    print(c, "chains successfully parsed and downloaded.")
+        oh = seq_to_onehot(seq)
+        if additional_checks(oh) and additional_checks(ang):
+            all_ohs.append(oh)
+            all_angs.append(ang)
+            all_ids.append(i)
+            c += 1
+        else:
+            ERROR_FILE.write(f"{i}, numerical issue\n")
+    print(f"{(c*100)/len(results):.1f}% of chains successfully parsed and downloaded. ({c}/{len(results)})")
     return all_ohs, all_angs, all_ids
 
 
-def save_data(X_train, X_val, X_test, y_train, y_val, y_test):
+def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validation_data):
     """
     Given split data along with the query information that generated it, this function saves the data as a Python
     dictionary, which is then saved to disk using torch.save.
     """
-    # Separate PDB ID/Sequence tuples.
-    X_train_ids = [x[1] for x in X_train]
-    X_test_ids = [x[1] for x in X_test]
-    X_val_ids = [x[1] for x in X_val]
-    X_train = [x[0] for x in X_train]
-    X_test = [x[0] for x in X_test]
-    X_val = [x[0] for x in X_val]
-
-    train_proteinnet_dict = torch.load(os.path.join(args.input_dir, TRAIN_FILE))
-    valid_proteinnet_dict = torch.load(os.path.join(args.input_dir, "validation.pt"))
-    test_proteinnet_dict = torch.load(os.path.join(args.input_dir, "testing.pt"))
+    # TODO: there is a difference between some mask and sequence lengths (they are obtained differently). Why?
+    train_proteinnet_dict = torch.load(os.path.join(args.input_dir, "torch", TRAIN_FILE))
+    valid_proteinnet_dict = torch.load(os.path.join(args.input_dir, "torch", "validation.pt"))
+    test_proteinnet_dict = torch.load(os.path.join(args.input_dir, "torch", "testing.pt"))
 
     # Create a dictionary data structure, using the sin/cos transformed angles
     date = datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
-    data = {"train": {"seq": X_train,
+
+    data = {"train": {"seq": x_train,
                       "ang": angle_list_to_sin_cos(y_train),
-                      "ids": X_train_ids,
-                      "mask": [train_proteinnet_dict[_id]["mask"] for _id in X_train_ids],
-                      "evolutionary": [train_proteinnet_dict[_id]["evolutionary"] for _id in X_train_ids],
-                      "secondary": [train_proteinnet_dict[_id]["secondary"] for _id in X_train_ids]},
-            "valid": {"seq": X_val,
-                      "ang": angle_list_to_sin_cos(y_val),
-                      "ids": X_val_ids,
-                      "mask": [valid_proteinnet_dict[_id]["mask"] for _id in X_val_ids],
-                      "evolutionary": [valid_proteinnet_dict[_id]["evolutionary"] for _id in X_val_ids],
-                      "secondary": [valid_proteinnet_dict[_id]["secondary"] for _id in X_val_ids]},
-            "test": {"seq": X_test,
+                      "ids": train_ids,
+                      "mask": [np.asarray(train_proteinnet_dict[_id]["mask"]) for _id in train_ids],
+                      "evolutionary": [np.asarray(train_proteinnet_dict[_id]["evolutionary"]) for _id in train_ids],
+                      "secondary": [train_proteinnet_dict[_id]["secondary"]
+                                    if "secondary" in train_proteinnet_dict[_id].keys()
+                                    else None
+                                    for _id in train_ids]},
+            "valid": {split: dict() for split in VALID_SPLITS},
+            "test": {"seq": x_test,
                      "ang": angle_list_to_sin_cos(y_test),
-                     "ids": X_test_ids,
-                     "mask": [test_proteinnet_dict[_id]["mask"] for _id in X_test_ids],
-                     "evolutionary": [test_proteinnet_dict[_id]["evolutionary"] for _id in X_test_ids],
-                     "secondary": [test_proteinnet_dict[_id]["secondary"] for _id in X_test_ids]},
-            "settings": {"max_len": max(map(len, X_train + X_val + X_test))},
-            "description": {"ProteinNet"},  # TODO add more informative description
-            "query": "ProteinNet",
+                     "ids": test_ids,
+                     "mask": [np.asarray(test_proteinnet_dict[_id]["mask"]) for _id in test_ids],
+                     "evolutionary": [np.asarray(test_proteinnet_dict[_id]["evolutionary"]) for _id in test_ids],
+                     "secondary": [test_proteinnet_dict[_id]["secondary"]
+                                   if "secondary" in test_proteinnet_dict[_id].keys()
+                                   else None
+                                   for _id in test_ids]},
+            "settings": {"max_len": max(map(len, x_train + x_test))},  # TODO find max length for validation
+            "description": {f"ProteinNet {CASP_VERSION.upper()}"},
             "date": {date}}
+    for split, (x_val, y_val, ids_val) in all_validation_data.items():
+        data["valid"][split]["seq"] = x_val
+        data["valid"][split]["ang"] = y_val
+        data["valid"][split]["ids"] = ids_val
+        data["valid"][split]["mask"] = [np.asarray(valid_proteinnet_dict[_id]["mask"]) for _id in ids_val]
+        data["valid"][split]["evolutionary"] = [np.asarray(valid_proteinnet_dict[_id]["evolutionary"]) for _id in ids_val]
+        data["valid"][split]["secondary"] = [valid_proteinnet_dict[_id]["secondary"]
+                                             if "secondary" in valid_proteinnet_dict[_id].keys()
+                                             else None
+                                             for _id in ids_val]
+        data["settings"]["max_len"] = max(data["settings"]["max_len"], max(map(len, x_val)))
+        valid_len = len(data["valid"][split]["seq"])
+        assert all([l == valid_len for l in map(len, [data["valid"][split][k]
+                                                      for k in ["ang", "ids", "mask", "evolutionary","secondary"]])]),\
+            "Valid lengths don't match."
+
+    train_len = len(data["train"]["seq"])
+    test_len = len(data["test"]["seq"])
+    assert all([l == train_len
+                for l in map(len, [data["train"][k]
+                                   for k in ["ang", "ids", "mask", "evolutionary",
+                                             "secondary"]])]), "Train lengths don't match."
+    assert all([l == test_len
+                for l in map(len, [data["test"][k]
+                                   for k in ["ang", "ids", "mask", "evolutionary",
+                                             "secondary"]])]), "Test lengths don't match."
     # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
 
     if args.pickle:
@@ -372,47 +422,63 @@ def fetch_pdb_ids(filename):
     Given a ProteinNet file, loads the query + description and performs a fetch for the relevant PDB IDs.
     """
     pdb_ids = []
-    pn_file = os.path.join(args.input_dir, filename)
+    pn_file = os.path.join(args.input_dir, "torch", filename)
     text_file = pn_file.replace('.pt', '.ids')
     if os.path.exists(text_file):
         with open(text_file, "r") as f:
-            line = f.readline().strip()
-            while line != "":
+            for line in f:
+                line = line.strip()
                 pdb_ids.append(line)
-                line = f.readline().strip()
     else:
         text_file_open = open(text_file, "w")
         d = torch.load(pn_file)
         for pnid, data in d.items():
-            try:
-                pdb_id, model_id, chain_id = pnid.split("_")
-            except ValueError:
-                # TODO Implement support for ASTRAL data
-                # ASTRAL data points have only "PDBID_domain" and are currently ignored
-                continue
-            pdb_ids.append(f"{pdb_id}_{chain_id}")
-            text_file_open.write(f"{pdb_id}_{chain_id}\n")
+            pdb_ids.append(pnid)
+            text_file_open.write(f"{pnid}\n")
         text_file_open.close()
 
     return pdb_ids
 
 
 def main():
-    # Load query and fetch PDB IDs
     train_pdb_ids = fetch_pdb_ids(TRAIN_FILE)
-    # validation_pdb_ids = fetch_pdb_ids("validation.pt")
+    valid_pdb_ids = fetch_pdb_ids("validation.pt")
+    # Because there are several validation sets, we group the IDs by their seq identity for use later
+    valid_pdb_ids_grouped = {k: [] for k in VALID_SPLITS}
+    for vid in valid_pdb_ids:
+        group = int(vid[:2])
+        valid_pdb_ids_grouped[group].append(vid)
+    test_casp_ids = fetch_pdb_ids("testing.pt")
+    print("IDs fetched.")
 
     # Download and preprocess all data from PDB IDs
     with Pool(multiprocessing.cpu_count()) as p:
-        results = list(tqdm.tqdm(p.imap(work, train_pdb_ids), total=len(train_pdb_ids)))
+        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids), total=len(train_pdb_ids)))
+
+    valid_result_meta = {}
+    for group, vids in valid_pdb_ids_grouped.items():
+        with Pool(multiprocessing.cpu_count()) as p:
+            valid_results = list(tqdm.tqdm(p.imap(work, vids), total=len(vids)))
+        valid_result_meta[group] = valid_results
+
+    with Pool(multiprocessing.cpu_count()) as p:
+        test_results = list(tqdm.tqdm(p.imap(work_test, test_casp_ids), total=len(test_casp_ids)))
+
+    print("IDs processed.")
+
+    # Unpack results
+    print("Training set:\t", end="")
+    train_ohs, train_angs, train_ids = unpack_processed_results(train_results)
+    for group, results in valid_result_meta.items():
+        print(f"Valid set {group}%:\t", end="")
+        valid_result_meta[group] = unpack_processed_results(results)
+    print("Test set:\t\t", end="")
+    test_ohs, test_angs, test_ids = unpack_processed_results(test_results)
     ERROR_FILE.close()
 
-    # Unpack results, throwing out malformed data
-    all_ohs, all_angs, all_ids = unpack_processed_results(results)
-
     # Split into train, test and validation sets. Report sizes.
-    x_train, x_val, x_test, y_train, y_val, y_test = split_data(all_ohs, all_angs, all_ids)
-    save_data(x_train, x_val, x_test, y_train, y_val, y_test)
+    save_data(train_ohs, test_ohs, train_angs, test_angs, train_ids, test_ids, valid_result_meta)
+    print(f"Data saved to {args.out_file}.")
 
 
 if __name__ == "__main__":
@@ -424,6 +490,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--pickle", action="store_true",
                         help="Save data as a pickled dictionary instead of a torch-dictionary.")
     args = parser.parse_args()
+    VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
     TRAIN_FILE = "training_100.pt"
     AA_MAP = {'A': 0,  'C': 1,  'D': 2,  'E': 3,
               'F': 4,  'G': 5,  'H': 6,  'I': 7,
@@ -435,10 +502,13 @@ if __name__ == "__main__":
     np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
     today = datetime.datetime.today()
     suffix = today.strftime("%y%m%d")
+    m = re.search(r"casp\d+", args.input_dir, re.IGNORECASE)
+    assert m, "The input_dir is not titled with 'caspX'."
+    CASP_VERSION = m.group(0)
     if not args.out_file and args.pickle:
-        args.out_file = "../data/proteinnet/" + suffix + ".pkl"
+        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + suffix + ".pkl"
     elif not args.out_file and not args.pickle:
-        args.out_file = "../data/proteinnet/" + suffix + ".pt"
+        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + suffix + ".pt"
     ERROR_FILE = open("error.log", "w")
     main()
 
