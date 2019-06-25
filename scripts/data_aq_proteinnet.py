@@ -61,9 +61,9 @@ def seq_to_onehot(seq):
 def get_bond_angles(res, next_res):
     """ Given 2 residues, returns the ncac, cacn, and cnca bond angles between them."""
     atoms = res.backbone.copy()
-    if len(atoms) < 3:
-        raise IncompleteStructureError('Missing backbone atoms.')
     atoms_next = next_res.backbone.copy()
+    if len(atoms) < 3 or len(atoms_next) < 3:
+        raise IncompleteStructureError('Missing backbone atoms.')
     ncac = pr.calcAngle(atoms[0], atoms[1], atoms[2], radian=True)
     cacn = pr.calcAngle(atoms[1], atoms[2], atoms_next[0], radian=True)
     cnca = pr.calcAngle(atoms[2], atoms_next[0], atoms_next[1], radian=True)
