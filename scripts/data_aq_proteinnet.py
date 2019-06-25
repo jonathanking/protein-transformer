@@ -11,32 +11,32 @@ import numpy as np
 import prody as pr
 import torch
 import tqdm
-from sklearn.model_selection import train_test_split
 
 sys.path.extend("../protein/")
 from protein.Sidechains import SC_DATA, NUM_PREDICTED_ANGLES
+
 pr.confProDy(verbosity='error')
 
 
 class IncompleteStructureError(Exception):
     """An exception to raise when a structure is incomplete."""
+
     def __init__(self, message):
         self.message = message
 
 
 class NonStandardAminoAcidError(Exception):
     """An exception to raise when a structure contains a Non-standard amino acid."""
+
     def __init__(self, *args):
         super().__init__(*args)
 
 
 def angle_list_to_sin_cos(angs, reshape=True):
-    """ Given a list of angles, returns a new list where those angles have
-        been turned into their sines and cosines. If reshape is False, a new dim.
-        is added that can hold the sine and cosine of each angle,
-        i.e. (len x #angs) -> (len x #angs x 2). If reshape is true, this last
-        dim. is squashed so that the list of angles becomes
-        [cos sin cos sin ...]. """
+    """ Given a list of angles, returns a new list where those angles have been turned into
+    their sines and cosines. If reshape is False, a new dim. is added that can hold the sine and
+    cosine of each angle, i.e. (len x #angs) -> ( len x #angs x 2). If reshape is true,
+    this last dim. is squashed so that the list of angles becomes [cos sin cos sin ...]. """
     new_list = []
     for a in angs:
         new_mat = np.zeros((a.shape[0], a.shape[1], 2))
@@ -83,7 +83,10 @@ def measure_bond_angles(residue, res_idx, all_res):
 
 
 def measure_phi_psi_omega(residue, outofboundchar=0):
-    """ Returns phi, psi, omega for a residue, replacing out-of-bounds angles with outofboundchar."""
+    """
+    Returns phi, psi, omega for a residue, replacing out-of-bounds angles with
+    outofboundchar.
+    """
     try:
         phi = pr.calcPhi(residue, radian=True, dist=None)
     except ValueError:
@@ -100,13 +103,18 @@ def measure_phi_psi_omega(residue, outofboundchar=0):
 
 
 def compute_single_dihedral(atoms):
-    """ Given an iterable of 4 Atoms, uses Prody to calculate the dihedral angle between them in radians. """
+    """
+    Given an iterable of 4 Atoms, uses Prody to calculate the dihedral angle between them in
+    radians.
+    """
     return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
 
 
 def get_dihedral(coords1, coords2, coords3, coords4, radian=False):
-    """ Returns the dihedral angle in degrees. Modified from prody.measure.measure to use a numerically safe
-        normalization method. """
+    """
+    Returns the dihedral angle in degrees. Modified from prody.measure.measure to use a
+    numerically safe normalization method.
+    """
     rad2deg = 180 / np.pi
     eps = 1e-6
 
@@ -140,18 +148,21 @@ def get_dihedral(coords1, coords2, coords3, coords4, radian=False):
 def check_standard_continuous(residue, prev_res_num):
     """ Asserts that the residue is standard and that the chain is continuous. """
     if not residue.isstdaa:
-        raise NonStandardAminoAcidError("Found a non-std AA. This should have been handled previously.")
+        raise NonStandardAminoAcidError("Found a non-std AA.")
     if residue.getResnum() != prev_res_num:
         raise IncompleteStructureError("Chain is missing residues.")
     return True
 
 
-def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bondangles, next_res, pad_char=0):
-    """ Computes all angles to predict for a given residue. If the residue is the first in the protein chain,
-        a fictitious C atom is placed before the first N. This is used to compute a [C-1, N, CA, CB] dihedral
-        angle. If it is not the first residue in the chain, the previous residue's C is used instead.
-        Then, each group of 4 atoms in atom_names is used to generate a list of dihedral angles for this
-        residue. """
+def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bondangles, next_res,
+                              pad_char=0):
+    """
+    Computes all angles to predict for a given residue. If the residue is the first in the
+    protein chain, a fictitious C atom is placed before the first N. This is used to compute a [
+    C-1, N, CA, CB] dihedral angle. If it is not the first residue in the chain, the previous
+    residue's C is used instead. Then, each group of 4 atoms in atom_names is used to generate a
+    list of dihedral angles for this residue.
+    """
     res_dihedrals = []
     if len(atom_names) > 0:
         if prev_residue is None:
@@ -161,21 +172,25 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
                 res_dihedrals = [get_dihedral(next_res.select("name N").getCoords()[0],
                                               residue.select("name C").getCoords()[0],
                                               residue.select("name CA").getCoords()[0],
-                                              residue.select("name CB").getCoords()[0], radian=True)]
+                                              residue.select("name CB").getCoords()[0],
+                                              radian=True)]
             except AttributeError:
-                raise IncompleteStructureError(f'Mising atoms at start of residue {residue} or {next_res}.')
+                raise IncompleteStructureError(
+                    f'Mising atoms at start of residue {residue} or {next_res}.')
         elif prev_residue is not None:
-            atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in atom_names]
+            atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in
+                                                       atom_names]
 
         if (prev_residue is not None and len(atoms) != len(atom_names) + 1) \
-            or (prev_residue is None and len(atoms) != len(atom_names)) or None in atoms:
+                or (prev_residue is None and len(atoms) != len(atom_names)) or None in atoms:
             raise IncompleteStructureError(f'Missing atoms in residue {residue}.')
         for n in range(len(atoms) - 3):
             dihe_atoms = atoms[n:n + 4]
             res_dihedrals.append(compute_single_dihedral(dihe_atoms))
     resname = residue.getResname()
     if resname not in ["LEU", "ILE", "VAL", "THR"]:
-        return backbone + bondangles + res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
+        return backbone + bondangles + res_dihedrals + (
+                    NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
     if resname == "LEU":
         first_three = ["CA", "CB", "CG"]
         next_atom = "CD2"
@@ -192,11 +207,14 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
     if len(atom_selections) != 4 or None in atom_selections:
         raise IncompleteStructureError('Missing sidechain atoms.')
     res_dihedrals.append(compute_single_dihedral(atom_selections))
-    assert len(res_dihedrals) + len(backbone + bondangles) == 10 and resname in ["ILE", "LEU"] or len(res_dihedrals) + \
+    assert len(res_dihedrals) + len(backbone + bondangles) == 10 and resname in ["ILE",
+                                                                                 "LEU"] or len(
+        res_dihedrals) + \
            len(backbone + bondangles) == 9 and resname in ["VAL", "THR"], \
         "Angle position in array must match what is assumed in Sidechains:extend_any_sidechain."
 
-    return backbone + bondangles + res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
+    return backbone + bondangles + res_dihedrals + (
+                NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
 
 
 # get angles from chain
@@ -234,8 +252,8 @@ def get_angles_from_chain(chain):
             next_res = all_residues[1]
         else:
             next_res = None
-        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, prev_res, res_backbone, res_bond_angles,
-                                                         next_res)
+        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, prev_res, res_backbone,
+                                                         res_bond_angles, next_res)
         dihedrals.append(calculated_dihedrals)
         prev_res = res
 
@@ -245,7 +263,8 @@ def get_angles_from_chain(chain):
 
 def work(pdbid_chain):
     """
-    For a single PDB ID with chain, i.e. ('1A9U_A'), fetches that PDB chain from the PDB and computes its angles.
+    For a single PDB ID with chain, i.e. ('1A9U_A'), fetches that PDB chain from the PDB and
+    computes its angles.
     """
     try:
         pdbid, model_id, chid = pdbid_chain.split("_")
@@ -276,17 +295,18 @@ def work(pdbid_chain):
 
 def work_test(category_caspid):
     """
-    For a single CASP target entry with category label, i.e. ('TBM#T0234'), fetches that PDB file from disk and
-    computes its angles.
+    For a single CASP target entry with category label, i.e. ('TBM#T0234'), fetches that PDB
+    file from disk and computes its angles.
     """
     category, caspid = category_caspid.split("#")
     try:
-        pdb_hv = pr.parsePDB(os.path.join(args.input_dir, "targets", caspid + ".pdb")).getHierView()
+        pdb_hv = pr.parsePDB(
+            os.path.join(args.input_dir, "targets", caspid + ".pdb")).getHierView()
     except AttributeError:
         print("Error parsing", category_caspid)
         ERROR_FILE.write(f"{category_caspid}\n")
         return None
-    assert pdb_hv.numChains() == 1, "Only a single chain should be parsed from the CASP Target PDB."
+    assert pdb_hv.numChains() == 1, "Only a single chain should be parsed from the CASP targ PDB."
     chain = next(iter(pdb_hv))
     try:
         dihedrals_sequence = get_angles_from_chain(chain)
@@ -309,8 +329,9 @@ def additional_checks(matrix):
 
 def unpack_processed_results(results):
     """
-    Given an iterable of processed results containing angles, sequences, and PDB IDs, this function separates out
-    the components (sequences as one-hot vectors, angle matrices, and PDB IDs) iff all were successfully preprocessed.
+    Given an iterable of processed results containing angles, sequences, and PDB IDs,
+    this function separates out the components (sequences as one-hot vectors, angle matrices,
+    and PDB IDs) iff all were successfully preprocessed.
     """
     all_ohs = []
     all_angs = []
@@ -329,16 +350,31 @@ def unpack_processed_results(results):
             c += 1
         else:
             ERROR_FILE.write(f"{i}, numerical issue\n")
-    print(f"{(c*100)/len(results):.1f}% of chains parsed. ({c}/{len(results)})")
+    print(f"{(c * 100) / len(results):.1f}% of chains parsed. ({c}/{len(results)})")
     return all_ohs, all_angs, all_ids
+
+
+def validate_data(data):
+    """
+    Performs several checks on dictionary before saving.
+    """
+    train_len = len(data["train"]["seq"])
+    test_len = len(data["test"]["seq"])
+    assert all([l == train_len
+                for l in map(len, [data["train"][k]
+                                   for k in ["ang", "ids", "mask", "evolutionary",
+                                             "secondary"]])]), "Train lengths don't match."
+    assert all([l == test_len
+                for l in map(len, [data["test"][k]
+                                   for k in ["ang", "ids", "mask", "evolutionary",
+                                             "secondary"]])]), "Test lengths don't match."
 
 
 def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validation_data):
     """
-    Given split data along with the query information that generated it, this function saves the data as a Python
-    dictionary, which is then saved to disk using torch.save.
+    Given split data along with the query information that generated it, this function saves the
+    data as a Python dictionary, which is then saved to disk using torch.save.
     """
-    # TODO: there is a difference between some mask and sequence lengths (they are obtained differently). Why?
     train_proteinnet_dict = torch.load(os.path.join(args.input_dir, "torch", TRAIN_FILE))
     valid_proteinnet_dict = torch.load(os.path.join(args.input_dir, "torch", "validation.pt"))
     test_proteinnet_dict = torch.load(os.path.join(args.input_dir, "torch", "testing.pt"))
@@ -365,7 +401,7 @@ def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validat
                                    if "secondary" in test_proteinnet_dict[_id].keys()
                                    else None
                                    for _id in test_ids]},
-            "settings": {"max_len": max(map(len, x_train + x_test))},  # TODO find max length for validation
+            "settings": {"max_len": max(map(len, x_train + x_test))},
             "description": {f"ProteinNet {CASP_VERSION.upper()}"},
             "date": {date}}
     for split, (x_val, y_val, ids_val) in all_validation_data.items():
@@ -383,17 +419,6 @@ def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validat
         assert all([l == valid_len for l in map(len, [data["valid"][split][k]
                                                       for k in ["ang", "ids", "mask", "evolutionary","secondary"]])]),\
             "Valid lengths don't match."
-
-    train_len = len(data["train"]["seq"])
-    test_len = len(data["test"]["seq"])
-    assert all([l == train_len
-                for l in map(len, [data["train"][k]
-                                   for k in ["ang", "ids", "mask", "evolutionary",
-                                             "secondary"]])]), "Train lengths don't match."
-    assert all([l == test_len
-                for l in map(len, [data["test"][k]
-                                   for k in ["ang", "ids", "mask", "evolutionary",
-                                             "secondary"]])]), "Test lengths don't match."
     # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
 
     if args.pickle:
@@ -403,23 +428,10 @@ def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validat
         torch.save(data, args.out_file)
 
 
-def split_data(all_ohs, all_angs, all_ids):
-    """
-    Given the entire dataset as 3 lists (one-hot sequences, angles, and IDs), this functions splits it into training,
-    validation, and testing sets.
-
-    If the script is run in ProteinNet mode, the script will follow ProteinNet's guidelines for splits.
-    """
-    ohs_ids = list(zip(all_ohs, all_ids))
-    X_train, X_test, y_train, y_test = train_test_split(ohs_ids, all_angs, test_size=0.20, random_state=42)
-    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.20, random_state=42)
-    print("Train, test, validation set sizes:\n" + str(list(map(len, [X_train, X_test, X_val]))))
-    return X_train, X_val, X_test, y_train, y_val, y_test
-
-
 def fetch_pdb_ids(filename):
     """
-    Given a ProteinNet file, loads the query + description and performs a fetch for the relevant PDB IDs.
+    Given a ProteinNet file, loads the query + description and performs a fetch for the relevant
+    PDB IDs.
     """
     pdb_ids = []
     pn_file = os.path.join(args.input_dir, "torch", filename)
@@ -443,7 +455,7 @@ def fetch_pdb_ids(filename):
 def main():
     train_pdb_ids = fetch_pdb_ids(TRAIN_FILE)
     valid_pdb_ids = fetch_pdb_ids("validation.pt")
-    # Because there are several validation sets, we group the IDs by their seq identity for use later
+    # Because there are several validation sets, we group IDs by their seq identity for use later
     valid_pdb_ids_grouped = {k: [] for k in VALID_SPLITS}
     for vid in valid_pdb_ids:
         group = int(vid[:2])
@@ -482,19 +494,21 @@ def main():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Converts a ProteinNet directory of raw records into a dataset for all"
-                                                 "atom protein structure prediction.")
+    parser = argparse.ArgumentParser(
+        description="Converts a ProteinNet directory of raw records into a dataset for all"
+                    "atom protein structure prediction.")
     parser.add_argument('input_dir', type=str, help='Path to ProteinNet raw records directory.')
     parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.tch file)')
-    parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str, help="Path for ProDy-downloaded PDB files.")
+    parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str,
+                        help="Path for ProDy-downloaded PDB files.")
     parser.add_argument("-p", "--pickle", action="store_true",
                         help="Save data as a pickled dictionary instead of a torch-dictionary.")
     args = parser.parse_args()
     VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
     TRAIN_FILE = "training_100.pt"
-    AA_MAP = {'A': 0,  'C': 1,  'D': 2,  'E': 3,
-              'F': 4,  'G': 5,  'H': 6,  'I': 7,
-              'K': 8,  'L': 9,  'M': 10, 'N': 11,
+    AA_MAP = {'A': 0, 'C': 1, 'D': 2, 'E': 3,
+              'F': 4, 'G': 5, 'H': 6, 'I': 7,
+              'K': 8, 'L': 9, 'M': 10, 'N': 11,
               'P': 12, 'Q': 13, 'R': 14, 'S': 15,
               'T': 16, 'V': 17, 'W': 18, 'Y': 19}
     pr.pathPDBFolder(args.pdb_dir)
@@ -511,4 +525,3 @@ if __name__ == "__main__":
         args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + suffix + ".pt"
     ERROR_FILE = open("error.log", "w")
     main()
-
