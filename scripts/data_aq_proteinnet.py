@@ -419,6 +419,7 @@ def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validat
         assert all([l == valid_len for l in map(len, [data["valid"][split][k]
                                                       for k in ["ang", "ids", "mask", "evolutionary","secondary"]])]),\
             "Valid lengths don't match."
+    validate_data(data)
     # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
 
     if args.pickle:
