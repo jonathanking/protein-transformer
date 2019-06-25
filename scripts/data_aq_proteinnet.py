@@ -329,7 +329,7 @@ def unpack_processed_results(results):
             c += 1
         else:
             ERROR_FILE.write(f"{i}, numerical issue\n")
-    print(f"{(c*100)/len(results):.1f}% of chains successfully parsed and downloaded. ({c}/{len(results)})")
+    print(f"{(c*100)/len(results):.1f}% of chains parsed. ({c}/{len(results)})")
     return all_ohs, all_angs, all_ids
 
 
