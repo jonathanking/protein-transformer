@@ -108,8 +108,7 @@ def compute_single_dihedral(atoms):
     Given an iterable of 4 Atoms, uses Prody to calculate the dihedral angle between them in
     radians.
     """
-    # TODO: use numerically safe get_dihedral
-    return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
+    return get_dihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)
 
 
 def get_dihedral(coords1, coords2, coords3, coords4, radian=False):
