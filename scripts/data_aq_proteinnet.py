@@ -1,5 +1,6 @@
 import argparse
 import datetime
+from glob import glob
 import multiprocessing
 import os
 import pickle
@@ -107,6 +108,7 @@ def compute_single_dihedral(atoms):
     Given an iterable of 4 Atoms, uses Prody to calculate the dihedral angle between them in
     radians.
     """
+    # TODO: use numerically safe get_dihedral
     return pr.calcDihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)[0]
 
 
@@ -217,7 +219,6 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
                 NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
 
 
-# get angles from chain
 def get_angles_from_chain(chain):
     """ Given a ProDy Chain object (from a Hierarchical View), return a numpy array of
         angles. Returns None if the PDB should be ignored due to weird artifacts. Also measures
@@ -429,39 +430,108 @@ def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validat
         torch.save(data, args.out_file)
 
 
-def fetch_pdb_ids(filename):
-    """
-    Given a ProteinNet file, loads the query + description and performs a fetch for the relevant
-    PDB IDs.
-    """
-    pdb_ids = []
-    pn_file = os.path.join(args.input_dir, "torch", filename)
-    text_file = pn_file.replace('.pt', '.ids')
-    if os.path.exists(text_file):
-        with open(text_file, "r") as f:
-            for line in f:
-                line = line.strip()
-                pdb_ids.append(line)
-    else:
-        text_file_open = open(text_file, "w")
-        d = torch.load(pn_file)
-        for pnid, data in d.items():
-            pdb_ids.append(pnid)
-            text_file_open.write(f"{pnid}\n")
-        text_file_open.close()
+def read_protein_from_file(file_pointer, include_tertiary=False):
+    """ Modified from github.com/OpenProtein/openprotein:preprocessing.py on June 20, 2019.
+        Original carries an MIT license, Copyright (c) 2018 Jeppe Hallgren. """
+    dict_ = {}
+    _dssp_dict = {'L': 0, 'H': 1, 'B': 2, 'E': 3, 'G': 4, 'I': 5, 'T': 6, 'S': 7}
+    _mask_dict = {'-': 0, '+': 1}
 
-    return pdb_ids
+    while True:
+        next_line = file_pointer.readline()
+        if next_line == '[ID]\n':
+            id_ = file_pointer.readline()[:-1]
+            dict_.update({'id': id_})
+        elif next_line == '[PRIMARY]\n':
+            primary = file_pointer.readline()[:-1]
+            dict_.update({'primary': primary})
+        elif next_line == '[EVOLUTIONARY]\n':
+            evolutionary = []
+            for residue in range(21): evolutionary.append(
+                [float(step) for step in file_pointer.readline().split()])
+            dict_.update({'evolutionary': evolutionary})
+        elif next_line == '[SECONDARY]\n':
+            secondary = list([_dssp_dict[dssp] for dssp in file_pointer.readline()[:-1]])
+            dict_.update({'secondary': secondary})
+        elif next_line == '[TERTIARY]\n' and include_tertiary:
+            tertiary = []
+            # 3 dimension
+            for axis in range(3): tertiary.append(
+                [float(coord) for coord in file_pointer.readline().split()])
+            dict_.update({'tertiary': tertiary})
+        elif next_line == '[MASK]\n':
+            mask = list([_mask_dict[aa] for aa in file_pointer.readline()[:-1]])
+            dict_.update({'mask': mask})
+        elif next_line == '\n':
+            return dict_
+        elif next_line == '':
+            return None
+
+
+def group_validation_set(vset_ids):
+    # Because there are several validation sets, we group IDs by their seq identity for use later
+    valid_ids_grouped = {k: [] for k in VALID_SPLITS}
+    for vid in vset_ids:
+        group = int(vid[:2])
+        valid_ids_grouped[group].append(vid)
+    return valid_ids_grouped
+
+
+def load_ids_from_text_files(directory):
+    with open(os.path.join(directory, "testing_100.ids"), "r") as trainf, \
+            open(os.path.join(directory, "validation.ids"), "r") as validf, \
+            open(os.path.join(directory, "testing.ids"), "r") as testf:
+        train_ids = trainf.read().splitlines()
+        valid_ids = validf.read().splitlines()
+        test_ids = testf.read().splitlines()
+        return train_ids, valid_ids, test_ids
+
+
+def parse_raw_proteinnet():
+    # Test for .pt files existance, return ids and exit if already complete
+    torch_dict_dir = os.path.join(args.input_dir, "torch/")
+    if os.path.exists(os.path.join(torch_dict_dir, "testing_100.pt")):
+        print("Raw ProteinNet files already preprocessed.")
+        train_ids, valid_ids, test_ids = load_ids_from_text_files(torch_dict_dir)
+        return train_ids, valid_ids, test_ids
+
+    train_ids, valid_ids,  test_ids = [], [], []
+    if not os.path.exists(torch_dict_dir):
+        os.mkdir(torch_dict_dir)
+
+    input_files = glob(os.path.join(args.input_dir, "raw/*"))
+    print("Preprocessing raw ProteinNet files...")
+    for input_filename in input_files:
+        print("    " + input_filename)
+        text_file = open(input_filename + '.ids', "w")
+        input_file = open(input_filename, "r")
+        meta_dict = {}
+        while True:
+            next_protein = read_protein_from_file(input_file)
+            if next_protein is None:
+                break
+            id_ = next_protein["id"]
+            del next_protein["id"]
+            meta_dict.update({id_: next_protein})
+            text_file.write(f"{id_}\n")
+            if "training_100" in input_filename:
+                train_ids.append(id_)
+            elif "validation" in input_filename:
+                valid_ids.append(id_)
+            elif "testing" in input_filename:
+                test_ids.append(id_)
+            else:
+                continue
+        torch.save(meta_dict, os.path.join(torch_dict_dir, os.path.basename(input_filename) + ".pt"))
+        input_file.close()
+        text_file.close()
+    print("Done.")
+    return train_ids, valid_ids, test_ids
 
 
 def main():
-    train_pdb_ids = fetch_pdb_ids(TRAIN_FILE)
-    valid_pdb_ids = fetch_pdb_ids("validation.pt")
-    # Because there are several validation sets, we group IDs by their seq identity for use later
-    valid_pdb_ids_grouped = {k: [] for k in VALID_SPLITS}
-    for vid in valid_pdb_ids:
-        group = int(vid[:2])
-        valid_pdb_ids_grouped[group].append(vid)
-    test_casp_ids = fetch_pdb_ids("testing.pt")
+    train_pdb_ids, valid_ids, test_casp_ids = parse_raw_proteinnet()
+    valid_ids_grouped = group_validation_set(valid_ids)
     print("IDs fetched.")
 
     # Download and preprocess all data from PDB IDs
@@ -469,10 +539,10 @@ def main():
         train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids), total=len(train_pdb_ids)))
 
     valid_result_meta = {}
-    for group, vids in valid_pdb_ids_grouped.items():
+    for split, vids in valid_ids_grouped.items():
         with Pool(multiprocessing.cpu_count()) as p:
             valid_results = list(tqdm.tqdm(p.imap(work, vids), total=len(vids)))
-        valid_result_meta[group] = valid_results
+        valid_result_meta[split] = valid_results
 
     with Pool(multiprocessing.cpu_count()) as p:
         test_results = list(tqdm.tqdm(p.imap(work_test, test_casp_ids), total=len(test_casp_ids)))
