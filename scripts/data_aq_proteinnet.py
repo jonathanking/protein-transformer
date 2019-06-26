@@ -321,11 +321,8 @@ def work_test(category_caspid):
 
 def additional_checks(matrix):
     """ Returns true if a matrix contains NaNs, infs, or all 0s."""
-    zeros = not np.any(matrix)
-    if not np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and not zeros:
-        return True
-    else:
-        return False
+    return np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and np.any(matrix)
+
 
 
 def unpack_processed_results(results):
