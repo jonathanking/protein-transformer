@@ -475,7 +475,7 @@ def group_validation_set(vset_ids):
 
 
 def load_ids_from_text_files(directory):
-    with open(os.path.join(directory, "testing_100.ids"), "r") as trainf, \
+    with open(os.path.join(directory, "training_100.ids"), "r") as trainf, \
             open(os.path.join(directory, "validation.ids"), "r") as validf, \
             open(os.path.join(directory, "testing.ids"), "r") as testf:
         train_ids = trainf.read().splitlines()
@@ -487,16 +487,16 @@ def load_ids_from_text_files(directory):
 def parse_raw_proteinnet():
     # Test for .pt files existance, return ids and exit if already complete
     torch_dict_dir = os.path.join(args.input_dir, "torch/")
-    if os.path.exists(os.path.join(torch_dict_dir, "testing_100.pt")):
+    if os.path.exists(os.path.join(torch_dict_dir, "training_100.pt")):
         print("Raw ProteinNet files already preprocessed.")
-        train_ids, valid_ids, test_ids = load_ids_from_text_files(torch_dict_dir)
+        train_ids, valid_ids, test_ids = load_ids_from_text_files(torch_dict_dir.replace("/torch", "/raw"))
         return train_ids, valid_ids, test_ids
 
     train_ids, valid_ids,  test_ids = [], [], []
     if not os.path.exists(torch_dict_dir):
         os.mkdir(torch_dict_dir)
 
-    input_files = glob(os.path.join(args.input_dir, "raw/*"))
+    input_files = glob(os.path.join(args.input_dir, "raw/*[!.ids]"))
     print("Preprocessing raw ProteinNet files...")
     for input_filename in input_files:
         print("    " + input_filename)
