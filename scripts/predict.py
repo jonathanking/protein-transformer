@@ -5,7 +5,7 @@ import argparse
 import os
 import sys
 
-sys.path.append("/home/jok120/sml/proj/attention-is-all-you-need-pytorch/")
+sys.path.append("/home/jok120/protein-transformer/")
 
 import torch
 from tqdm import tqdm
