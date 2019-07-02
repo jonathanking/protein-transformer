@@ -1,4 +1,6 @@
 ''' Define the Transformer model '''
+import os.path as path
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,10 +10,12 @@ from protein.Sidechains import NUM_PREDICTED_ANGLES
 
 __author__ = "Yu-Hsiang Huang"
 
+
 def get_non_pad_mask(seq):
     assert seq.dim() == 3
     # return seq.ne(Constants.PAD).type(torch.float).unsqueeze(-1)
     return (seq != 0).any(dim=-1).type(torch.float).unsqueeze(-1)
+
 
 def get_sinusoid_encoding_table(n_position, d_hid, padding_idx=None):
     ''' Sinusoid position encoding table '''
@@ -33,6 +37,7 @@ def get_sinusoid_encoding_table(n_position, d_hid, padding_idx=None):
 
     return torch.FloatTensor(sinusoid_table)
 
+
 def get_attn_key_pad_mask(seq_k, seq_q):
     ''' For masking out the padding part of key sequence. '''
 
@@ -43,6 +48,7 @@ def get_attn_key_pad_mask(seq_k, seq_q):
     padding_mask = padding_mask.unsqueeze(1).expand(-1, len_q, -1)  # b x lq x lk
 
     return padding_mask
+
 
 def get_subsequent_mask(seq):
     ''' For masking out the subsequent info. '''
@@ -99,6 +105,7 @@ class Encoder(nn.Module):
             return enc_output, enc_slf_attn_list
         return enc_output,
 
+
 class Decoder(nn.Module):
     ''' A decoder model with self attention mechanism. '''
 
@@ -150,13 +157,13 @@ class Decoder(nn.Module):
             return dec_output, dec_slf_attn_list, dec_enc_attn_list
         return dec_output,
 
+
 class Transformer(nn.Module):
     ''' A sequence to sequence model with attention mechanism. '''
 
-    def __init__(
-            self, len_max_seq, d_angle=NUM_PREDICTED_ANGLES * 2,
-            d_word_vec=20, d_model=512, d_inner=2048,
-            n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1):
+    def __init__(self, data_path, len_max_seq, d_angle=NUM_PREDICTED_ANGLES * 2, d_word_vec=20, d_model=512,
+                 d_inner=2048,
+                 n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1):
 
         super().__init__()
 
@@ -173,22 +180,37 @@ class Transformer(nn.Module):
             dropout=dropout)
 
         self.input_embedding = nn.Linear(d_word_vec, d_model)  # nn.Embedding(d_word_vec, d_angle)
-        self.tgt_angle_prj = nn.Linear(d_model, d_angle, bias=False)
+        self.tgt_angle_prj = nn.Linear(d_model, d_angle)
         self.tgt_embedding = nn.Linear(d_angle, d_model)
         nn.init.xavier_normal_(self.tgt_angle_prj.weight)
         nn.init.xavier_normal_(self.input_embedding.weight)
         nn.init.xavier_normal_(self.tgt_embedding.weight)
 
-        self.x_logit_scale = 1.
+        # Initialize output linear layer bias with angle means
+        self.tgt_angle_prj.bias = nn.Parameter(torch.FloatTensor(self.load_angle_means(data_path)))
+
         self.tanh = nn.Tanh()
 
+    def load_angle_means(self, data_path):
+        """
+        Loads the average angle vector in order to initialize the bias out the output layer. This allows the model to
+        begin predicting the average angle vectors and must only learn to predict the difference.
+        """
+        data, ext = path.splitext(data_path)
+        angle_mean_path = data + "_mean.npy"
+        if not path.exists(angle_mean_path):
+            angle_mean_path_new = "data/data_190602_query4_mean.npy"
+            print(f"Unable to find {angle_mean_path}. Loading from {angle_mean_path_new} instead.")
+            angle_mean_path = angle_mean_path_new
+        angle_means = np.load(angle_mean_path)
+        return angle_means
 
     def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):
         src_seq = self.input_embedding(src_seq)
         tgt_seq = self.tgt_embedding(tgt_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
         dec_output, *_ = self.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
-        angles = self.tgt_angle_prj(dec_output) * self.x_logit_scale
+        angles = self.tgt_angle_prj(dec_output)
         angles = self.tanh(angles)
         return angles
 

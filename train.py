@@ -28,7 +28,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     loss = ""
     training_losses = []
     if not opt.cluster:
-        pbar = tqdm(training_data, mininterval=2, desc='  - (Training) Loss = {0}   '.format(loss), leave=False)
+        pbar = tqdm(training_data, mininterval=2, desc='  - (Train) Loss = {0}   '.format(loss), leave=False)
     else:
         pbar = training_data
 
@@ -64,13 +64,12 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         total_mse_loss += m_loss.item()
         n_batches += 1
         if not opt.cluster and len(training_losses) > 32:
-            pbar.set_description('  - (Training) drmsd = {0:.6f}, rmse = {3:.6f}, 32avg = {1:.6f}, comb = {4:.6f}, LR = {2:.7f}'.format(
-                float(d_loss), np.mean(training_losses[-32:]), cur_lr, np.sqrt(float(m_loss)), float(c_loss)))
+            pbar.set_description('  - (Train) drmsd = {0:.6f}, rmse = {3:.6f}, 32avg = {1:.6f}, comb = {4:.6f}, '
+                                 'LR = {2:.7f}'.format(float(d_loss), np.mean(training_losses[-32:]), cur_lr,
+                                                       np.sqrt(float(m_loss)), float(c_loss)))
         elif not opt.cluster:
-            pbar.set_description('  - (Training) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}, LR = {1:.7f}'.format(float(d_loss),
-                                                                                                       cur_lr,
-                                                                                                       np.sqrt(float(
-                                                                                                           m_loss)), float(c_loss)))
+            pbar.set_description('  - (Train) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}, LR = {1:.7f}'.format(
+                float(d_loss), cur_lr, np.sqrt(float(m_loss)), float(c_loss)))
         if opt.cluster and len(training_losses) > 32:
             print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
                 float(loss), np.mean(training_losses[-32:]), cur_lr))
@@ -131,7 +130,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
 
         start = time.time()
         if epoch_i != 0:
-            train_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
+            _, _ = train_epoch(model, training_data, optimizer, device, opt, log_writer)
         train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model, training_data,
                                                                                         device, opt)
         train_combined_losses.append(train_comb_loss)
@@ -140,7 +139,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
             cur_lr = optimizer.cur_lr
         else:
             cur_lr = 0
-        print('  - (Training)   drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
+        print('  - (Train)   drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
               'elapse: {elapse:3.3f} min, lr: {lr: {lr_precision}} '.format(d=train_drmsd_loss,
                                                                             m=np.sqrt(train_mse_loss),
                                                                             elapse=(time.time() - start) / 60,
@@ -272,51 +271,51 @@ def main():
     parser.add_argument('--cluster', action='store_true', help="Set of parameters to facilitate training on a remote" +
                                                                " cluster. Limited I/O, etc.")
 
-    opt = parser.parse_args()
-    opt.cuda = not opt.no_cuda
-    opt.d_word_vec = opt.d_model
-    opt.buffering_mode = None if opt.cluster else 1
-    LOGFILEHEADER = prepare_log_header(opt)
+    args = parser.parse_args()
+    args.cuda = not args.no_cuda
+    args.d_word_vec = args.d_model
+    args.buffering_mode = None if args.cluster else 1
+    LOGFILEHEADER = prepare_log_header(args)
 
     # ========= Loading Dataset ========= #
-    data = torch.load(opt.data)
-    opt.max_token_seq_len = data['settings']["max_len"]
+    data = torch.load(args.data)
+    args.max_token_seq_len = data['settings']["max_len"]
 
-    training_data, validation_data, test_data = prepare_dataloaders(data, opt)
+    training_data, validation_data, test_data = prepare_dataloaders(data, args)
 
     # ========= Preparing Log and Checkpoint Files ========= #
     
-    if not opt.log:
-        opt.log_file = "./logs/" + opt.name + '.train'
+    if not args.log:
+        args.log_file = "./logs/" + args.name + '.train'
     else:
-        opt.log_file = "./logs/" + opt.log + '.train'
-    print(opt, "\n")
-    print('[Info] Training performance will be written to file: {}'.format(opt.log_file))
-    os.makedirs(os.path.dirname(opt.log_file), exist_ok=True)
-    log_f = open(opt.log_file, 'w', buffering=opt.buffering_mode)
+        args.log_file = "./logs/" + args.log + '.train'
+    print(args, "\n")
+    print('[Info] Training performance will be written to file: {}'.format(args.log_file))
+    os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
+    log_f = open(args.log_file, 'w', buffering=args.buffering_mode)
     log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
-    opt.chkpt_path = "./checkpoints/" + opt.name
+    args.chkpt_path = "./checkpoints/" + args.name
     os.makedirs("./checkpoints", exist_ok=True)
 
     # ========= Preparing Model ========= #
 
-    device = torch.device('cuda' if opt.cuda else 'cpu')
-    transformer = Transformer(
-        opt.max_token_seq_len,
-        d_k=opt.d_k,
-        d_v=opt.d_v,
-        d_model=opt.d_model,
-        d_inner=opt.d_inner_hid,
-        n_layers=opt.n_layers,
-        n_head=opt.n_head,
-        dropout=opt.dropout).to(device)
+    device = torch.device('cuda' if args.cuda else 'cpu')
+    transformer = Transformer(args.data,
+                              args.max_token_seq_len,
+                              d_k=args.d_k,
+                              d_v=args.d_v,
+                              d_model=args.d_model,
+                              d_inner=args.d_inner_hid,
+                              n_layers=args.n_layers,
+                              n_head=args.n_head,
+                              dropout=args.dropout).to(device)
     optimizer = optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
-                           betas=(0.9, 0.98), eps=1e-09, lr=opt.learning_rate)
-    if opt.lr_scheduling:
-        optimizer = ScheduledOptim(optimizer, opt.d_model, opt.n_warmup_steps, simple=False)
+                           betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
+    if args.lr_scheduling:
+        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
 
-    train(transformer, training_data, validation_data, test_data, optimizer, device, opt, log_writer)
+    train(transformer, training_data, validation_data, test_data, optimizer, device, args, log_writer)
     log_f.close()
     # TODO: Add test data evaluation
 
