@@ -6,7 +6,6 @@ coords/*
 preds/*
 *.pdb
 *.tch
-*.npy
 console.txt
 *.o*-*
 
