@@ -187,7 +187,8 @@ class Transformer(nn.Module):
         nn.init.xavier_normal_(self.tgt_embedding.weight)
 
         # Initialize output linear layer bias with angle means
-        self.tgt_angle_prj.bias = nn.Parameter(torch.FloatTensor(self.load_angle_means(data_path)))
+        self.tgt_angle_prj.bias = nn.Parameter(torch.FloatTensor(np.arctanh(self.load_angle_means(data_path))))
+        nn.init.zeros_(self.tgt_angle_prj.weight)
 
         self.tanh = nn.Tanh()
 

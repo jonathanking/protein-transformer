@@ -34,7 +34,8 @@ def load_model(args):
     if args.data is None:
         args.data = model_args.data
 
-    the_model = transformer.Models.Transformer(model_args.max_token_seq_len,
+    the_model = transformer.Models.Transformer(model_args.data,
+                                               model_args.max_token_seq_len,
                                                d_k=model_args.d_k,
                                                d_v=model_args.d_v,
                                                d_model=model_args.d_model,
