@@ -1,11 +1,6 @@
 from protein.Sidechains import SC_DATA
 
 
-
-
-
-
-
 class AminoAcid(object):
     """ A class to represent an amino acid sidechain. Its main utility is in constructing sidechains
         during structure prediction by aligning planar atoms to already predicted atoms."""

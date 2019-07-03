@@ -324,6 +324,22 @@ def additional_checks(matrix):
     return not np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and np.any(matrix)
 
 
+def zero_runs(arr):
+    """
+    Returns indices of zero-runs.
+    Taken from https://stackoverflow.com/questions/24885092/finding-the-consecutive-zeros-in-a-numpy-array.
+    >>> import numpy as np
+    >>> zero_runs(np.array([0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0]))
+    array([[0, 4],
+          [11, 13]])
+    """
+    # Create an array that is 1 where a is 0, and pad each end with an extra 0.
+    iszero = np.concatenate(([0], np.equal(arr, 0).view(np.int8), [0]))
+    absdiff = np.abs(np.diff(iszero))
+    # Runs start and end where absdiff is 1.
+    ranges = np.where(absdiff == 1)[0].reshape(-1, 2)
+    return ranges
+
 
 def unpack_processed_results(results):
     """
@@ -340,6 +356,17 @@ def unpack_processed_results(results):
             # PDB failed to download
             continue
         ang, seq, i = r
+        # PN_seq = compare_dict[i]["primary"]
+        # PN_mask = compare_dict[i]["mask"]
+        # if len(seq) != len(PN_seq):
+        #     z = zero_runs(np.asarray(PN_mask))
+        #     if z[1, 1] == len(seq):
+        #         seq = seq[:z[1, 0]]  # trim end
+        #     if z[0, 0] == 0:
+        #         seq = seq[z[0, 1]:]
+        #     assert len(seq == len(PN_seq))
+
+
         oh = seq_to_onehot(seq)
         if additional_checks(oh) and additional_checks(ang):
             all_ohs.append(oh)
@@ -368,7 +395,7 @@ def validate_data(data):
                                              "secondary"]])]), "Test lengths don't match."
 
 
-def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validation_data):
+def create_data_dict(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validation_data):
     """
     Given split data along with the query information that generated it, this function saves the
     data as a Python dictionary, which is then saved to disk using torch.save.
@@ -378,8 +405,6 @@ def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validat
     test_proteinnet_dict = torch.load(os.path.join(args.input_dir, "torch", "testing.pt"))
 
     # Create a dictionary data structure, using the sin/cos transformed angles
-    date = datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
-
     data = {"train": {"seq": x_train,
                       "ang": angle_list_to_sin_cos(y_train),
                       "ids": train_ids,
@@ -399,9 +424,10 @@ def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validat
                                    if "secondary" in test_proteinnet_dict[_id].keys()
                                    else None
                                    for _id in test_ids]},
-            "settings": {"max_len": max(map(len, x_train + x_test))},
+             "settings": {"max_len": max(map(len, x_train + x_test))},
             "description": {f"ProteinNet {CASP_VERSION.upper()}"},
-            "date": {date}}
+            # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
+            "date": {datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")}}
     for split, (x_val, y_val, ids_val) in all_validation_data.items():
         data["valid"][split]["seq"] = x_val
         data["valid"][split]["ang"] = y_val
@@ -418,18 +444,14 @@ def save_data(x_train, x_test, y_train, y_test, train_ids, test_ids, all_validat
                                                       for k in ["ang", "ids", "mask", "evolutionary","secondary"]])]),\
             "Valid lengths don't match."
     validate_data(data)
-    # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
-
-    if args.pickle:
-        with open(args.out_file, "wb") as f:
-            pickle.dump(data, f)
-    else:
-        torch.save(data, args.out_file)
+    return data
 
 
 def read_protein_from_file(file_pointer, include_tertiary=False):
-    """ Modified from github.com/OpenProtein/openprotein:preprocessing.py on June 20, 2019.
-        Original carries an MIT license, Copyright (c) 2018 Jeppe Hallgren. """
+    """
+    Modified from github.com/OpenProtein/openprotein:preprocessing.py on June 20, 2019.
+    Original carries an MIT license. Copyright (c) 2018 Jeppe Hallgren.
+    """
     dict_ = {}
     _dssp_dict = {'L': 0, 'H': 1, 'B': 2, 'E': 3, 'G': 4, 'I': 5, 'T': 6, 'S': 7}
     _mask_dict = {'-': 0, '+': 1}
@@ -542,17 +564,53 @@ def parse_raw_proteinnet():
     return train_ids, valid_ids, test_ids
 
 
+def save_data_dict(data):
+    if not args.out_file and args.pickle:
+        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + suffix + ".pkl"
+    elif not args.out_file and not args.pickle:
+        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + suffix + ".pt"
+    if args.pickle:
+        with open(args.out_file, "wb") as f:
+            pickle.dump(data, f)
+    else:
+        torch.save(data, args.out_file)
+    print(f"Data saved to {args.out_file}.")
+
+
+def post_process_data(data):
+    # For masked sequences, first remove missing residues at the start and end of the sequence.
+    # Then, assert that the sequence matches the one aquired from the PDB
+    for dset in [data["train"], data["test"]] + [data["valid"][split] for split in VALID_SPLITS]:
+        pdb_seqs = dset["seq"]
+        pn_seqs = dset["primary"]
+        masks = dset["masks"]
+        bad_ids = []
+        for i, (pdb_s, pn_s, m) in enumerate(zip(pdb_seqs, pn_seqs, masks)):
+            z = zero_runs(np.asarray(m))
+            if z[1, 1] == len(pn_s):
+                pn_s = pn_s[:z[1, 0]]  # trim end
+                m = m[:z[1, 0]]
+            if z[0, 0] == 0:
+                pn_s = pn_s[z[0, 1]:]  # trim start
+                m = m[z[0, 1]:]
+            if len(pdb_s) != len(pn_s): # "After triming, the PN Seq and PDB seq should be the same lenght."
+                bad_ids.append(0)
+
+
+    return data
+
+
+
 def main():
     train_pdb_ids, valid_ids, test_casp_ids = parse_raw_proteinnet()
-    valid_ids_grouped = group_validation_set(valid_ids)
     print("IDs fetched.")
 
     # Download and preprocess all data from PDB IDs
     with Pool(multiprocessing.cpu_count()) as p:
-        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids), total=len(train_pdb_ids)))
+        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:200]), total=len(train_pdb_ids[:40])))
 
     valid_result_meta = {}
-    for split, vids in valid_ids_grouped.items():
+    for split, vids in group_validation_set(valid_ids).items():
         with Pool(multiprocessing.cpu_count()) as p:
             valid_results = list(tqdm.tqdm(p.imap(work, vids), total=len(vids)))
         valid_result_meta[split] = valid_results
@@ -560,7 +618,7 @@ def main():
     with Pool(multiprocessing.cpu_count()) as p:
         test_results = list(tqdm.tqdm(p.imap(work_test, test_casp_ids), total=len(test_casp_ids)))
 
-    print("IDs processed.")
+    print("Structures processed.")
 
     # Unpack results
     print("Training set:\t", end="")
@@ -570,11 +628,24 @@ def main():
         valid_result_meta[group] = unpack_processed_results(results)
     print("Test set:\t\t", end="")
     test_ohs, test_angs, test_ids = unpack_processed_results(test_results)
+    # train_ohs, train_angs, train_ids = unpack_processed_results(train_results, torch.load(os.path.join(args.input_dir,
+    #                                                                                       "torch",
+    #                                                                                       "training_100.pt.")))
+    # for group, results in valid_result_meta.items():
+    #     print(f"Valid set {group}%:\t", end="")
+    #     valid_result_meta[group] = unpack_processed_results(results, torch.load(os.path.join(args.input_dir, "torch",
+    #                                                                             "validation.pt.")))
+    #     print("Test set:\t\t", end="")
+    # test_ohs, test_angs, test_ids = unpack_processed_results(test_results, torch.load(os.path.join(args.input_dir,
+    #                                                                                   "torch",
+    #                                                                                   "testing.pt.")))
     ERROR_FILE.close()
 
     # Split into train, test and validation sets. Report sizes.
-    save_data(train_ohs, test_ohs, train_angs, test_angs, train_ids, test_ids, valid_result_meta)
-    print(f"Data saved to {args.out_file}.")
+    data = create_data_dict(train_ohs, test_ohs, train_angs, test_angs, train_ids, test_ids, valid_result_meta)
+    data = post_process_data(data)
+    save_data_dict(data)
+
 
 
 if __name__ == "__main__":
@@ -600,12 +671,8 @@ if __name__ == "__main__":
     np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
     today = datetime.datetime.today()
     suffix = today.strftime("%y%m%d")
-    m = re.search(r"casp\d+", args.input_dir, re.IGNORECASE)
-    assert m, "The input_dir is not titled with 'caspX'."
-    CASP_VERSION = m.group(0)
-    if not args.out_file and args.pickle:
-        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + suffix + ".pkl"
-    elif not args.out_file and not args.pickle:
-        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + suffix + ".pt"
+    match = re.search(r"casp\d+", args.input_dir, re.IGNORECASE)
+    assert match, "The input_dir is not titled with 'caspX'."
+    CASP_VERSION = match.group(0)
     ERROR_FILE = open("error.log", "w")
     main()
