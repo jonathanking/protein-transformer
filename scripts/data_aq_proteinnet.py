@@ -320,8 +320,8 @@ def work_test(category_caspid):
 
 
 def additional_checks(matrix):
-    """ Returns true if a matrix contains NaNs, infs, or all 0s."""
-    return np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and np.any(matrix)
+    """ Returns true if a matrix does not contain NaNs, infs, or all 0s."""
+    return not np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and np.any(matrix)
 
 
 
@@ -466,6 +466,13 @@ def read_protein_from_file(file_pointer, include_tertiary=False):
 
 
 def group_validation_set(vset_ids):
+    """
+    Given a list of validation set ids, (i.e. 70#1A9U_1_A), this returns a dictionary that maps each split
+    to the list of PDBS in that split.
+    >>> vids = ["70#1A9U_1_A", "30#1Z3F_1_B"]
+    >>> group_validation_set(vids)
+    {70: "70#1A9U_1_A", 30:"30#1Z3F_1_B"}
+    """
     # Because there are several validation sets, we group IDs by their seq identity for use later
     valid_ids_grouped = {k: [] for k in VALID_SPLITS}
     for vid in vset_ids:
@@ -475,6 +482,11 @@ def group_validation_set(vset_ids):
 
 
 def load_ids_from_text_files(directory):
+    """
+    Given a directory where raw ProteinNet records are stored along with .ids files, reads and returns the
+    contents of those files. Effectively returns a list of IDs associated with the training, validation,
+    and test sets.
+    """
     with open(os.path.join(directory, "training_100.ids"), "r") as trainf, \
             open(os.path.join(directory, "validation.ids"), "r") as validf, \
             open(os.path.join(directory, "testing.ids"), "r") as testf:
@@ -485,6 +497,10 @@ def load_ids_from_text_files(directory):
 
 
 def parse_raw_proteinnet():
+    """
+    Preprocesses raw ProteinNet records by reading them and transforming them
+    into a Pytorch-saved dictionary. It excludes the tertiary information as
+    this will """
     # Test for .pt files existance, return ids and exit if already complete
     torch_dict_dir = os.path.join(args.input_dir, "torch/")
     if os.path.exists(os.path.join(torch_dict_dir, "training_100.pt")):
