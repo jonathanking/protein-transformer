@@ -356,17 +356,6 @@ def unpack_processed_results(results):
             # PDB failed to download
             continue
         ang, seq, i = r
-        # PN_seq = compare_dict[i]["primary"]
-        # PN_mask = compare_dict[i]["mask"]
-        # if len(seq) != len(PN_seq):
-        #     z = zero_runs(np.asarray(PN_mask))
-        #     if z[1, 1] == len(seq):
-        #         seq = seq[:z[1, 0]]  # trim end
-        #     if z[0, 0] == 0:
-        #         seq = seq[z[0, 1]:]
-        #     assert len(seq == len(PN_seq))
-
-
         oh = seq_to_onehot(seq)
         if additional_checks(oh) and additional_checks(ang):
             all_ohs.append(oh)
@@ -430,7 +419,7 @@ def create_data_dict(x_train, x_test, y_train, y_test, train_ids, test_ids, all_
             "date": {datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")}}
     for split, (x_val, y_val, ids_val) in all_validation_data.items():
         data["valid"][split]["seq"] = x_val
-        data["valid"][split]["ang"] = y_val
+        data["valid"][split]["ang"] = angle_list_to_sin_cos(y_val)
         data["valid"][split]["ids"] = ids_val
         data["valid"][split]["mask"] = [np.asarray(valid_proteinnet_dict[_id]["mask"]) for _id in ids_val]
         data["valid"][split]["evolutionary"] = [np.asarray(valid_proteinnet_dict[_id]["evolutionary"]) for _id in ids_val]
@@ -445,6 +434,37 @@ def create_data_dict(x_train, x_test, y_train, y_test, train_ids, test_ids, all_
             "Valid lengths don't match."
     validate_data(data)
     return data
+
+
+def group_validation_set(vset_ids):
+    """
+    Given a list of validation set ids, (i.e. 70#1A9U_1_A), this returns a dictionary that maps each split
+    to the list of PDBS in that split.
+    >>> vids = ["70#1A9U_1_A", "30#1Z3F_1_B"]
+    >>> group_validation_set(vids)
+    {70: "70#1A9U_1_A", 30:"30#1Z3F_1_B"}
+    """
+    # Because there are several validation sets, we group IDs by their seq identity for use later
+    valid_ids_grouped = {k: [] for k in VALID_SPLITS}
+    for vid in vset_ids:
+        group = int(vid[:2])
+        valid_ids_grouped[group].append(vid)
+    return valid_ids_grouped
+
+
+def load_ids_from_text_files(directory):
+    """
+    Given a directory where raw ProteinNet records are stored along with .ids files, reads and returns the
+    contents of those files. Effectively returns a list of IDs associated with the training, validation,
+    and test sets.
+    """
+    with open(os.path.join(directory, "training_100.ids"), "r") as trainf, \
+            open(os.path.join(directory, "validation.ids"), "r") as validf, \
+            open(os.path.join(directory, "testing.ids"), "r") as testf:
+        train_ids = trainf.read().splitlines()
+        valid_ids = validf.read().splitlines()
+        test_ids = testf.read().splitlines()
+        return train_ids, valid_ids, test_ids
 
 
 def read_protein_from_file(file_pointer, include_tertiary=False):
@@ -487,42 +507,12 @@ def read_protein_from_file(file_pointer, include_tertiary=False):
             return None
 
 
-def group_validation_set(vset_ids):
-    """
-    Given a list of validation set ids, (i.e. 70#1A9U_1_A), this returns a dictionary that maps each split
-    to the list of PDBS in that split.
-    >>> vids = ["70#1A9U_1_A", "30#1Z3F_1_B"]
-    >>> group_validation_set(vids)
-    {70: "70#1A9U_1_A", 30:"30#1Z3F_1_B"}
-    """
-    # Because there are several validation sets, we group IDs by their seq identity for use later
-    valid_ids_grouped = {k: [] for k in VALID_SPLITS}
-    for vid in vset_ids:
-        group = int(vid[:2])
-        valid_ids_grouped[group].append(vid)
-    return valid_ids_grouped
-
-
-def load_ids_from_text_files(directory):
-    """
-    Given a directory where raw ProteinNet records are stored along with .ids files, reads and returns the
-    contents of those files. Effectively returns a list of IDs associated with the training, validation,
-    and test sets.
-    """
-    with open(os.path.join(directory, "training_100.ids"), "r") as trainf, \
-            open(os.path.join(directory, "validation.ids"), "r") as validf, \
-            open(os.path.join(directory, "testing.ids"), "r") as testf:
-        train_ids = trainf.read().splitlines()
-        valid_ids = validf.read().splitlines()
-        test_ids = testf.read().splitlines()
-        return train_ids, valid_ids, test_ids
-
-
 def parse_raw_proteinnet():
     """
     Preprocesses raw ProteinNet records by reading them and transforming them
     into a Pytorch-saved dictionary. It excludes the tertiary information as
-    this will """
+    this will acquired from the PDB.
+    """
     # Test for .pt files existance, return ids and exit if already complete
     torch_dict_dir = os.path.join(args.input_dir, "torch/")
     if os.path.exists(os.path.join(torch_dict_dir, "training_100.pt")):
@@ -542,7 +532,7 @@ def parse_raw_proteinnet():
         input_file = open(input_filename, "r")
         meta_dict = {}
         while True:
-            next_protein = read_protein_from_file(input_file)
+            next_protein = read_protein_from_file(input_file, include_tertiary=False)
             if next_protein is None:
                 break
             id_ = next_protein["id"]
@@ -587,18 +577,16 @@ def post_process_data(data):
         bad_ids = []
         for i, (pdb_s, pn_s, m) in enumerate(zip(pdb_seqs, pn_seqs, masks)):
             z = zero_runs(np.asarray(m))
-            if z[1, 1] == len(pn_s):
-                pn_s = pn_s[:z[1, 0]]  # trim end
-                m = m[:z[1, 0]]
+            if z[-1, -1] == len(pn_s):
+                pn_s = pn_s[:z[-1, 0]]  # trim end
+                m = m[:z[-1, 0]]
             if z[0, 0] == 0:
                 pn_s = pn_s[z[0, 1]:]  # trim start
                 m = m[z[0, 1]:]
             if len(pdb_s) != len(pn_s): # "After triming, the PN Seq and PDB seq should be the same lenght."
                 bad_ids.append(0)
 
-
     return data
-
 
 
 def main():
@@ -606,8 +594,9 @@ def main():
     print("IDs fetched.")
 
     # Download and preprocess all data from PDB IDs
+    lim = 16
     with Pool(multiprocessing.cpu_count()) as p:
-        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:200]), total=len(train_pdb_ids[:40])))
+        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim])))
 
     valid_result_meta = {}
     for split, vids in group_validation_set(valid_ids).items():
@@ -617,35 +606,23 @@ def main():
 
     with Pool(multiprocessing.cpu_count()) as p:
         test_results = list(tqdm.tqdm(p.imap(work_test, test_casp_ids), total=len(test_casp_ids)))
-
     print("Structures processed.")
 
     # Unpack results
     print("Training set:\t", end="")
     train_ohs, train_angs, train_ids = unpack_processed_results(train_results)
-    for group, results in valid_result_meta.items():
-        print(f"Valid set {group}%:\t", end="")
-        valid_result_meta[group] = unpack_processed_results(results)
+    for split, results in valid_result_meta.items():
+        print(f"Valid set {split}%:\t", end="")
+        valid_result_meta[split] = unpack_processed_results(results)
     print("Test set:\t\t", end="")
     test_ohs, test_angs, test_ids = unpack_processed_results(test_results)
-    # train_ohs, train_angs, train_ids = unpack_processed_results(train_results, torch.load(os.path.join(args.input_dir,
-    #                                                                                       "torch",
-    #                                                                                       "training_100.pt.")))
-    # for group, results in valid_result_meta.items():
-    #     print(f"Valid set {group}%:\t", end="")
-    #     valid_result_meta[group] = unpack_processed_results(results, torch.load(os.path.join(args.input_dir, "torch",
-    #                                                                             "validation.pt.")))
-    #     print("Test set:\t\t", end="")
-    # test_ohs, test_angs, test_ids = unpack_processed_results(test_results, torch.load(os.path.join(args.input_dir,
-    #                                                                                   "torch",
-    #                                                                                   "testing.pt.")))
+
     ERROR_FILE.close()
 
     # Split into train, test and validation sets. Report sizes.
     data = create_data_dict(train_ohs, test_ohs, train_angs, test_angs, train_ids, test_ids, valid_result_meta)
-    data = post_process_data(data)
+    # data = post_process_data(data)
     save_data_dict(data)
-
 
 
 if __name__ == "__main__":
