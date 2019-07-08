@@ -161,12 +161,13 @@ class Decoder(nn.Module):
 class Transformer(nn.Module):
     ''' A sequence to sequence model with attention mechanism. '''
 
-    def __init__(self, data_path, len_max_seq, d_angle=NUM_PREDICTED_ANGLES * 2, d_word_vec=20, d_model=512,
+    def __init__(self, args, d_angle=NUM_PREDICTED_ANGLES * 2,
+                 d_word_vec=20, d_model=512,
                  d_inner=2048,
                  n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1):
 
         super().__init__()
-
+        init_w_angle_means, data_path, len_max_seq = not args.without_angle_means, args.data, args.max_token_seq_len
         self.encoder = Encoder(
             len_max_seq=len_max_seq,
             d_word_vec=d_word_vec, d_model=d_model, d_inner=d_inner,
@@ -187,8 +188,9 @@ class Transformer(nn.Module):
         nn.init.xavier_normal_(self.tgt_embedding.weight)
 
         # Initialize output linear layer bias with angle means
-        self.tgt_angle_prj.bias = nn.Parameter(torch.FloatTensor(np.arctanh(self.load_angle_means(data_path))))
-        nn.init.zeros_(self.tgt_angle_prj.weight)
+        if init_w_angle_means:
+            self.tgt_angle_prj.bias = nn.Parameter(torch.FloatTensor(np.arctanh(self.load_angle_means(data_path))))
+            nn.init.zeros_(self.tgt_angle_prj.weight)
 
         self.tanh = nn.Tanh()
 

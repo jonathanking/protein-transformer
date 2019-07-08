@@ -253,6 +253,8 @@ def main():
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
     parser.add_argument('--lr_scheduling', action='store_true', help='Use learning rate scheduling as described in" + '
                                                                      '"original paper.')
+    parser.add_argument('--without_angle_means', action='store_true',
+                        help="Do not initialize the model with pre-computed angle means.")
 
     # Model parameters
     parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
@@ -301,8 +303,7 @@ def main():
     # ========= Preparing Model ========= #
 
     device = torch.device('cuda' if args.cuda else 'cpu')
-    transformer = Transformer(args.data,
-                              args.max_token_seq_len,
+    transformer = Transformer(args,
                               d_k=args.d_k,
                               d_v=args.d_v,
                               d_model=args.d_model,
