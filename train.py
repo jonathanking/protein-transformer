@@ -146,7 +146,8 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
                                                                             lr=cur_lr, rmsd=train_rmsd_loss,
                                                                             comb=train_comb_loss,
                                                                             lr_precision="5.2e"
-                                                                            if (cur_lr < .001 and cur_lr != 0) else "5.3f"))
+                                                                            if (cur_lr < .001 and cur_lr != 0) else
+                                                                            "5.3f"))
 
         if not opt.train_only:
             start = time.time()
@@ -333,10 +334,11 @@ def prepare_dataloaders(data, opt):
         collate_fn=paired_collate_fn,
         shuffle=True)
 
+    # TODO: load one or multiple validation sets
     valid_loader = torch.utils.data.DataLoader(
         ProteinDataset(
-            seqs=data['valid']['seq'],
-            angs=data['valid']['ang']),
+            seqs=data['valid'][70]['seq'],
+            angs=data['valid'][70]['ang']),
         num_workers=2,
         batch_size=opt.batch_size,
         collate_fn=paired_collate_fn)
