@@ -292,17 +292,17 @@ def main():
     # ========= Preparing Log and Checkpoint Files ========= #
     
     if not args.log:
-        args.log_file = "./logs/" + args.name + '.train'
+        args.log_file = "./data/logs/" + args.name + '.train'
     else:
-        args.log_file = "./logs/" + args.log + '.train'
+        args.log_file = "./data/logs/" + args.log + '.train'
     print(args, "\n")
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
     log_f = open(args.log_file, 'w', buffering=args.buffering_mode)
     log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
-    args.chkpt_path = "./checkpoints/" + args.name
-    os.makedirs("./checkpoints", exist_ok=True)
+    args.chkpt_path = "./data/checkpoints/" + args.name
+    os.makedirs("./data/checkpoints", exist_ok=True)
 
     # ========= Preparing Model ========= #
 
