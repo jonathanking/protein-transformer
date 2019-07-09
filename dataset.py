@@ -10,46 +10,43 @@ def paired_collate_fn(insts):
         trg_seq/pos Tensors. insts is a list of tuples, each containing one src
         and one target seq.
         """
-    src_insts, tgt_insts = list(zip(*insts))
-    src_insts = collate_fn(src_insts)
-    tgt_insts = collate_fn(tgt_insts, is_tgt=True)
-    return (*src_insts, *tgt_insts)
+    sequences, angles, coords = list(zip(*insts))
+    sequences = collate_fn(sequences, pad_dim=20)
+    angles = collate_fn(angles, pad_dim=NUM_PREDICTED_ANGLES * 2)
+    coords = collate_fn(coords, pad_dim=3)
+    return (*sequences, *angles, *coords)
 
 
-def collate_fn(insts, is_tgt=False):
+def collate_fn(insts, pad_dim):
     """ Pad the instance to the max seq length in batch """
 
     max_len = max(len(inst) for inst in insts)
-
-    if is_tgt:
-        pad_dim = NUM_PREDICTED_ANGLES * 2
-    else:
-        pad_dim = 20
-    batch_seq = np.array([
-        np.concatenate((inst, np.zeros((max_len - len(inst), pad_dim))), axis=0)
-        for inst in insts])
+    batch_seq = []
+    for inst in insts:
+        z = np.zeros((max_len - len(inst), pad_dim))
+        c = np.concatenate((inst, z), axis=0)
+        batch_seq.append(c)
+    batch_seq = np.array(batch_seq)
 
     batch_pos = np.array([
         [pos_i+1 if w_i.any() else 0
-         for pos_i, w_i in enumerate(inst)] for inst in batch_seq]) # position arr
+         for pos_i, w_i in enumerate(inst)] for inst in batch_seq])  # position arr
 
-    if is_tgt:
-        batch_seq = torch.FloatTensor(batch_seq)
-    else:
-        batch_seq = torch.FloatTensor(batch_seq)
+    batch_seq = torch.FloatTensor(batch_seq)
     batch_pos = torch.LongTensor(batch_pos)
 
     return batch_seq, batch_pos
 
 
 class ProteinDataset(torch.utils.data.Dataset):
-    def __init__(self, seqs=None, angs=None):
+    def __init__(self, seqs=None, angs=None, crds=None):
 
         assert seqs is not None
-        assert (angs is None) or (len(seqs) == len(angs))
+        assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
 
         self._seqs = seqs
         self._angs = angs
+        self._crds = crds
 
     @property
     def n_insts(self):
@@ -61,5 +58,5 @@ class ProteinDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         if self._angs is not None:
-            return self._seqs[idx], self._angs[idx]
+            return self._seqs[idx], self._angs[idx], self._crds[idx]
         return self._seqs[idx]
