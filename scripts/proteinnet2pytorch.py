@@ -88,7 +88,7 @@ def unpack_processed_results(results):
     """
     all_ohs = []
     all_angs = []
-    all_strs = []
+    all_crds = []
     all_ids = []
     c = 0
     for r in results:
@@ -100,13 +100,13 @@ def unpack_processed_results(results):
         if additional_checks(oh) and additional_checks(ang) and additional_checks(coords):
             all_ohs.append(oh)
             all_angs.append(ang)
-            all_strs.append(coords)
+            all_crds.append(coords)
             all_ids.append(i)
             c += 1
         else:
             ERROR_FILE.write(f"{i}, numerical issue\n")
     print(f"{(c * 100) / len(results):.1f}% of chains parsed. ({c}/{len(results)})")
-    return all_ohs, all_angs, all_strs, all_ids
+    return all_ohs, all_angs, all_crds, all_ids
 
 
 def validate_data(data):
@@ -197,6 +197,9 @@ def group_validation_set(vset_ids):
 
 
 def save_data_dict(data):
+    """
+    Saves a Python dictionary containing all training data to disk via Pickle or PyTorch.
+    """
     if not args.out_file and args.pickle:
         args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + suffix + ".pkl"
     elif not args.out_file and not args.pickle:
@@ -210,6 +213,9 @@ def save_data_dict(data):
 
 
 def post_process_data(data):
+    """
+    Trims parts of sequences that are masked at the start and end only.
+    """
     # For masked sequences, first remove missing residues at the start and end of the sequence.
     # Then, assert that the sequence matches the one aquired from the PDB
     for dset in [data["train"], data["test"]] + [data["valid"][split] for split in VALID_SPLITS]:
@@ -225,7 +231,7 @@ def post_process_data(data):
             if z[0, 0] == 0:
                 pn_s = pn_s[z[0, 1]:]  # trim start
                 m = m[z[0, 1]:]
-            if len(pdb_s) != len(pn_s): # "After triming, the PN Seq and PDB seq should be the same lenght."
+            if len(pdb_s) != len(pn_s):  # "After trimming, the PN Seq and PDB seq should be the same length."
                 bad_ids.append(0)
 
     return data
