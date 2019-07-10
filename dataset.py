@@ -10,11 +10,10 @@ def paired_collate_fn(insts):
         trg_seq/pos Tensors. insts is a list of tuples, each containing one src
         and one target seq.
         """
-    sequences, angles, coords = list(zip(*insts))
+    sequences, angles = list(zip(*insts))
     sequences = collate_fn(sequences, pad_dim=20)
     angles = collate_fn(angles, pad_dim=NUM_PREDICTED_ANGLES * 2)
-    coords = collate_fn(coords, pad_dim=3)
-    return (*sequences, *angles, *coords)
+    return (*sequences, *angles)
 
 
 def collate_fn(insts, pad_dim):
@@ -42,11 +41,10 @@ class ProteinDataset(torch.utils.data.Dataset):
     def __init__(self, seqs=None, angs=None, crds=None):
 
         assert seqs is not None
-        assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
+        assert (angs is None) or (len(seqs) == len(angs) )
 
         self._seqs = seqs
         self._angs = angs
-        self._crds = crds
 
     @property
     def n_insts(self):
@@ -58,5 +56,5 @@ class ProteinDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         if self._angs is not None:
-            return self._seqs[idx], self._angs[idx], self._crds[idx]
+            return self._seqs[idx], self._angs[idx]
         return self._seqs[idx]

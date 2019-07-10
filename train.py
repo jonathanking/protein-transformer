@@ -33,7 +33,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         pbar = training_data
 
     for batch_num, batch in enumerate(pbar):
-        src_seq, src_pos, tgt_seq, tgt_pos, tgt_crd, tgt_crd_pos = map(lambda x: x.to(device), batch)
+        src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
         gold = tgt_seq[:]
 
         optimizer.zero_grad()
@@ -100,7 +100,7 @@ def eval_epoch(model, validation_data, device, opt):
 
     with torch.no_grad():
         for batch in validation_data:
-            src_seq, src_pos, tgt_seq, tgt_pos, tgt_crd, tgt_crd_pos = map(lambda x: x.to(device), batch)
+            src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
             gold = tgt_seq[:]
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
             d_loss, r_loss = drmsd_loss(pred, gold, src_seq, device,
@@ -331,7 +331,6 @@ def prepare_dataloaders(data, opt):
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=data['train']['seq'],
-            crds=data['train']['crd'],
             angs=data['train']['ang'],
             ),
         num_workers=2,
@@ -344,7 +343,6 @@ def prepare_dataloaders(data, opt):
         valid_loader = torch.utils.data.DataLoader(
             ProteinDataset(
                 seqs=data['valid'][70]['seq'],
-                crds=data['valid'][70]['crd'],
                 angs=data['valid'][70]['ang'],
                 ),
             num_workers=2,
@@ -354,7 +352,6 @@ def prepare_dataloaders(data, opt):
         valid_loader = torch.utils.data.DataLoader(
             ProteinDataset(
                 seqs=data['valid']['seq'],
-                crds=data['valid']['crd'],
                 angs=data['valid']['ang'],
                 ),
             num_workers=2,
@@ -364,7 +361,6 @@ def prepare_dataloaders(data, opt):
     test_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=data['test']['seq'],
-            crds=data['test']['crd'],
             angs=data['test']['ang'],
             ),
         num_workers=2,
