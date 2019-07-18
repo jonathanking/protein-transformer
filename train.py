@@ -25,7 +25,8 @@ def print_status(mode, opt, items):
     'train_val', or 'train_test'.
     """
     if mode == "train_epoch":
-        pbar, loss, d_loss, training_losses, lr_string, m_loss, c_loss = items
+        pbar, loss, d_loss, training_losses, cur_lr, m_loss, c_loss = items
+        lr_string = f", LR = {cur_lr:.7f}" if opt.lr_scheduling else ""
         if not opt.cluster and len(training_losses) > 32:
             pbar.set_description('\r  - (Train) drmsd = {0:.6f}, rmse = {3:.6f}, 32avg = {1:.6f}, comb = {4:.6f}{'
                                  '2}'.format(float(d_loss), np.mean(training_losses[-32:]), lr_string,
@@ -93,7 +94,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
         d_loss = drmsd_loss(pred, gold, src_seq, device)
         m_loss = mse_loss(pred, gold)
-        c_loss = combine_drmsd_mse(d_loss, m_loss, w=0.5)
+        c_loss = combine_drmsd_mse(d_loss, m_loss, w=0.8)
         if opt.combined_loss:
             loss = c_loss
         else:
@@ -107,21 +108,15 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
 
         # update parameters
         optimizer.step()
-        if opt.lr_scheduling:
-            cur_lr = optimizer.cur_lr
-            lr_string = f", LR = {cur_lr:.7f}"
-        else:
-            cur_lr = 0
-            lr_string = ""
 
         # note keeping
         total_drmsd_loss += d_loss.item()
         total_mse_loss += m_loss.item()
         n_batches += 1
-        print_status("train_epoch", opt, (pbar, loss, d_loss, training_losses, lr_string, m_loss, c_loss))
+        cur_lr = optimizer.cur_lr if opt.lr_scheduling else 0
+        print_status("train_epoch", opt, (pbar, loss, d_loss, training_losses, cur_lr, m_loss, c_loss))
         log_batch(log_writer, d_loss.item(), m_loss.item(), None, c_loss.item(), cur_lr, is_val=False,
                   end_of_epoch=False, t=time.time())
-
         if np.isnan(loss.item()):
             print("A nan loss has occurred. Exiting training.")
             sys.exit(1)
