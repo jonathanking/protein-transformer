@@ -103,16 +103,6 @@ def drmsd_loss_from_coords(pred_angs, gold_coords, input_seq, device, return_rms
     losses = []
     rmsds = []
     # TODO: gracefully handle losses when batchsize is 1.
-    # if pred_angs.shape[0] == 1:
-    #     pred_item = pred_angs[0]
-    #     gold_item = gold_coords[0]
-    #     input_item = input_seq[0]
-    #     pred_coords = generate_coords(pred_item, pred_item.shape[0], input_item, device)
-    #     loss = drmsd(pred_coords, gold_item, pad_from_b=True)
-    #     losses.append(loss)
-    #     if return_rmsd:
-    #         rmsds.append(rmsd(pred_coords.data.numpy(), gold_item.data.numpy()))
-    # else:
     for pred_item, gold_item, input_item in zip(pred_angs, gold_coords, input_seq):
         pad_loc = input_item.eq(0).all(1).argmax().item()
         if pad_loc == 0: pad_loc = input_item.shape[0]
