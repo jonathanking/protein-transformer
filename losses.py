@@ -100,12 +100,14 @@ def drmsd_loss(pred, gold, input_seq, device, return_rmsd=False):
         return torch.mean(torch.stack(losses))
 
 
-def mse_loss(pred, gold):
+def mse_loss(pred, gold, over_angles=True):
     """ Computes MSE loss over non-zero elements only."""
+    # TODO Implement nan padding so that mse can be computed appropriately in both angle and sin/cos cases
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
-    pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
-    pred, gold = copy_padding_from_gold(pred, gold, device)
+    if over_angles:
+        pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
+        pred, gold = copy_padding_from_gold(pred, gold, device)
     mse = ((pred - gold) ** 2).sum() / torch.nonzero(gold).size(0)
     return mse
 
