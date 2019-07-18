@@ -61,7 +61,7 @@ def determine_pad_loc_test():
     assert determine_pad_loc(bt).item() == 33
 
 
-def drmsd_loss(pred, gold, input_seq, device, return_rmsd=False):
+def drmsd_loss_from_angles(pred, gold, input_seq, device, return_rmsd=False):
     """ Calculate DRMSD loss. """
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
@@ -72,14 +72,15 @@ def drmsd_loss(pred, gold, input_seq, device, return_rmsd=False):
     losses = []
     rmsds = []
     # TODO: gracefully handle losses when batchsize is 1.
+    # TODO: determine which loss functions benefit from GPU vs CPU
     if pred.shape[0] == 1:
         pred_item = pred[0]
         gold_item = gold[0]
         input_item = input_seq[0]
         true_coords = generate_coords(gold_item, pred_item.shape[0], input_item, device)
         pred_coords = generate_coords(pred_item, pred_item.shape[0], input_item, device)
-        loss = drmsd(pred_coords, true_coords)
-        losses.append(loss)
+        loss = drmsd(pred_coords.cuda(), true_coords.cuda())
+        losses.append(loss.to(device))
         if return_rmsd:
             rmsds.append(rmsd(pred_coords.data.numpy(), true_coords.data.numpy()))
     else:
