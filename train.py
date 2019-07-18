@@ -140,10 +140,9 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
         print('[ Epoch', epoch_i, ']')
 
         start = time.time()
-        if epoch_i != 0:
-            _, _ = train_epoch(model, training_data, optimizer, device, opt, log_writer)
-        train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model, training_data,
-                                                                                        device, opt)
+        _, _ = train_epoch(model, training_data, optimizer, device, opt, log_writer)
+        train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model, training_data, device,
+                                                                                        opt, mode="Train")
         train_combined_losses.append(train_comb_loss)
         train_drmsd_losses.append(train_drmsd_loss)
         if opt.lr_scheduling:
