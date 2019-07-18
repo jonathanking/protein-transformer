@@ -76,7 +76,7 @@ def init_sidechain(angles, bb_arr, input_seq, return_tuples=False):
 def init_backbone(angles, device):
     """ Given an angle matrix (RES x ANG), this initializes the first 3 backbone points (which are arbitrary) and
         returns a TensorArray of the size required to hold all the coordinates. """
-    a1 = torch.FloatTensor(torch.zeros(3, requires_grad=True).to(device))
+    a1 = torch.FloatTensor([0.00001, 0, 0])
 
     if device.type == "cuda":
         a2 = a1 + torch.cuda.FloatTensor([BONDLENS["n-ca"], 0, 0])
