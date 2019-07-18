@@ -44,7 +44,7 @@ def print_status(mode, opt, items):
     elif mode == "eval_epoch":
         pbar, d_loss, mode, m_loss, c_loss = items
         if not opt.cluster:
-            pbar.set_description('\r  - ({1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
+            pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
                 float(d_loss), mode, np.sqrt(float(m_loss)), float(c_loss)))
 
     elif mode == "train_train":
@@ -66,7 +66,7 @@ def print_status(mode, opt, items):
                                                  comb=val_comb_loss))
     elif mode == "train_test":
         test_drmsd_loss, test_mse_loss, t, test_comb_loss, test_rmsd_loss = items
-        print('  - (Test) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
+        print('\r  - (Test) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
               'elapse: {elapse:3.3f} min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
                                                  elapse=(time.time() - t) / 60, comb=test_comb_loss,
                                                  rmsd=test_rmsd_loss))
@@ -82,7 +82,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     loss = ""
     training_losses = []
     if not opt.cluster:
-        pbar = tqdm(training_data, mininterval=2, desc='  - (Train) Loss = {0}   '.format(loss), leave=False)
+        pbar = tqdm(training_data, mininterval=2, leave=False)
     else:
         pbar = training_data
 
@@ -136,7 +136,7 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
     n_batches = 0.0
     loss = ""
     if not opt.cluster:
-        pbar = tqdm(validation_data, mininterval=2, desc='  - ({0}) Loss = {1}   '.format(mode, loss), leave=False)
+        pbar = tqdm(validation_data, mininterval=2, leave=False)
     else:
         pbar = validation_data
 
