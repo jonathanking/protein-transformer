@@ -56,7 +56,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         optimizer.step()
         if opt.lr_scheduling:
             cur_lr = optimizer.cur_lr
-            lr_string = f"{cur_lr:.7f}"
+            lr_string = f", LR = {cur_lr:.7f}"
         else:
             cur_lr = 0
             lr_string = ""
@@ -66,17 +66,17 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         total_mse_loss += m_loss.item()
         n_batches += 1
         if not opt.cluster and len(training_losses) > 32:
-            pbar.set_description('  - (Train) drmsd = {0:.6f}, rmse = {3:.6f}, 32avg = {1:.6f}, comb = {4:.6f}, '
-                                 'LR = {2}'.format(float(d_loss), np.mean(training_losses[-32:]), lr_string,
+            pbar.set_description('  - (Train) drmsd = {0:.6f}, rmse = {3:.6f}, 32avg = {1:.6f}, comb = {4:.6f}{'
+                                 '2}'.format(float(d_loss), np.mean(training_losses[-32:]), lr_string,
                                                        np.sqrt(float(m_loss)), float(c_loss)))
         elif not opt.cluster:
-            pbar.set_description('  - (Train) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}, LR = {1}'.format(
+            pbar.set_description('  - (Train) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}{1}'.format(
                 float(d_loss), lr_string, np.sqrt(float(m_loss)), float(c_loss)))
         if opt.cluster and len(training_losses) > 32:
-            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2}'.format(
+            print('Loss = {0:.6f}, 32avg = {1:.6f}{2}'.format(
                 float(loss), np.mean(training_losses[-32:]), lr_string))
         elif opt.cluster and len(training_losses) <= 32:
-            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2}'.format(
+            print('Loss = {0:.6f}, 32avg = {1:.6f}{2}'.format(
                 float(loss), np.mean(training_losses), lr_string))
 
         log_batch(log_writer, d_loss.item(), m_loss.item(), None, c_loss.item(), cur_lr, is_val=False,
