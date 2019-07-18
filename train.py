@@ -11,7 +11,7 @@ import torch.utils.data
 from tqdm import tqdm
 
 from dataset import paired_collate_fn, ProteinDataset
-from losses import drmsd_loss, mse_loss, combine_drmsd_mse
+from losses import drmsd_loss_from_angles, drmsd_loss_from_coords, mse_loss, combine_drmsd_mse
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 
@@ -92,7 +92,8 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
 
         optimizer.zero_grad()
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-        d_loss = drmsd_loss(pred, gold, src_seq, device)
+        # d_loss = drmsd_loss_from_angles(pred, gold, src_seq, device)
+        d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
         m_loss = mse_loss(pred, gold)
         c_loss = combine_drmsd_mse(d_loss, m_loss, w=0.8)
         if opt.combined_loss:
@@ -145,8 +146,9 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
             src_seq, src_pos, tgt_seq, tgt_pos, tgt_crds, _ = map(lambda x: x.to(device), batch)
             gold = tgt_seq[:]
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            d_loss, r_loss = drmsd_loss(pred, gold, src_seq, device,
-                                        return_rmsd=True)  # When evaluating the epoch, only use DRMSD loss
+            # d_loss, r_loss = drmsd_loss_from_angles(pred, gold, src_seq, device,
+            #                             return_rmsd=True)  # When evaluating the epoch, only use DRMSD loss
+            d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
             m_loss = mse_loss(pred, gold)
             c_loss = combine_drmsd_mse(d_loss, m_loss)
             total_drmsd_loss += d_loss.item()
@@ -218,7 +220,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
     if not opt.train_only:
         # Evaluate model on test set
         t = time.time()
-        test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss = eval_epoch(model, test_data, device, opt)
+        test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss = eval_epoch(model, test_data, device, opt, mode="Test")
         print_status("train_test", opt, (test_drmsd_loss, test_mse_loss, t, test_comb_loss, test_rmsd_loss))
         log_batch(log_writer, test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss, cur_lr,
                   is_val=True,
