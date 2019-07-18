@@ -56,8 +56,10 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         optimizer.step()
         if opt.lr_scheduling:
             cur_lr = optimizer.cur_lr
+            lr_string = f"{cur_lr:.7f}"
         else:
             cur_lr = 0
+            lr_string = ""
 
         # note keeping
         total_drmsd_loss += d_loss.item()
@@ -65,17 +67,17 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         n_batches += 1
         if not opt.cluster and len(training_losses) > 32:
             pbar.set_description('  - (Train) drmsd = {0:.6f}, rmse = {3:.6f}, 32avg = {1:.6f}, comb = {4:.6f}, '
-                                 'LR = {2:.7f}'.format(float(d_loss), np.mean(training_losses[-32:]), cur_lr,
+                                 'LR = {2}'.format(float(d_loss), np.mean(training_losses[-32:]), lr_string,
                                                        np.sqrt(float(m_loss)), float(c_loss)))
         elif not opt.cluster:
-            pbar.set_description('  - (Train) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}, LR = {1:.7f}'.format(
-                float(d_loss), cur_lr, np.sqrt(float(m_loss)), float(c_loss)))
+            pbar.set_description('  - (Train) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}, LR = {1}'.format(
+                float(d_loss), lr_string, np.sqrt(float(m_loss)), float(c_loss)))
         if opt.cluster and len(training_losses) > 32:
-            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
-                float(loss), np.mean(training_losses[-32:]), cur_lr))
+            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2}'.format(
+                float(loss), np.mean(training_losses[-32:]), lr_string))
         elif opt.cluster and len(training_losses) <= 32:
-            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2:.7f}'.format(
-                float(loss), np.mean(training_losses), cur_lr))
+            print('Loss = {0:.6f}, 32avg = {1:.6f}, LR = {2}'.format(
+                float(loss), np.mean(training_losses), lr_string))
 
         log_batch(log_writer, d_loss.item(), m_loss.item(), None, c_loss.item(), cur_lr, is_val=False,
                   end_of_epoch=False, t=time.time())
@@ -87,7 +89,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     return total_drmsd_loss / n_batches, total_mse_loss / n_batches
 
 
-def eval_epoch(model, validation_data, device, opt):
+def eval_epoch(model, validation_data, device, opt, mode="Val"):
     """ Epoch operation in evaluation phase. """
 
     model.eval()
@@ -97,9 +99,14 @@ def eval_epoch(model, validation_data, device, opt):
     total_rmsd_loss = 0
     total_combined_loss = 0
     n_batches = 0.0
+    loss = ""
+    if not opt.cluster:
+        pbar = tqdm(validation_data, mininterval=2, desc='  - ({0}) Loss = {1}   '.format(mode, loss), leave=False)
+    else:
+        pbar = validation_data
 
     with torch.no_grad():
-        for batch in validation_data:
+        for batch in pbar:
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
             gold = tgt_seq[:]
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
@@ -112,6 +119,10 @@ def eval_epoch(model, validation_data, device, opt):
             total_rmsd_loss += r_loss
             total_combined_loss += c_loss.item()
             n_batches += 1
+
+            if not opt.cluster:
+                pbar.set_description('  - ({1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
+                    float(d_loss), mode, np.sqrt(float(m_loss)), float(c_loss)))
 
     return (x / n_batches for x in [total_drmsd_loss, total_mse_loss, total_rmsd_loss, total_combined_loss])
 
