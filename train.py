@@ -11,7 +11,7 @@ import torch.utils.data
 from tqdm import tqdm
 
 from dataset import paired_collate_fn, ProteinDataset
-from losses import drmsd_loss, mse_loss, combine_drmsd_mse
+from losses import drmsd_loss_from_angles, drmsd_loss_from_coords, mse_loss, combine_drmsd_mse
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 
@@ -44,7 +44,7 @@ def print_status(mode, opt, items):
     elif mode == "eval_epoch":
         pbar, d_loss, mode, m_loss, c_loss = items
         if not opt.cluster:
-            pbar.set_description('\r  - ({1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
+            pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
                 float(d_loss), mode, np.sqrt(float(m_loss)), float(c_loss)))
 
     elif mode == "train_train":
@@ -66,7 +66,7 @@ def print_status(mode, opt, items):
                                                  comb=val_comb_loss))
     elif mode == "train_test":
         test_drmsd_loss, test_mse_loss, t, test_comb_loss, test_rmsd_loss = items
-        print('  - (Test) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
+        print('\r  - (Test) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
               'elapse: {elapse:3.3f} min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
                                                  elapse=(time.time() - t) / 60, comb=test_comb_loss,
                                                  rmsd=test_rmsd_loss))
@@ -82,17 +82,18 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     loss = ""
     training_losses = []
     if not opt.cluster:
-        pbar = tqdm(training_data, mininterval=2, desc='  - (Train) Loss = {0}   '.format(loss), leave=False)
+        pbar = tqdm(training_data, mininterval=2, leave=False)
     else:
         pbar = training_data
 
     for batch in pbar:
-        src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
+        src_seq, src_pos, tgt_seq, tgt_pos, tgt_crds, _ = map(lambda x: x.to(device), batch)
         gold = tgt_seq[:]
 
         optimizer.zero_grad()
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-        d_loss = drmsd_loss(pred, gold, src_seq, device)
+        # d_loss = drmsd_loss_from_angles(pred, gold, src_seq, device)
+        d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
         m_loss = mse_loss(pred, gold)
         c_loss = combine_drmsd_mse(d_loss, m_loss, w=0.8)
         if opt.combined_loss:
@@ -136,17 +137,18 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
     n_batches = 0.0
     loss = ""
     if not opt.cluster:
-        pbar = tqdm(validation_data, mininterval=2, desc='  - ({0}) Loss = {1}   '.format(mode, loss), leave=False)
+        pbar = tqdm(validation_data, mininterval=2, leave=False)
     else:
         pbar = validation_data
 
     with torch.no_grad():
         for batch in pbar:
-            src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
+            src_seq, src_pos, tgt_seq, tgt_pos, tgt_crds, _ = map(lambda x: x.to(device), batch)
             gold = tgt_seq[:]
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            d_loss, r_loss = drmsd_loss(pred, gold, src_seq, device,
-                                        return_rmsd=True)  # When evaluating the epoch, only use DRMSD loss
+            # d_loss, r_loss = drmsd_loss_from_angles(pred, gold, src_seq, device,
+            #                             return_rmsd=True)  # When evaluating the epoch, only use DRMSD loss
+            d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
             m_loss = mse_loss(pred, gold)
             c_loss = combine_drmsd_mse(d_loss, m_loss)
             total_drmsd_loss += d_loss.item()
@@ -218,7 +220,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
     if not opt.train_only:
         # Evaluate model on test set
         t = time.time()
-        test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss = eval_epoch(model, test_data, device, opt)
+        test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss = eval_epoch(model, test_data, device, opt, mode="Test")
         print_status("train_test", opt, (test_drmsd_loss, test_mse_loss, t, test_comb_loss, test_rmsd_loss))
         log_batch(log_writer, test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss, cur_lr,
                   is_val=True,
@@ -356,6 +358,7 @@ def prepare_dataloaders(data, opt):
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=data['train']['seq'],
+            crds=data['train']['crd'],
             angs=data['train']['ang'],
             ),
         num_workers=2,
@@ -368,6 +371,7 @@ def prepare_dataloaders(data, opt):
         valid_loader = torch.utils.data.DataLoader(
             ProteinDataset(
                 seqs=data['valid'][70]['seq'],
+                crds=data['valid'][70]['crd'],
                 angs=data['valid'][70]['ang'],
                 ),
             num_workers=2,
@@ -377,6 +381,7 @@ def prepare_dataloaders(data, opt):
         valid_loader = torch.utils.data.DataLoader(
             ProteinDataset(
                 seqs=data['valid']['seq'],
+                crds=data['valid']['crd'],
                 angs=data['valid']['ang'],
                 ),
             num_workers=2,
@@ -386,6 +391,7 @@ def prepare_dataloaders(data, opt):
     test_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=data['test']['seq'],
+            crds=data['test']['crd'],
             angs=data['test']['ang'],
             ),
         num_workers=2,

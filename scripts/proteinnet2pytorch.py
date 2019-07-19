@@ -42,7 +42,6 @@ def work(pdbid_chain):
         print("Error parsing", pdbid_chain)
         ERROR_FILE.write(f"{pdbid_chain}\n")
         return None
-    assert pdb_hv.numChains() == 1, "Only a single chain should be parsed from the PDB."
     chain = pdb_hv[chid]
     assert chain.getChid() == chid, "The chain ID was not as expected."
     try:

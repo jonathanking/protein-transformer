@@ -29,6 +29,7 @@ def copy_padding_from_gold(pred, gold, device):
     """ Given two angle tensors, one of which is the true angles (gold) and is properly padded, copy the padding
         from that tensor and apple it to the predicted tensor. The predicted tensor does not understand padding
         sufficiently. """
+    # TODO: Assumes any zero is a pad
     not_padded_mask = (gold != 0)
     if device.type == "cuda":
         pred_unpadded = pred.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
@@ -61,7 +62,7 @@ def determine_pad_loc_test():
     assert determine_pad_loc(bt).item() == 33
 
 
-def drmsd_loss(pred, gold, input_seq, device, return_rmsd=False):
+def drmsd_loss_from_angles(pred, gold, input_seq, device, return_rmsd=False):
     """ Calculate DRMSD loss. """
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
@@ -71,29 +72,50 @@ def drmsd_loss(pred, gold, input_seq, device, return_rmsd=False):
 
     losses = []
     rmsds = []
-    # TODO: gracefully handle losses when batchsize is 1.
-    if pred.shape[0] == 1:
-        pred_item = pred[0]
-        gold_item = gold[0]
-        input_item = input_seq[0]
-        true_coords = generate_coords(gold_item, pred_item.shape[0], input_item, device)
-        pred_coords = generate_coords(pred_item, pred_item.shape[0], input_item, device)
+    # TODO: determine which loss functions benefit from GPU vs CPU
+    for pred_item, gold_item, input_item in zip(pred, gold, input_seq):
+        pad_loc = determine_pad_loc(gold_item)
+        gold_item = gold_item[:pad_loc]
+        pred_item = pred_item[:pad_loc]
+        input_item = input_item[:pad_loc]
+        true_coords = generate_coords(gold_item, pad_loc, input_item, device)
+        pred_coords = generate_coords(pred_item, pad_loc, input_item, device)
         loss = drmsd(pred_coords, true_coords)
         losses.append(loss)
         if return_rmsd:
             rmsds.append(rmsd(pred_coords.data.numpy(), true_coords.data.numpy()))
+    if return_rmsd:
+        return torch.mean(torch.stack(losses)), np.mean(rmsds)
     else:
-        for pred_item, gold_item, input_item in zip(pred, gold, input_seq):
-            pad_loc = determine_pad_loc(gold_item)
-            gold_item = gold_item[:pad_loc]
-            pred_item = pred_item[:pad_loc]
-            input_item = input_item[:pad_loc]
-            true_coords = generate_coords(gold_item, pad_loc, input_item, device)
-            pred_coords = generate_coords(pred_item, pad_loc, input_item, device)
-            loss = drmsd(pred_coords, true_coords)
-            losses.append(loss)
-            if return_rmsd:
-                rmsds.append(rmsd(pred_coords.data.numpy(), true_coords.data.numpy()))
+        return torch.mean(torch.stack(losses))
+
+
+def drmsd_loss_from_coords(pred_angs, gold_coords, input_seq, device, return_rmsd=False):
+    """
+    Calculate DRMSD loss by first generating predicted coordinates. Then, these coordinates
+    are compared with the true coordinate tensor provided to the function.
+    """
+    device = torch.device("cpu")
+    pred_angs, gold_coords = pred_angs.to(device), gold_coords.to(device)
+
+    pred_angs = inverse_trig_transform(pred_angs)
+
+    losses = []
+    rmsds = []
+    # TODO: gracefully handle losses when batchsize is 1.
+    for pred_item, gold_item, input_item in zip(pred_angs, gold_coords, input_seq):
+        pad_loc = input_item.eq(0).all(1).argmax().item()
+        if pad_loc == 0: pad_loc = input_item.shape[0]
+        pred_item = pred_item[:pad_loc]
+        # TODO: replace magic number 13 with global variable for # atoms per residue
+        gold_item = gold_item[:pad_loc*13]
+        input_item = input_item[:pad_loc]
+        pred_coords = generate_coords(pred_item, pad_loc, input_item, device)
+        # TODO the generated coordinates from gold do not match what is expected from the input seq
+        loss = drmsd(pred_coords, gold_item, pad_from_b=True)
+        losses.append(loss)
+        if return_rmsd:
+            rmsds.append(rmsd(pred_coords.data.numpy(), gold_item.data.numpy()))
     if return_rmsd:
         return torch.mean(torch.stack(losses)), np.mean(rmsds)
     else:
@@ -121,13 +143,14 @@ def pairwise_internal_dist(coords):
     return res
 
 
-def drmsd(a, b):
+def drmsd(a, b, pad_from_b=False):
     """ Given two coordinate tensors, returns the dRMSD score between them.
         Both tensors must be the exact same shape. """
-    mask = a.ne(0).any(1)
-    a = a[mask]
     mask = b.ne(0).any(1)
     b = b[mask]
+    if not pad_from_b:
+        mask = a.ne(0).any(1)
+    a = a[mask]
 
     a_ = pairwise_internal_dist(a)
     b_ = pairwise_internal_dist(b)

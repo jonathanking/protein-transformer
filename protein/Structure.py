@@ -16,6 +16,7 @@ def generate_coords(angles, pad_loc, input_seq, device):
     bb_arr = init_backbone(angles, device)
     next_bb_pts = extend_backbone(1, angles, bb_arr, device)
     sc_arr = init_sidechain(angles, [next_bb_pts[0], bb_arr[2], bb_arr[1], bb_arr[0]], input_seq)
+    total_arr = bb_arr + sc_arr + (10 - len(sc_arr)) * [torch.zeros(3)]
 
     for i in range(1, pad_loc):
         bb_pts = extend_backbone(i, angles, bb_arr, device)
@@ -23,9 +24,10 @@ def generate_coords(angles, pad_loc, input_seq, device):
 
         # Extend sidechain
         sc_pts = Sidechains.extend_sidechain(i, angles, bb_arr, input_seq)
-        sc_arr += sc_pts
 
-    return torch.stack(bb_arr + sc_arr)
+        total_arr += bb_pts + sc_pts + (10 - len(sc_pts)) * [torch.zeros(3)]
+
+    return torch.stack(total_arr)
 
 
 def generate_coords_with_tuples(angles, pad_loc, input_seq, device):
@@ -60,7 +62,7 @@ def generate_coords_with_tuples(angles, pad_loc, input_seq, device):
 
 
 def init_sidechain(angles, bb_arr, input_seq, return_tuples=False):
-    """ Builds the first sidechain based off of the first backbone atoms and a ficticious previous atom.
+    """ Builds the first sidechain based off of the first backbone atoms and a fictitious previous atom.
         This allows us to reuse the extend_sidechain method. Assumes the first atom of the backbone is at (0,0,0). """
     if return_tuples:
         sc, aa_code, atom_names = Sidechains.extend_sidechain(0, angles, bb_arr, input_seq, return_tuples,
@@ -74,7 +76,7 @@ def init_sidechain(angles, bb_arr, input_seq, return_tuples=False):
 def init_backbone(angles, device):
     """ Given an angle matrix (RES x ANG), this initializes the first 3 backbone points (which are arbitrary) and
         returns a TensorArray of the size required to hold all the coordinates. """
-    a1 = torch.FloatTensor(torch.zeros(3, requires_grad=True).to(device))
+    a1 = torch.FloatTensor([0.00001, 0, 0])
 
     if device.type == "cuda":
         a2 = a1 + torch.cuda.FloatTensor([BONDLENS["n-ca"], 0, 0])
