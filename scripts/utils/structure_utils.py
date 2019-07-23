@@ -27,9 +27,21 @@ def seq_to_onehot(seq):
     vector_array = []
     for aa in seq:
         one_hot = np.zeros(len(AA_MAP), dtype=bool)
-        one_hot[AA_MAP[aa]] = 1
+        if aa in AA_MAP.keys():
+            one_hot[AA_MAP[aa]] = 1
+        else:
+            one_hot -= 1
         vector_array.append(one_hot)
     return np.asarray(vector_array)
+
+
+def onehot_to_seq(oh):
+    """ Given a vector of one-hot vectors, returns its corresponding AA sequence."""
+    seq = ""
+    for aa in oh:
+        idx = aa.argmax()
+        seq += AA_MAP_INV[idx]
+    return seq
 
 
 def check_standard_continuous(residue, prev_res_num):
@@ -145,6 +157,23 @@ def get_angles_from_chain(chain):
 
     dihedrals_np = np.asarray(dihedrals)
     return dihedrals_np, sequence
+
+
+def get_atom_coords_by_names(residue, atom_names, return_coords=False):
+    """
+    Given a ProDy Residue and a list of atom names, this attempts to select and return all the atoms. If atoms are
+    not present, it substitutes the pad character in lieu of their coordinates.
+    """
+    # TODO use nans instead of zeros for padding
+    coords = []
+    pad_coord = np.zeros(3)
+    for an in atom_names:
+        a = residue.select(f"name {an}")
+        if a:
+            coords.append(a.getCoords()[0])
+        else:
+            coords.append(pad_coord)
+    return coords
 
 
 def get_angles_and_coords_from_chain(chain):
@@ -314,3 +343,4 @@ AA_MAP = {'A': 0, 'C': 1, 'D': 2, 'E': 3,
           'K': 8, 'L': 9, 'M': 10, 'N': 11,
           'P': 12, 'Q': 13, 'R': 14, 'S': 15,
           'T': 16, 'V': 17, 'W': 18, 'Y': 19}
+AA_MAP_INV = {v: k for k, v in AA_MAP.items()}
