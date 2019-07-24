@@ -23,28 +23,59 @@ sys.path.extend("../protein/")
 pr.confProDy(verbosity='error')
 
 
+def get_chain_from_trainid(proteinnet_id):
+    """
+    Given a ProteinNet ID of a training or validation set item, this function returns the associated
+    ProDy-parsed chain object.
+    """
+    try:
+        pdbid, model_id, chid = proteinnet_id.split("_")
+        if "#" in pdbid:
+            pdbid = pdbid.split("#")[1]
+    except ValueError:
+        # TODO Implement support for ASTRAL data; ids only contain "PDBID_domain" and are currently ignored
+        return None
+    try:
+        pdb_hv = pr.parseCIF(pdbid, chain=chid).getHierView()
+    except AttributeError:
+        print("Error parsing", proteinnet_id)
+        ERROR_FILE.write(f"{proteinnet_id}\n")
+        return None
+    chain = pdb_hv[chid]
+    assert chain.getChid() == chid, "The chain ID was not as expected."
+    return chain
+
+
+def get_chain_from_testid(proteinnet_id):
+    """
+    Given a ProteinNet ID of a test set item, this function returns the associated
+    ProDy-parsed chain object.
+    """
+    category, caspid = proteinnet_id.split("#")
+    try:
+        pdb_hv = pr.parsePDB(os.path.join(args.input_dir, "targets", caspid + ".pdb")).getHierView()
+    except AttributeError:
+        print("Error parsing", proteinnet_id)
+        ERROR_FILE.write(f"{proteinnet_id}\n")
+        return None
+    assert pdb_hv.numChains() == 1, "Only a single chain should be parsed from the CASP targ PDB."
+    chain = next(iter(pdb_hv))
+    return chain
+
+
 def work(pdbid_chain):
     """
     For a single PDB ID with chain, i.e. ('1A9U_A'), fetches that PDB chain from the PDB and
     computes its angles.
     """
+    # If the ProteinNet ID is from the test set
+    if "TBM#" in pdbid_chain or "FM#" in pdbid_chain:
+        chain = get_chain_from_testid(pdbid_chain)
+    # If the ProteinNet ID is from the train or validation set
+    else:
+        chain = get_chain_from_trainid(pdbid_chain)
     try:
-        pdbid, model_id, chid = pdbid_chain.split("_")
-        if "#" in pdbid:
-            pdbid = pdbid.split("#")[1]
-    except ValueError:
-        # TODO Implement support for ASTRAL data
-        # ASTRAL data points have only "PDBID_domain" and are currently ignored
-        return None
-    try:
-        pdb_hv = pr.parseCIF(pdbid, chain=chid).getHierView()
-    except AttributeError:
-        print("Error parsing", pdbid_chain)
-        ERROR_FILE.write(f"{pdbid_chain}\n")
-        return None
-    chain = pdb_hv[chid]
-    assert chain.getChid() == chid, "The chain ID was not as expected."
-    try:
+        # TODO get_angles_and_coords_from_chain should return padded items
         dihedrals_coords_sequence = get_angles_and_coords_from_chain(chain)
     except (IncompleteStructureError, NonStandardAminoAcidError):
         return None
@@ -52,31 +83,6 @@ def work(pdbid_chain):
     dihedrals, coords, sequence = dihedrals_coords_sequence
 
     return dihedrals, coords, sequence, pdbid_chain
-
-
-def work_test(category_caspid):
-    """
-    For a single CASP target entry with category label, i.e. ('TBM#T0234'), fetches that PDB
-    file from disk and computes its angles.
-    """
-    category, caspid = category_caspid.split("#")
-    try:
-        pdb_hv = pr.parseCIF(
-            os.path.join(args.input_dir, "targets", caspid + ".pdb")).getHierView()
-    except AttributeError:
-        print("Error parsing", category_caspid)
-        ERROR_FILE.write(f"{category_caspid}\n")
-        return None
-    assert pdb_hv.numChains() == 1, "Only a single chain should be parsed from the CASP targ PDB."
-    chain = next(iter(pdb_hv))
-    try:
-        dihedrals_coords_sequence = get_angles_and_coords_from_chain(chain)
-    except (IncompleteStructureError, NonStandardAminoAcidError):
-        return None
-
-    dihedrals, coords, sequence = dihedrals_coords_sequence
-
-    return dihedrals, coords, sequence, category_caspid
 
 
 def unpack_processed_results(results):
@@ -252,7 +258,7 @@ def main():
         valid_result_meta[split] = valid_results
 
     with Pool(multiprocessing.cpu_count()) as p:
-        test_results = list(tqdm.tqdm(p.imap(work_test, test_casp_ids), total=len(test_casp_ids)))
+        test_results = list(tqdm.tqdm(p.imap(work, test_casp_ids), total=len(test_casp_ids)))
     print("Structures processed.")
 
     # Unpack results
