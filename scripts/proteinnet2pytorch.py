@@ -37,7 +37,7 @@ def work(pdbid_chain):
         # ASTRAL data points have only "PDBID_domain" and are currently ignored
         return None
     try:
-        pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
+        pdb_hv = pr.parseCIF(pdbid, chain=chid).getHierView()
     except AttributeError:
         print("Error parsing", pdbid_chain)
         ERROR_FILE.write(f"{pdbid_chain}\n")
@@ -61,7 +61,7 @@ def work_test(category_caspid):
     """
     category, caspid = category_caspid.split("#")
     try:
-        pdb_hv = pr.parsePDB(
+        pdb_hv = pr.parseCIF(
             os.path.join(args.input_dir, "targets", caspid + ".pdb")).getHierView()
     except AttributeError:
         print("Error parsing", category_caspid)
