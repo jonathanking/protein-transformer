@@ -51,6 +51,7 @@ def get_chain_from_testid(proteinnet_id):
     Given a ProteinNet ID of a test set item, this function returns the associated
     ProDy-parsed chain object.
     """
+    # TODO: assert existence of test/targets at start of script
     category, caspid = proteinnet_id.split("#")
     try:
         pdb_hv = pr.parsePDB(os.path.join(args.input_dir, "targets", caspid + ".pdb")).getHierView()
@@ -63,10 +64,9 @@ def get_chain_from_testid(proteinnet_id):
     return chain
 
 
-def work(pdbid_chain):
+def get_chain_from_proteinnetid(pdbid_chain):
     """
-    For a single PDB ID with chain, i.e. ('1A9U_A'), fetches that PDB chain from the PDB and
-    computes its angles.
+    Determines whether or not a PN id is a test or training id and calls the corresponding method.
     """
     # If the ProteinNet ID is from the test set
     if "TBM#" in pdbid_chain or "FM#" in pdbid_chain:
@@ -74,6 +74,15 @@ def work(pdbid_chain):
     # If the ProteinNet ID is from the train or validation set
     else:
         chain = get_chain_from_trainid(pdbid_chain)
+    return chain
+
+
+def work(pdbid_chain):
+    """
+    For a single PDB ID with chain, i.e. ('1A9U_A'), fetches that PDB chain from the PDB and
+    computes its angles.
+    """
+    chain = get_chain_from_proteinnetid(pdbid_chain)
     try:
         # TODO get_angles_and_coords_from_chain should return padded items
         dihedrals_coords_sequence = get_angles_and_coords_from_chain(chain)
