@@ -191,14 +191,8 @@ def get_angles_and_coords_from_chain(chain):
     chain = chain.select("protein and not hetero").copy()
     # TODO remove references to previous residue - not necessary, instead use next residue
     all_residues = list(chain.iterResidues())
-    prev = all_residues[0].getResnum()
     prev_res = None
     for res_id, res in enumerate(all_residues):
-        check_standard_continuous(res, prev)
-        if len(res.backbone) < 3:
-            raise IncompleteStructureError(f"Incomplete backbone for residue {res}.")
-        prev = res.getResnum() + 1
-
         res_backbone = measure_phi_psi_omega(res)
         res_bond_angles = measure_bond_angles(res, res_id, all_residues)
 
@@ -214,10 +208,10 @@ def get_angles_and_coords_from_chain(chain):
             next_res = None
         calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, prev_res, res_backbone,
                                                          res_bond_angles, next_res)
-
-        bbcoords = [res.select(f"name {n}").getCoords()[0] for n in ["N", "CA", "C"]]
-        sccoords = [res.select(f"name {n}").getCoords()[0] for n in set(atom_names) - {"N", "CA", "C", "H"}]
+        bbcoords = get_atom_coords_by_names(res, ["N", "CA", "C"])
+        sccoords = get_atom_coords_by_names(res, set(atom_names) - {"N", "CA", "C", "H"})
         rescoords = np.concatenate((np.stack(bbcoords + sccoords), np.zeros((10 - len(sccoords), 3))))
+        # TODO : use nans instead of zeros for padding
 
         coords.append(rescoords)
         dihedrals.append(calculated_dihedrals)

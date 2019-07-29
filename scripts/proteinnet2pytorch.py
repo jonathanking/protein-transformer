@@ -1,3 +1,12 @@
+"""
+    Using ProteinNet as a guide, this script creates a new dataset that adds sidechain atom information.
+    It retains data splits, sequences, and masks but recomputes each structure's coordinates so that
+    sidechain atoms may be recorded. It also saves the entirety of the data as a single Python dictionary.
+
+    Author: Jonathan King
+    Date:   July 21, 2019
+"""
+
 import argparse
 import datetime
 import multiprocessing
