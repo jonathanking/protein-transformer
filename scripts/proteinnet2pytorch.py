@@ -22,7 +22,7 @@ import torch
 import tqdm
 
 sys.path.append("/home/jok120/protein-transformer/scripts/utils/")
-from structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_angles_and_coords_from_chain, \
+from structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
     additional_checks, zero_runs
 from proteinnet_parsing import parse_raw_proteinnet
 from structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError
@@ -30,6 +30,8 @@ from structure_exceptions import IncompleteStructureError, NonStandardAminoAcidE
 sys.path.extend("../protein/")
 
 pr.confProDy(verbosity='error')
+m = multiprocessing.Manager()
+FAILED_ASTRAL_IDS = m.list()
 
 
 def get_chain_from_trainid(proteinnet_id):
@@ -43,14 +45,21 @@ def get_chain_from_trainid(proteinnet_id):
             pdbid = pdbid.split("#")[1]
     except ValueError:
         # TODO Implement support for ASTRAL data; ids only contain "PDBID_domain" and are currently ignored
-        return None
+        return -1
     try:
-        pdb_hv = pr.parseCIF(pdbid, chain=chid).getHierView()
-    except AttributeError:
+        # TODO Parse CIFs, though ProDy doesn't like to do this. Issues arise with model #s, multiple atom coords
+        pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
+    except (AttributeError, pr.proteins.pdbfile.PDBParseError) as e:
         print("Error parsing", proteinnet_id)
-        ERROR_FILE.write(f"{proteinnet_id}\n")
+        ERROR_FILE.write(f"{proteinnet_id}, {str(e)}\n")
         return None
     chain = pdb_hv[chid]
+    try:
+        if chain.numCoordsets() > 1:
+            chain.setACSIndex(int(model_id))
+    except IndexError:
+        pass
+
     assert chain.getChid() == chid, "The chain ID was not as expected."
     return chain
 
@@ -92,10 +101,14 @@ def work(pdbid_chain):
     computes its angles.
     """
     chain = get_chain_from_proteinnetid(pdbid_chain)
+    if chain is None:
+        return None
+    if chain == -1:
+        FAILED_ASTRAL_IDS.append(1)
+        return None
     try:
-        # TODO get_angles_and_coords_from_chain should return padded items
-        dihedrals_coords_sequence = get_angles_and_coords_from_chain(chain)
-    except (IncompleteStructureError, NonStandardAminoAcidError):
+        dihedrals_coords_sequence = get_seq_and_masked_coords_and_angles(chain)
+    except NonStandardAminoAcidError:
         return None
 
     dihedrals, coords, sequence = dihedrals_coords_sequence
@@ -278,7 +291,7 @@ def main():
     with Pool(multiprocessing.cpu_count()) as p:
         test_results = list(tqdm.tqdm(p.imap(work, test_casp_ids), total=len(test_casp_ids)))
     print("Structures processed.")
-
+    print(f"{sum(FAILED_ASTRAL_IDS)} ASTRAL IDs failed to download.")
     # Unpack results
     print("Training set:\t", end="")
     train_ohs, train_angs, train_strs, train_ids = unpack_processed_results(train_results)
