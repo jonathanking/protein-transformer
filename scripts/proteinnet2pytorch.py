@@ -45,7 +45,8 @@ def get_chain_from_trainid(proteinnet_id):
             pdbid = pdbid.split("#")[1]
     except ValueError:
         # TODO Implement support for ASTRAL data; ids only contain "PDBID_domain" and are currently ignored
-        return -1
+        FAILED_ASTRAL_IDS.append(1)
+        return None
     try:
         # TODO Parse CIFs, though ProDy doesn't like to do this. Issues arise with model #s, multiple atom coords
         pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
@@ -102,9 +103,6 @@ def work(pdbid_chain):
     """
     chain = get_chain_from_proteinnetid(pdbid_chain)
     if chain is None:
-        return None
-    if chain == -1:
-        FAILED_ASTRAL_IDS.append(1)
         return None
     try:
         dihedrals_coords_sequence = get_seq_and_masked_coords_and_angles(chain)
