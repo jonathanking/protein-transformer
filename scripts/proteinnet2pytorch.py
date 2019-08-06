@@ -23,7 +23,8 @@ import tqdm
 
 sys.path.append("/home/jok120/protein-transformer/scripts/utils/")
 from structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
-    additional_checks, zero_runs, get_residue_mask_from_structure
+    additional_checks, zero_runs, get_residue_mask_from_structure, parse_astral_summary_file, \
+get_chain_from_astral_id
 from proteinnet_parsing import parse_raw_proteinnet
 from structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError, SequenceError, ContigMultipleMatchingError
 
@@ -36,6 +37,7 @@ MULTIPLE_CONTIG_ERRORS = m.list()
 FAILED_ASTRAL_IDS = m.list()
 PARSING_ERRORS = m.list()
 NSAA_ERRORS = m.list()
+MISSING_ASTRAL_IDS = m.list()
 
 
 def get_chain_from_trainid(proteinnet_id):
@@ -49,8 +51,19 @@ def get_chain_from_trainid(proteinnet_id):
             pdbid = pdbid.split("#")[1]
     except ValueError:
         # TODO Implement support for ASTRAL data; ids only contain "PDBID_domain" and are currently ignored
-        FAILED_ASTRAL_IDS.append(1)
-        return None
+        try:
+            pdbid, astral_id = proteinnet_id.split("_")
+        except ValueError:
+            FAILED_ASTRAL_IDS.append(1)
+            return None
+        try:
+            return get_chain_from_astral_id(astral_id, ASTRAL_ID_MAPPING)
+        except KeyError:
+            MISSING_ASTRAL_IDS.append(1)
+            return None
+        except:
+            FAILED_ASTRAL_IDS.append(1)
+            return None
     try:
         # TODO Parse CIFs, though ProDy doesn't like to do this. Issues arise with model #s, multiple atom coords
         pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
@@ -90,7 +103,7 @@ def get_chain_from_proteinnetid(pdbid_chain):
     Determines whether or not a PN id is a test or training id and calls the corresponding method.
     """
     # If the ProteinNet ID is from the test set
-    if "TBM#" in pdbid_chain or "FM#" in pdbid_chain:
+    if "TBM#" in pdbid_chain or "FM#" in pdbid_chain or "TBM-hard" in pdbid_chain or "FM-hard" in pdbid_chain:
         chain = get_chain_from_testid(pdbid_chain)
     # If the ProteinNet ID is from the train or validation set
     else:
@@ -321,7 +334,8 @@ def main():
     with Pool(multiprocessing.cpu_count()) as p:
         test_results = list(tqdm.tqdm(p.imap(work, test_casp_ids), total=len(test_casp_ids)))
     print("Structures processed.")
-    print(f"{sum(FAILED_ASTRAL_IDS)} ASTRAL IDs failed to download.")
+    print(f"{sum(MISSING_ASTRAL_IDS)} ASTRAL IDs were missing from the file.")
+    print(f"{sum(FAILED_ASTRAL_IDS)} ASTRAL IDs failed to download for another reason.")
     print(f"{len(MULTIPLE_CONTIG_ERRORS)} ProteinNet IDs failed because of multiple matching contigs.")
     print(f"{len(SEQUENCE_ERRORS)} ProteinNet IDs failed because of mismatching sequence errors.")
     print(f"{len(NSAA_ERRORS)} ProteinNet IDs failed because of non-std AAs.")
@@ -361,6 +375,8 @@ if __name__ == "__main__":
     VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
     TRAIN_FILE = "training_100.pt"
     PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT = torch.load(os.path.join(args.input_dir, "torch", TRAIN_FILE)), torch.load(os.path.join(args.input_dir, "torch", "validation.pt")), torch.load(os.path.join(args.input_dir, "torch", "testing.pt"))
+    ASTRAL_FILE = "/home/jok120/protein-transformer/data/dir.des.scope.2.07-stable.txt"
+    ASTRAL_ID_MAPPING = parse_astral_summary_file(ASTRAL_FILE)
     pr.pathPDBFolder(args.pdb_dir)
     np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
     np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing

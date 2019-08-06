@@ -10,6 +10,34 @@ GLOBAL_PAD_CHAR = np.nan
 NUM_PREDICTED_COORDS = 13
 
 
+def parse_astral_summary_file(path):
+    d = {}
+    for line in open(path, "r").readlines():
+        if line.startswith("#"):
+            continue
+        line_items = line.split()
+        if line_items[3] == "-":
+            continue
+        d[line_items[3]] = (line_items[4], line_items[5])
+    return d
+
+
+def get_chain_from_astral_id(astral_id, d):
+    pdbid, chain = d[astral_id]
+    assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
+    chain, resnums = chain.split(":")
+    resnums = ''.join(i for i in resnums if (i.isdigit() or i == "-"))
+    a = pr.parsePDB(pdbid, chain=chain)
+    if resnums != "":
+        if resnums[0] == "-":
+            # Ranges with negative numbers must be escaped with ` character
+            a = a.select(f"resnum `{resnums[0] + resnums[1:].replace('-', ':')}`")
+        else:
+            a = a.select(f"resnum {resnums.replace('-', ':')}")
+    return a
+
+
+
 def angle_list_to_sin_cos(angs, reshape=True):
     """ Given a list of angles, returns a new list where those angles have been turned into
     their sines and cosines. If reshape is False, a new dim. is added that can hold the sine and
@@ -238,9 +266,9 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
     bond angles along the peptide backbone, since they account for significant variation.
     i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, chi3, chi4, chi5], [...] ...]
     """
+    chain = chain.select("protein and not hetero and not hetatm").copy()
     if chain.nonstdaa:
         raise NonStandardAminoAcidError
-    chain = chain.select("protein and not hetero and not hetatm").copy()
 
     coords = []
     dihedrals = []
