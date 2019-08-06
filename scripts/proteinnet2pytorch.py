@@ -96,11 +96,25 @@ def get_chain_from_proteinnetid(pdbid_chain):
     return chain
 
 
+def get_proteinnet_seq_from_id(pnid):
+    """
+    Given a ProteinNet ID, this method returns the associated primary AA sequence.
+    """
+    if "#" not in pnid:
+        true_seq = PN_TRAIN_DICT[pnid]["primary"]
+    elif "TBM#" in pnid or "FM#" in pnid or "TBM-hard" in pnid:
+        true_seq = PN_TEST_DICT[pnid]["primary"]
+    else:
+        true_seq = PN_VALID_DICT[pnid]["primary"]
+    return true_seq
+
+
 def work(pdbid_chain):
     """
     For a single PDB ID with chain, i.e. ('1A9U_A'), fetches that PDB chain from the PDB and
     computes its angles.
     """
+    true_seq = get_proteinnet_seq_from_id(pdbid_chain)
     chain = get_chain_from_proteinnetid(pdbid_chain)
     if chain is None:
         return None
@@ -272,6 +286,7 @@ def post_process_data(data):
 
 
 def main():
+    global PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT
     train_pdb_ids, valid_ids, test_casp_ids = parse_raw_proteinnet(args.input_dir)
     print("IDs fetched.")
 
@@ -323,6 +338,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
     TRAIN_FILE = "training_100.pt"
+    PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT = torch.load(os.path.join(args.input_dir, "torch", TRAIN_FILE)), torch.load(os.path.join(args.input_dir, "torch", "validation.pt")), torch.load(os.path.join(args.input_dir, "torch", "testing.pt"))
     pr.pathPDBFolder(args.pdb_dir)
     np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
     np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
