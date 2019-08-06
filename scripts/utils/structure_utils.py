@@ -176,7 +176,7 @@ def find_contig_locations(contigs, true_seq):
             print(f"Multiple matches of {contigs[i]} found in {search_seq}.")
             raise ContigMultipleMatchingError
         if loc == -1:
-            print(f"Sequence mismatch.\n{contigs[i]}\n{search_seq}")
+            print(f"Can't find contig in search_seq.\n{contigs[i]}\n{search_seq}")
             raise SequenceError
         search_seq = search_seq[loc + len(contigs[i]):]
         if len(contig_locs) == 0:
@@ -212,6 +212,25 @@ def use_mask_to_pad_coords_dihedrals(mask_seq, coords, dihedrals):
     return new_coords, new_angs
 
 
+def use_contigs_to_compute_mask(contigs, true_seq, observed_sequence):
+    mask_seq = "-" * len(true_seq)
+    # If there are no gaps in the structure, then keep the observed sequence
+    if len(contigs) == 1:
+        true_seq = observed_sequence
+        mask_seq = "+" * len(observed_sequence)
+    else:
+        # Compute the best contig locations
+        contig_locs = find_contig_locations(contigs, true_seq)
+
+        # Use the contig locations to create our mask
+        for contig, c_loc in zip(contigs, contig_locs):
+            mask_seq = mask_seq[:c_loc] + "+" * len(contig) + mask_seq[c_loc + len(contig):]
+
+        # Now that we have our mask sequence, we can trim its ends and fill in pad chars for residues
+        mask_seq, true_seq = trim_mask_and_true_seqs(mask_seq, true_seq)
+    return mask_seq, true_seq
+
+
 def get_seq_and_masked_coords_and_angles(chain, true_seq):
     """
     Given a ProDy Chain object (from a Hierarchical View), return a tuple (angles, coords, sequence).
@@ -221,7 +240,6 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
     """
     if chain.nonstdaa:
         raise NonStandardAminoAcidError
-    # TODO what is the difference between hetero and hetatm? should i ignore hetatm?
     chain = chain.select("protein and not hetero and not hetatm").copy()
 
     coords = []
@@ -234,7 +252,6 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
     # Mask info
     current_contig = ""
     contigs = []
-    mask_seq = "-" * len(true_seq)
 
     for res_id, res in enumerate(all_residues):
         if not res.stdaa:
@@ -249,39 +266,25 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
         # Measure coordinates
         rescoords = measure_res_coordinates(res)
 
+        # Update records
         coords.append(rescoords)
         dihedrals.append(all_res_angles)
         prev_res = res
         observed_sequence += res.getSequence()[0]
 
-        if res_id < len(all_residues) - 1 and residues_are_contiguous(res, all_residues[res_id+1]):  # includes penultimate residue
+        if current_contig == "":
+            current_contig = res.getSequence()[0]
+        if res_id < len(all_residues) - 1 and residues_are_contiguous(res, all_residues[res_id+1]):
             # The residues are connected
-            if current_contig == "":
-                current_contig += res.getSequence()[0] + all_residues[res_id+1].getSequence()[0]
-            else:
-                current_contig += all_residues[res_id+1].getSequence()[0]
+            current_contig += all_residues[res_id+1].getSequence()[0]
         elif res_id < len(all_residues) - 1 and not residues_are_contiguous(res, all_residues[res_id+1]):
+            # The residues are not connected
             contigs.append(current_contig)
             current_contig = ""
-        elif res_id == len(all_residues) - 1 and not residues_are_contiguous(all_residues[res_id-1], res):
-            current_contig += res.getSequence()[0]
     if current_contig != "":
         contigs.append(current_contig)
 
-    # if len is longer and no gaps, replace true seq with observed
-    if len(contigs) == 1 and len(observed_sequence) > len(true_seq):
-        true_seq = observed_sequence
-        mask_seq = "+" * len(coords)
-    else:
-        # Compute the best contig locations
-        contig_locs = find_contig_locations(contigs, true_seq)
-
-        # Use the contig locations to create our mask
-        for contig, c_loc in zip(contigs, contig_locs):
-            mask_seq = mask_seq[:c_loc] + "+" * len(contig) + mask_seq[c_loc + len(contig):]
-
-        # Now that we have our mask sequence, we can trim its ends and fill in pad chars for residues
-        mask_seq, true_seq = trim_mask_and_true_seqs(mask_seq, true_seq)
+    mask_seq, true_seq = use_contigs_to_compute_mask(contigs, true_seq, observed_sequence)
 
     assert mask_seq.count("+") == len(coords), f"The number of coords ({len(coords)}) must match the number of '+'s in mask_seq {mask_seq.count('+')}, {mask_seq}.\n{observed_sequence}\n{true_seq}"
     assert mask_seq.count("+") == len(dihedrals), f"The number of dihedrals ({len(dihedrals)}) must match the number of '+'s in mask_seq {mask_seq.count('+')}, {mask_seq}."
