@@ -23,15 +23,19 @@ import tqdm
 
 sys.path.append("/home/jok120/protein-transformer/scripts/utils/")
 from structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
-    additional_checks, zero_runs
+    additional_checks, zero_runs, get_residue_mask_from_structure
 from proteinnet_parsing import parse_raw_proteinnet
-from structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError
+from structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError, SequenceError, ContigMultipleMatchingError
 
 sys.path.extend("../protein/")
 
 pr.confProDy(verbosity='error')
 m = multiprocessing.Manager()
+SEQUENCE_ERRORS = m.list()
+MULTIPLE_CONTIG_ERRORS = m.list()
 FAILED_ASTRAL_IDS = m.list()
+PARSING_ERRORS = m.list()
+NSAA_ERRORS = m.list()
 
 
 def get_chain_from_trainid(proteinnet_id):
@@ -51,8 +55,7 @@ def get_chain_from_trainid(proteinnet_id):
         # TODO Parse CIFs, though ProDy doesn't like to do this. Issues arise with model #s, multiple atom coords
         pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
     except (AttributeError, pr.proteins.pdbfile.PDBParseError) as e:
-        print("Error parsing", proteinnet_id)
-        ERROR_FILE.write(f"{proteinnet_id}, {str(e)}\n")
+        PARSING_ERRORS.append(1)
         return None
     chain = pdb_hv[chid]
     try:
@@ -75,8 +78,7 @@ def get_chain_from_testid(proteinnet_id):
     try:
         pdb_hv = pr.parsePDB(os.path.join(args.input_dir, "targets", caspid + ".pdb")).getHierView()
     except AttributeError:
-        print("Error parsing", proteinnet_id)
-        ERROR_FILE.write(f"{proteinnet_id}\n")
+        PARSING_ERRORS.append(1)
         return None
     assert pdb_hv.numChains() == 1, "Only a single chain should be parsed from the CASP targ PDB."
     chain = next(iter(pdb_hv))
@@ -119,10 +121,25 @@ def work(pdbid_chain):
     if chain is None:
         return None
     try:
-        dihedrals_coords_sequence = get_seq_and_masked_coords_and_angles(chain)
+        dihedrals_coords_sequence = get_seq_and_masked_coords_and_angles(chain, true_seq)
     except NonStandardAminoAcidError:
+        NSAA_ERRORS.append(1)
         return None
-
+    except SequenceError:
+        try:
+            pdbid, model_id, chid = pdbid_chain.split("_")
+            if "#" in pdbid:
+                pdbid = pdbid.split("#")[1]
+            p, header = pr.parsePDB(pdbid, chain=chid, header=True)
+            polymer = header[chid]
+            dihedrals_coords_sequence = get_seq_and_masked_coords_and_angles(chain, polymer.sequence)
+        except SequenceError:
+            print("Not fixed.", pdbid_chain)
+            SEQUENCE_ERRORS.append(1)
+            return None
+    except ContigMultipleMatchingError:
+        MULTIPLE_CONTIG_ERRORS.append(1)
+        return None
     dihedrals, coords, sequence = dihedrals_coords_sequence
 
     return dihedrals, coords, sequence, pdbid_chain
@@ -291,7 +308,7 @@ def main():
     print("IDs fetched.")
 
     # Download and preprocess all data from PDB IDs
-    lim = 16
+    lim = None
     with Pool(multiprocessing.cpu_count()) as p:
         train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim])))
 
@@ -305,6 +322,11 @@ def main():
         test_results = list(tqdm.tqdm(p.imap(work, test_casp_ids), total=len(test_casp_ids)))
     print("Structures processed.")
     print(f"{sum(FAILED_ASTRAL_IDS)} ASTRAL IDs failed to download.")
+    print(f"{len(MULTIPLE_CONTIG_ERRORS)} ProteinNet IDs failed because of multiple matching contigs.")
+    print(f"{len(SEQUENCE_ERRORS)} ProteinNet IDs failed because of mismatching sequence errors.")
+    print(f"{len(NSAA_ERRORS)} ProteinNet IDs failed because of non-std AAs.")
+    print(f"{len(PARSING_ERRORS)} ProteinNet IDs failed because of parsing errors.")
+
     # Unpack results
     print("Training set:\t", end="")
     train_ohs, train_angs, train_strs, train_ids = unpack_processed_results(train_results)
