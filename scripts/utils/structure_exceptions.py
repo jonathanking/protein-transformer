@@ -28,3 +28,9 @@ class ContigMultipleMatchingError(Exception):
     """An exception to raise when a sequence is ambiguous due to multiple matching contig locations."""
     def __init__(self, *args):
         super().__init__(*args)
+
+
+class ShortStructureError(Exception):
+    """An exception to raise when a sequence is ambiguous due to multiple matching contig locations."""
+    def __init__(self, *args):
+        super().__init__(*args)

@@ -4,7 +4,7 @@ import re
 
 from protein.Sidechains import NUM_PREDICTED_ANGLES, SC_DATA
 from structure_exceptions import NonStandardAminoAcidError, IncompleteStructureError, MissingBackboneAtomsError, \
-    SequenceError, ContigMultipleMatchingError
+    SequenceError, ContigMultipleMatchingError, ShortStructureError
 
 GLOBAL_PAD_CHAR = np.nan
 NUM_PREDICTED_COORDS = 13
@@ -26,16 +26,27 @@ def get_chain_from_astral_id(astral_id, d):
     pdbid, chain = d[astral_id]
     assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
     chain, resnums = chain.split(":")
-    resnums = ''.join(i for i in resnums if (i.isdigit() or i == "-"))
     a = pr.parsePDB(pdbid, chain=chain)
     if resnums != "":
         if resnums[0] == "-":
             # Ranges with negative numbers must be escaped with ` character
-            a = a.select(f"resnum `{resnums[0] + resnums[1:].replace('-', ':')}`")
+            a = a.select(f"resnum `{resnums[0] + resnums[1:].replace('-', ' to ')}`")
         else:
-            a = a.select(f"resnum {resnums.replace('-', ':')}")
+            a = a.select(f"resnum {resnums.replace('-', ' to ')}")
     return a
 
+
+def get_header_seq_from_astral_id(astral_id, d):
+    pdbid, chain = d[astral_id]
+    assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
+    chain, resnums = chain.split(":")
+    resnums = ''.join(i for i in resnums if (i.isdigit() or i == "-"))
+    a, h = pr.parsePDB(pdbid, chain=chain, header=True)
+    if resnums == "":
+        return h[chain].sequence
+    else:
+        # This means the ASTRAL id is a substructure, and I can't use the seqres record directly
+        raise SequenceError
 
 
 def angle_list_to_sin_cos(angs, reshape=True):
@@ -266,14 +277,17 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
     bond angles along the peptide backbone, since they account for significant variation.
     i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, chi3, chi4, chi5], [...] ...]
     """
-    chain = chain.select("protein and not hetero and not hetatm").copy()
-    if chain.nonstdaa:
+    chain = chain.select("protein and not hetero and not hetatm")
+    if chain is None or chain.nonstdaa:
         raise NonStandardAminoAcidError
+    chain = chain.copy()
 
     coords = []
     dihedrals = []
     observed_sequence = ""
     all_residues = list(chain.iterResidues())
+    if len(all_residues) < 2:
+        raise ShortStructureError
     prev_res = None
     next_res = all_residues[1]
 
