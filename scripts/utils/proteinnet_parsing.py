@@ -1,5 +1,6 @@
 import os
 from glob import glob
+import multiprocessing
 
 import torch
 
@@ -59,6 +60,26 @@ def read_protein_from_file(file_pointer, include_tertiary):
             return None
 
 
+def process_file(input_filename):
+    global torch_dict_dir
+    print("    " + input_filename)
+    text_file = open(input_filename + '.ids', "w")
+    input_file = open(input_filename, "r")
+    meta_dict = {}
+    while True:
+        next_protein = read_protein_from_file(input_file, include_tertiary=False)
+        if next_protein is None:
+            break
+        id_ = next_protein["id"]
+        del next_protein["id"]
+        meta_dict.update({id_: next_protein})
+        text_file.write(f"{id_}\n")
+    torch.save(meta_dict, os.path.join(torch_dict_dir, os.path.basename(input_filename) + ".pt"))
+    input_file.close()
+    text_file.close()
+    print(f"{input_filename} finished.")
+
+
 def parse_raw_proteinnet(input_dir):
     """
     Preprocesses raw ProteinNet records by reading them and transforming them
@@ -66,6 +87,7 @@ def parse_raw_proteinnet(input_dir):
     this will acquired from the PDB.
     :param input_dir:
     """
+    global torch_dict_dir
     # Test for .pt files existance, return ids and exit if already complete
     torch_dict_dir = os.path.join(input_dir, "torch/")
     if os.path.exists(os.path.join(torch_dict_dir, "training_100.pt")):
@@ -73,35 +95,13 @@ def parse_raw_proteinnet(input_dir):
         train_ids, valid_ids, test_ids = load_ids_from_text_files(torch_dict_dir.replace("/torch", "/raw"))
         return train_ids, valid_ids, test_ids
 
-    train_ids, valid_ids,  test_ids = [], [], []
     if not os.path.exists(torch_dict_dir):
         os.mkdir(torch_dict_dir)
 
     input_files = glob(os.path.join(input_dir, "raw/*[!.ids]"))
     print("Preprocessing raw ProteinNet files...")
-    for input_filename in input_files:
-        print("    " + input_filename)
-        text_file = open(input_filename + '.ids', "w")
-        input_file = open(input_filename, "r")
-        meta_dict = {}
-        while True:
-            next_protein = read_protein_from_file(input_file, include_tertiary=False)
-            if next_protein is None:
-                break
-            id_ = next_protein["id"]
-            del next_protein["id"]
-            meta_dict.update({id_: next_protein})
-            text_file.write(f"{id_}\n")
-            if "training_100" in input_filename:
-                train_ids.append(id_)
-            elif "validation" in input_filename:
-                valid_ids.append(id_)
-            elif "testing" in input_filename:
-                test_ids.append(id_)
-            else:
-                continue
-        torch.save(meta_dict, os.path.join(torch_dict_dir, os.path.basename(input_filename) + ".pt"))
-        input_file.close()
-        text_file.close()
+
+    with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
+        p.map(process_file, input_files)
     print("Done.")
-    return train_ids, valid_ids, test_ids
+    return parse_raw_proteinnet(input_dir)
