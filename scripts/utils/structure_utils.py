@@ -361,7 +361,7 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
         print(f"Coords shape {coords_np.shape} does not match len(seq)*13 = {len(true_seq) * NUM_PREDICTED_COORDS},\n"
               "OBS: {observed_sequence}\nTRU: {true_seq}\n{chain}")
         raise SequenceError
-    return dihedrals_np, coords_np, observed_sequence
+    return dihedrals_np, coords_np, true_seq
 
 
 def residues_are_contiguous(resA, resB):
