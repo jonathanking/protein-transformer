@@ -46,42 +46,40 @@ def get_chain_from_trainid(proteinnet_id):
     Given a ProteinNet ID of a training or validation set item, this function returns the associated
     ProDy-parsed chain object.
     """
-    # TODO Parse CIFs, though ProDy doesn't like to do this. Issues arise with model #s, multiple atom coords
+    # Try parsing the ID as a PDB ID. If it fails, assume it's an ASTRAL ID.
     try:
         pdbid, model_id, chid = proteinnet_id.split("_")
         if "#" in pdbid:
             pdbid = pdbid.split("#")[1]
     except ValueError:
-        # TODO Implement support for ASTRAL data; ids only contain "PDBID_domain" and are currently ignored
         try:
             pdbid, astral_id = proteinnet_id.split("_")
-        except ValueError:
-            FAILED_ASTRAL_IDS.append(1)
-            return None
-        try:
             return get_chain_from_astral_id(astral_id, ASTRAL_ID_MAPPING)
         except KeyError:
             MISSING_ASTRAL_IDS.append(1)
             return None
+        except ValueError:
+            FAILED_ASTRAL_IDS.append(1)
+            return None
         except:
             FAILED_ASTRAL_IDS.append(1)
             return None
+
+    # Continue loading the chain, given the PDB ID
     try:
         pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
     except (AttributeError, pr.proteins.pdbfile.PDBParseError, OSError) as e:
         PARSING_ERRORS.append(1)
         return None
     chain = pdb_hv[chid]
+
+    # Attempt to select a coordset
     try:
         if chain.numCoordsets() > 1:
             chain.setACSIndex(int(model_id))
     except IndexError:
         pass
 
-    try:
-        assert chain.getChid() == chid, "The chain ID was not as expected."
-    except AttributeError:
-        pass  # This is probably a segment object
     return chain
 
 
