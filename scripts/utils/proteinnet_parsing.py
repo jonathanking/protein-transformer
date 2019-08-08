@@ -61,6 +61,8 @@ def read_protein_from_file(file_pointer, include_tertiary):
 
 
 def process_file(input_filename):
+    """ A parallelizable method for processing one raw ProteinNet file and creating
+        a Pytorch-saved python dictionary of the data. """
     global torch_dict_dir
     print("    " + input_filename)
     text_file = open(input_filename + '.ids', "w")

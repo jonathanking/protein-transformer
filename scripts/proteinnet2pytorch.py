@@ -130,6 +130,9 @@ def get_proteinnet_seq_from_id(pnid):
 
 
 def get_sequence_from_pdb_header(pnid):
+    """ Given a ProteinNet ID, this function tries to obtain the sequence from the PDB's
+        SEQRES records."""
+    # Try parsing the file, assuming it's not an ASTRAL ID.
     try:
         pdbid, model_id, chid = pnid.split("_")
         if "#" in pdbid:
@@ -146,7 +149,8 @@ def get_sequence_from_pdb_header(pnid):
 def work(pdbid_chain):
     """
     For a single PDB ID with chain, i.e. ('1A9U_A'), fetches that PDB chain from the PDB and
-    computes its angles.
+    computes its angles, coordinates, and sequence. The angles and coordinates contain
+    GLOBAL_PAD_CHARs where there was missing data.
     """
     true_seq = get_proteinnet_seq_from_id(pdbid_chain)
     chain = get_chain_from_proteinnetid(pdbid_chain)
@@ -164,6 +168,8 @@ def work(pdbid_chain):
         SHORT_ERRORS.append(1)
         return None
     except SequenceError:
+        # This means there was some mismatch between the "true" sequence and observed sequence.
+        # Since the default true seq comes from ProteinNet, this attempts to use the SEQRES records.
         try:
             seq = get_sequence_from_pdb_header(pdbid_chain)
             dihedrals_coords_sequence = get_seq_and_masked_coords_and_angles(chain, seq)
@@ -230,19 +236,15 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
     Given split data along with the query information that generated it, this function saves the
     data as a Python dictionary, which is then saved to disk using torch.save.
     """
-    train_proteinnet_dict = torch.load(os.path.join(args.input_dir, "torch", TRAIN_FILE))
-    valid_proteinnet_dict = torch.load(os.path.join(args.input_dir, "torch", "validation.pt"))
-    test_proteinnet_dict = torch.load(os.path.join(args.input_dir, "torch", "testing.pt"))
-
     # Create a dictionary data structure, using the sin/cos transformed angles
     data = {"train": {"seq": train_seq,
                       "ang": angle_list_to_sin_cos(train_ang),
                       "ids": train_ids,
                       "crd": train_crd,
-                      "mask": [np.asarray(train_proteinnet_dict[_id]["mask"]) for _id in train_ids],
-                      "evolutionary": [np.asarray(train_proteinnet_dict[_id]["evolutionary"]) for _id in train_ids],
-                      "secondary": [train_proteinnet_dict[_id]["secondary"]
-                                    if "secondary" in train_proteinnet_dict[_id].keys()
+                      "mask": [np.asarray(PN_TRAIN_DICT[_id]["mask"]) for _id in train_ids],
+                      "evolutionary": [np.asarray(PN_TRAIN_DICT[_id]["evolutionary"]) for _id in train_ids],
+                      "secondary": [PN_TRAIN_DICT[_id]["secondary"]
+                                    if "secondary" in PN_TRAIN_DICT[_id].keys()
                                     else None
                                     for _id in train_ids]},
             "valid": {split: dict() for split in VALID_SPLITS},
@@ -250,10 +252,10 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
                      "ang": angle_list_to_sin_cos(test_ang),
                      "ids": test_ids,
                      "crd": test_crd,
-                     "mask": [np.asarray(test_proteinnet_dict[_id]["mask"]) for _id in test_ids],
-                     "evolutionary": [np.asarray(test_proteinnet_dict[_id]["evolutionary"]) for _id in test_ids],
-                     "secondary": [test_proteinnet_dict[_id]["secondary"]
-                                   if "secondary" in test_proteinnet_dict[_id].keys()
+                     "mask": [np.asarray(PN_TEST_DICT[_id]["mask"]) for _id in test_ids],
+                     "evolutionary": [np.asarray(PN_TEST_DICT[_id]["evolutionary"]) for _id in test_ids],
+                     "secondary": [PN_TEST_DICT[_id]["secondary"]
+                                   if "secondary" in PN_TEST_DICT[_id].keys()
                                    else None
                                    for _id in test_ids]},
             "settings": {"max_len": max(map(len, train_seq + test_seq))},
@@ -265,10 +267,10 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
         data["valid"][split]["ang"] = angle_list_to_sin_cos(ang_val)
         data["valid"][split]["crd"] = crd_val
         data["valid"][split]["ids"] = ids_val
-        data["valid"][split]["mask"] = [np.asarray(valid_proteinnet_dict[_id]["mask"]) for _id in ids_val]
-        data["valid"][split]["evolutionary"] = [np.asarray(valid_proteinnet_dict[_id]["evolutionary"]) for _id in ids_val]
-        data["valid"][split]["secondary"] = [valid_proteinnet_dict[_id]["secondary"]
-                                             if "secondary" in valid_proteinnet_dict[_id].keys()
+        data["valid"][split]["mask"] = [np.asarray(PN_VALID_DICT[_id]["mask"]) for _id in ids_val]
+        data["valid"][split]["evolutionary"] = [np.asarray(PN_VALID_DICT[_id]["evolutionary"]) for _id in ids_val]
+        data["valid"][split]["secondary"] = [PN_VALID_DICT[_id]["secondary"]
+                                             if "secondary" in PN_VALID_DICT[_id].keys()
                                              else None
                                              for _id in ids_val]
         data["settings"]["max_len"] = max(data["settings"]["max_len"], max(map(len, seq_val)))
@@ -301,9 +303,9 @@ def save_data_dict(data):
     Saves a Python dictionary containing all training data to disk via Pickle or PyTorch.
     """
     if not args.out_file and args.pickle:
-        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + suffix + ".pkl"
+        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pkl"
     elif not args.out_file and not args.pickle:
-        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + suffix + ".pt"
+        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pt"
     if args.pickle:
         with open(args.out_file, "wb") as f:
             pickle.dump(data, f)
@@ -360,7 +362,7 @@ def main():
     with Pool(multiprocessing.cpu_count()) as p:
         test_results = list(tqdm.tqdm(p.imap(work, test_casp_ids), total=len(test_casp_ids)))
     print("Structures processed.")
-    print_summary()
+    print_failure_summary()
 
     # Unpack results
     print("Training set:\t", end="")
@@ -380,7 +382,8 @@ def main():
     save_data_dict(data)
 
 
-def print_summary():
+def print_failure_summary():
+    """ Summarizes failures associated with the processing of ProteinNet ID data. """
     print(f"{sum(MISSING_ASTRAL_IDS)} ASTRAL IDs were missing from the file.")
     print(f"{sum(FAILED_ASTRAL_IDS)} ASTRAL IDs failed to download for another reason.")
     print(f"{len(MULTIPLE_CONTIG_ERRORS)} ProteinNet IDs failed because of multiple matching contigs.")
@@ -388,6 +391,7 @@ def print_summary():
     print(f"{len(NSAA_ERRORS)} ProteinNet IDs failed because of non-std AAs.")
     print(f"{len(SHORT_ERRORS)} ProteinNet IDs failed because their length was <= 2.")
     print(f"{len(PARSING_ERRORS)} ProteinNet IDs failed because of parsing errors.")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -402,22 +406,24 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--pickle", action="store_true",
                         help="Save data as a pickled dictionary instead of a torch-dictionary.")
     args = parser.parse_args()
+
     VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
     TRAIN_FILE = "training_100.pt"
     PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT = None, None, None
     ASTRAL_FILE = "/home/jok120/protein-transformer/data/dir.des.scope.2.07-stable.txt"
     ASTRAL_ID_MAPPING = parse_astral_summary_file(ASTRAL_FILE)
-    pr.pathPDBFolder(args.pdb_dir)
-    np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
-    np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
-    today = datetime.datetime.today()
-    suffix = today.strftime("%y%m%d")
+    SUFFIX = str(datetime.datetime.today().strftime("%y%m%d")) + "_30"
     match = re.search(r"casp\d+", args.input_dir, re.IGNORECASE)
     assert match, "The input_dir is not titled with 'caspX'."
     CASP_VERSION = match.group(0)
     ERROR_FILE = open("error.log", "w")
+
+    pr.pathPDBFolder(args.pdb_dir)  # Set PDB download location
+    np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
+    np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
+
     try:
         main()
     except Exception as e:
-        print_summary()
+        print_failure_summary()
         raise e

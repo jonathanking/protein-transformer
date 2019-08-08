@@ -11,6 +11,8 @@ NUM_PREDICTED_COORDS = 13
 
 
 def parse_astral_summary_file(path):
+    """ Given a path to the ASTRAL database summary file, this function parses
+        that file and returns a dictionary that maps ASTRAL IDs to (pdbid, chain). """
     d = {}
     for line in open(path, "r").readlines():
         if line.startswith("#"):
@@ -23,6 +25,8 @@ def parse_astral_summary_file(path):
 
 
 def get_chain_from_astral_id(astral_id, d):
+    """ Given an ASTRAL ID and the ASTRAL->PDB/chain mapping dictionary, this
+        function attempts to return the relevant, parsed ProDy object. """
     pdbid, chain = d[astral_id]
     assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
     chain, resnums = chain.split(":")
@@ -37,6 +41,8 @@ def get_chain_from_astral_id(astral_id, d):
 
 
 def get_header_seq_from_astral_id(astral_id, d):
+    """ Attempts to return the sequence associated with a given ASTRAL ID.
+        Requires the ASTRAL->PDB/chain mapping dictionary. """
     pdbid, chain = d[astral_id]
     assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
     chain, resnums = chain.split(":")
@@ -98,6 +104,8 @@ def check_standard_continuous(residue, prev_res_num):
 
 
 def determine_sidechain_atomnames(_res):
+    """ Given a residue from ProDy, returns a list of sidechain atom names
+        that must be recorded."""
     if _res.getResname() is "GLY":
         atom_names = []
     elif _res.getResname() in SC_DATA.keys():
@@ -206,7 +214,7 @@ def empty_ang():
 
 def find_contig_locations(contigs, true_seq):
     """ Given a list of contigs, returns their positions within true_seq. Raises errors if the matching is ambiguous
-        or """
+        or if the observed sequence contains residues not found in the true seq. """
     contig_locs = []
     search_seq = str(true_seq)
     for i in range(len(contigs)):
@@ -226,6 +234,8 @@ def find_contig_locations(contigs, true_seq):
 
 
 def trim_mask_and_true_seqs(mask_seq, true_seq):
+    """ Given a mask and true sequence of the same length, this removes gaps
+        from the ends of both. """
     mask_seq_no_left = mask_seq.lstrip('-')
     mask_seq_no_right = mask_seq.rstrip('-')
     n_removed_left = len(mask_seq) - len(mask_seq_no_left)
@@ -237,6 +247,10 @@ def trim_mask_and_true_seqs(mask_seq, true_seq):
 
 
 def use_mask_to_pad_coords_dihedrals(mask_seq, coords, dihedrals):
+    """ Given a mask sequence ('-' for gap, '+' for present), and python lists
+        of coordinates and dihedrals, this function places gaps in the relevant
+        locations for each before returning. At the end, both should have the
+        same length as the mask_seq. """
     new_coords = []
     new_angs = []
     coords = iter(coords)
@@ -252,6 +266,11 @@ def use_mask_to_pad_coords_dihedrals(mask_seq, coords, dihedrals):
 
 
 def use_contigs_to_compute_mask(contigs, true_seq, observed_sequence):
+    """ Given a list of contigs, aka contiguous sequence portions from a protein
+        structure, along with the true sequence and an obs. sequence that may
+        contain gaps, this function returns the mask and true sequence.
+        The mask has '-' for gaps and '+' for present items w.r.t. the true
+        sequence. """
     mask_seq = "-" * len(true_seq)
     # If there are no gaps in the structure, then keep the observed sequence
     if len(contigs) == 1:
@@ -355,68 +374,6 @@ def residues_are_contiguous(resA, resB):
         # raise MissingBackboneAtomsError("Residue")
         return resA.getResnum() + 1 == resB.getResnum()
     return np.linalg.norm(cur_coords - next_coords) <= contiguous_threshold
-
-
-def get_residue_mask_from_structure(chain, true_seq):
-    obs_seq = ""
-    all_res = list(chain.iterResidues())
-    contiguous_threshold = 2
-    contiguous_sections = []
-    current_contig = ""
-    gap_indices = []
-
-    for i in range(len(all_res)-1):
-        cur_r = all_res[i]
-        next_r = all_res[i+1]
-        try:
-            cur_r_coords = cur_r.select("name C").getCoords()
-            next_r_coords = next_r.select("name N").getCoords()
-        except AttributeError as e:
-            print(e)
-            print(i)
-            print(cur_r.getNames())
-            print(next_r.getNames())
-            raise IncompleteStructureError
-        obs_seq += cur_r.getSequence()[0]
-        if np.linalg.norm(cur_r_coords - next_r_coords) <= contiguous_threshold:
-            # The residues are connected
-            if current_contig == "":
-                current_contig += cur_r.getSequence()[0] + next_r.getSequence()[0]
-            else:
-                current_contig += next_r.getSequence()[0]
-        else:
-            # The residues are not connected
-            contiguous_sections.append(current_contig)
-            current_contig = ""
-            gap_indices.append(i)
-
-    if current_contig != "":
-        contiguous_sections.append(current_contig)
-
-    print(f"Gaps at {gap_indices}.")
-
-    tru_seq_ptr = 0
-    mask_seq = ""
-    mask_array = []
-
-    for i, cs in enumerate(contiguous_sections):
-        loc = true_seq.find(cs)
-        assert loc is not -1, f"{cs} not found in {true_seq}."
-        # Mask string
-        gap_insert = "-" * (loc - tru_seq_ptr)
-        mask_seq += gap_insert
-        mask_seq += cs
-        # Mask array
-        gap_int_insert = [0] * (loc - tru_seq_ptr)
-        mask_array += gap_int_insert
-        mask_array += [1] * len(cs)
-
-        tru_seq_ptr += len(gap_insert+cs)
-    if tru_seq_ptr < len(true_seq):
-        mask_seq += "-" * (len(true_seq) - tru_seq_ptr)
-        mask_array += [0] * (len(true_seq) - tru_seq_ptr)
-    print(f"{true_seq}\n{mask_seq}")
-    return np.asarray(mask_array)
 
 
 def additional_checks(matrix):
