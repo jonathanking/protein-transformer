@@ -314,31 +314,6 @@ def save_data_dict(data):
     print(f"Data saved to {args.out_file}.")
 
 
-def post_process_data(data):
-    """
-    Trims parts of sequences that are masked at the start and end only.
-    """
-    # For masked sequences, first remove missing residues at the start and end of the sequence.
-    # Then, assert that the sequence matches the one aquired from the PDB
-    for dset in [data["train"], data["test"]] + [data["valid"][split] for split in VALID_SPLITS]:
-        pdb_seqs = dset["seq"]
-        pn_seqs = dset["primary"]
-        masks = dset["masks"]
-        bad_ids = []
-        for i, (pdb_s, pn_s, m) in enumerate(zip(pdb_seqs, pn_seqs, masks)):
-            z = zero_runs(np.asarray(m))
-            if z[-1, -1] == len(pn_s):
-                pn_s = pn_s[:z[-1, 0]]  # trim end
-                m = m[:z[-1, 0]]
-            if z[0, 0] == 0:
-                pn_s = pn_s[z[0, 1]:]  # trim start
-                m = m[z[0, 1]:]
-            if len(pdb_s) != len(pn_s):  # "After trimming, the PN Seq and PDB seq should be the same length."
-                bad_ids.append(0)
-
-    return data
-
-
 def main():
     global PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT
     train_pdb_ids, valid_ids, test_casp_ids = parse_raw_proteinnet(args.input_dir)
@@ -378,7 +353,6 @@ def main():
     # Split into train, test and validation sets. Report sizes.
     data = create_data_dict(train_ohs, test_ohs, train_angs, test_angs, train_strs, test_strs, train_ids, test_ids,
                             valid_result_meta)
-    # data = post_process_data(data)
     save_data_dict(data)
 
 
