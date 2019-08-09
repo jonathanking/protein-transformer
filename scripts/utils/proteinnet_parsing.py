@@ -5,13 +5,13 @@ import multiprocessing
 import torch
 
 
-def load_ids_from_text_files(directory):
+def load_ids_from_text_files(directory, train_file):
     """
     Given a directory where raw ProteinNet records are stored along with .ids files, reads and returns the
     contents of those files. Effectively returns a list of IDs associated with the training, validation,
     and test sets.
     """
-    with open(os.path.join(directory, "training_100.ids"), "r") as trainf, \
+    with open(os.path.join(directory, train_file.replace(".pt", ".ids")), "r") as trainf, \
             open(os.path.join(directory, "validation.ids"), "r") as validf, \
             open(os.path.join(directory, "testing.ids"), "r") as testf:
         train_ids = trainf.read().splitlines()
@@ -82,7 +82,7 @@ def process_file(input_filename):
     print(f"{input_filename} finished.")
 
 
-def parse_raw_proteinnet(input_dir):
+def parse_raw_proteinnet(input_dir, train_file):
     """
     Preprocesses raw ProteinNet records by reading them and transforming them
     into a Pytorch-saved dictionary. It excludes the tertiary information as
@@ -92,9 +92,9 @@ def parse_raw_proteinnet(input_dir):
     global torch_dict_dir
     # Test for .pt files existance, return ids and exit if already complete
     torch_dict_dir = os.path.join(input_dir, "torch/")
-    if os.path.exists(os.path.join(torch_dict_dir, "training_100.pt")):
+    if os.path.exists(os.path.join(torch_dict_dir, train_file)):
         print("Raw ProteinNet files already preprocessed.")
-        train_ids, valid_ids, test_ids = load_ids_from_text_files(torch_dict_dir.replace("/torch", "/raw"))
+        train_ids, valid_ids, test_ids = load_ids_from_text_files(torch_dict_dir.replace("/torch", "/raw"), train_file)
         return train_ids, valid_ids, test_ids
 
     if not os.path.exists(torch_dict_dir):

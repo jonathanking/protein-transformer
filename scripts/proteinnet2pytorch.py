@@ -314,7 +314,7 @@ def save_data_dict(data):
 
 def main():
     global PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT
-    train_pdb_ids, valid_ids, test_casp_ids = parse_raw_proteinnet(args.input_dir)
+    train_pdb_ids, valid_ids, test_casp_ids = parse_raw_proteinnet(args.input_dir, TRAIN_FILE)
     print("IDs fetched.")
     PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT = torch.load(
         os.path.join(args.input_dir, "torch", TRAIN_FILE)), torch.load(
@@ -375,10 +375,12 @@ if __name__ == "__main__":
                         help="Include tertiary (coordinate-level) data.", default=True)
     parser.add_argument("-p", "--pickle", action="store_true",
                         help="Save data as a pickled dictionary instead of a torch-dictionary.")
+    parser.add_argument('--training_set', type=int, default=100, help='Which thinning of the training set to parse. '
+                                                                      '{30,50,70,90,95,100}. Default 100.')
     args = parser.parse_args()
 
     VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
-    TRAIN_FILE = "training_100.pt"
+    TRAIN_FILE = f"training_{args.training_set}.pt"
     PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT = None, None, None
     ASTRAL_FILE = "/home/jok120/protein-transformer/data/dir.des.scope.2.07-stable.txt"
     ASTRAL_ID_MAPPING = parse_astral_summary_file(ASTRAL_FILE)
