@@ -209,8 +209,6 @@ def unpack_processed_results(results):
             all_crds.append(coords)
             all_ids.append(i)
             c += 1
-        else:
-            ERROR_FILE.write(f"{i}, numerical issue\n")
     print(f"{(c * 100) / len(results):.1f}% of chains parsed. ({c}/{len(results)})")
     return all_ohs, all_angs, all_crds, all_ids
 
@@ -348,8 +346,6 @@ def main():
     print("Test set:\t\t", end="")
     test_ohs, test_angs, test_strs, test_ids = unpack_processed_results(test_results)
 
-    ERROR_FILE.close()
-
     # Split into train, test and validation sets. Report sizes.
     data = create_data_dict(train_ohs, test_ohs, train_angs, test_angs, train_strs, test_strs, train_ids, test_ids,
                             valid_result_meta)
@@ -390,7 +386,6 @@ if __name__ == "__main__":
     match = re.search(r"casp\d+", args.input_dir, re.IGNORECASE)
     assert match, "The input_dir is not titled with 'caspX'."
     CASP_VERSION = match.group(0)
-    ERROR_FILE = open("error.log", "w")
 
     pr.pathPDBFolder(args.pdb_dir)  # Set PDB download location
     np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
