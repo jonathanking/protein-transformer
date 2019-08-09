@@ -93,7 +93,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         tgt_ang_no_nan = tgt_ang.clone().detach()
         tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
         pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
-        d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
+        d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device).to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
         c_loss = combine_drmsd_mse(d_loss, m_loss, w=0.8)
         if opt.combined_loss:
@@ -350,8 +350,9 @@ def main():
                               n_layers=args.n_layers,
                               n_head=args.n_head,
                               dropout=args.dropout).to(device)
-    optimizer = optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
-                           betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
+    # optimizer = optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
+    #                        betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
+    optimizer = optim.SGD(filter(lambda x: x.requires_grad, transformer.parameters()), lr=args.learning_rate)
     if args.lr_scheduling:
         optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
 

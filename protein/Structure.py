@@ -122,12 +122,6 @@ def extend_backbone(i, angles, coords, device):
     return bb_pts[-3:]
 
 
-def l2_normalize(t, device, eps=1e-12):
-    """ Safe L2-normalization for pytorch."""
-    epsilon = torch.FloatTensor([eps]).to(device)
-    return t / torch.sqrt(torch.max((t**2).sum(), epsilon))
-
-
 def nerf(a, b, c, l, theta, chi, device):
     """ Nerf method of finding 4th coord (d)
         in cartesian space
@@ -141,13 +135,13 @@ def nerf(a, b, c, l, theta, chi, device):
     # calculate unit vectors AB and BC
     assert -np.pi <= theta <= np.pi, "theta must be in radians and in [-pi, pi]. theta = " + str(theta)
 
-    W_hat = l2_normalize(b - a, device)
-    x_hat = l2_normalize(c - b, device)
+    W_hat = torch.nn.functional.normalize(b - a, dim=0)
+    x_hat = torch.nn.functional.normalize(c-b, dim=0)
 
     # calculate unit normals n = AB x BC
     # and p = n x BC
     n_unit = torch.cross(W_hat, x_hat)
-    z_hat = l2_normalize(n_unit, device)
+    z_hat = torch.nn.functional.normalize(n_unit, dim=0)
     y_hat = torch.cross(z_hat, x_hat)
 
     # create rotation matrix [BC; p; n] (3x3)

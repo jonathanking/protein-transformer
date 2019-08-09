@@ -113,13 +113,18 @@ def mse_over_angles(pred, true):
     return torch.nn.functional.mse_loss(pred[ang_non_zero][ang_non_nans], true[ang_non_zero][ang_non_nans])
 
 
+def my_cdist(x1, x2):
+    # TODO cite source from Pytorch forum / github
+    x1_norm = x1.pow(2).sum(dim=-1, keepdim=True)
+    x2_norm = x2.pow(2).sum(dim=-1, keepdim=True)
+    res = torch.addmm(x2_norm.transpose(-2, -1), x1, x2.transpose(-2, -1), alpha=-2).add_(x1_norm)
+    res = res.clamp_min_(1e-30).sqrt_()
+    return res
+
+
 def pairwise_internal_dist(coords):
     """ Returns a tensor of the pairwise distances between all points in coords. """
-    c1 = coords.unsqueeze(1)
-    c2 = coords.unsqueeze(0)
-    z = c1 - c2 + 1e-10        # (L x L x 3)
-    res = torch.norm(z, dim=2)  # (L x L)
-    return res
+    return my_cdist(coords, coords)
 
 
 def drmsd(a, b, pad_from_b=False):
@@ -173,6 +178,3 @@ def drmsd_loss_rnn(y_pred_, y_true_, sorted_lengths, x):
 
     return drmsds.mean()
 
-
-if __name__ == "__main__":
-    determine_pad_loc_test()
