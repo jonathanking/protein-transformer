@@ -16,6 +16,7 @@ from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 
 LOGFILEHEADER = ''
+START_EPOCH = 0
 
 
 def print_status(mode, opt, items):
@@ -79,7 +80,6 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     total_drmsd_loss = 0
     total_mse_loss = 0
     n_batches = 0.0
-    loss = ""
     training_losses = []
     if not opt.cluster:
         pbar = tqdm(training_data, mininterval=2, leave=False)
@@ -135,7 +135,6 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
     total_rmsd_loss = 0
     total_combined_loss = 0
     n_batches = 0.0
-    loss = ""
     if not opt.cluster:
         pbar = tqdm(validation_data, mininterval=2, leave=False)
     else:
@@ -171,7 +170,8 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
     epoch_last_improved = -1
     best_valid_loss_so_far = np.inf
     for epoch_i in range(opt.epochs):
-        print('[ Epoch', epoch_i, ']')
+        display_epoch = epoch_i + START_EPOCH
+        print(f'[ Epoch {display_epoch} ]')
 
         start = time.time()
         _, _ = train_epoch(model, training_data, optimizer, device, opt, log_writer)
@@ -215,7 +215,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
             # Model hasn't improved in X epochs
             print("No improvement for {} epochs. Stopping model training early.".format(opt.early_stopping))
             break
-        save_model(opt, optimizer, model, loss_to_compare, losses_to_compare, epoch_i)
+        save_model(opt, optimizer, model, loss_to_compare, losses_to_compare, display_epoch)
 
     if not opt.train_only:
         # Evaluate model on test set
@@ -241,9 +241,28 @@ def save_model(opt, optimizer, model, valid_loss, valid_losses, epoch_i):
         chkpt_file_name = opt.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, valid_loss)
         torch.save(checkpoint, chkpt_file_name)
     if len(valid_losses) == 1 or valid_loss < min(valid_losses[:-1]):
-        chkpt_file_name = opt.chkpt_path + "_best.chkpt".format(epoch_i, valid_loss)
+        chkpt_file_name = opt.chkpt_path + "_best.chkpt"
         torch.save(checkpoint, chkpt_file_name)
         print('\r    - [Info] The checkpoint file has been updated.')
+
+
+def load_model(model, optimizer, args):
+    """ Given a model, its optimizer, and the program's arguments, resumes
+        model training if the user has not specified otherwise. Assumes model
+        was saved the 'best' mode. """
+    global START_EPOCH
+    chkpt_file_name = args.chkpt_path + "_best.chkpt"
+    if os.path.exists(chkpt_file_name) and not args.restart:
+        print(f"Attempting to load model from {chkpt_file_name}.")
+    else:
+        return model, optimizer, False
+    checkpoint = torch.load(chkpt_file_name)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    START_EPOCH = checkpoint['epoch']
+    print(f"Resuming model training from Epoch {checkpoint['epoch']}. Previous validation loss"
+          f" = {checkpoint['loss']:.4f}.")
+    return model, optimizer, True
 
 
 def log_batch(log_writer, drmsd, mse, rmsd, combined, cur_lr, is_val=False, end_of_epoch=False, t=time.time()):
@@ -301,6 +320,7 @@ def main():
     parser.add_argument('--no_cuda', action='store_true')
     parser.add_argument('--cluster', action='store_true', help="Set of parameters to facilitate training on a remote" +
                                                                " cluster. Limited I/O, etc.")
+    parser.add_argument('--restart', action='store_true', help="Does not resume training.")
 
     # Temporary args
     parser.add_argument('--proteinnet', action='store_true')
@@ -310,27 +330,15 @@ def main():
     args.d_word_vec = args.d_model
     args.buffering_mode = None if args.cluster else 1
     LOGFILEHEADER = prepare_log_header(args)
+    if args.save_mode == "all" and not args.restart:
+        print("You cannot resume this model because it was saved with mode 'all'.")
+        exit(1)
 
     # ========= Loading Dataset ========= #
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
 
     training_data, validation_data, test_data = prepare_dataloaders(data, args)
-
-    # ========= Preparing Log and Checkpoint Files ========= #
-    
-    if not args.log:
-        args.log_file = "./data/logs/" + args.name + '.train'
-    else:
-        args.log_file = "./data/logs/" + args.log + '.train'
-    print(args, "\n")
-    print('[Info] Training performance will be written to file: {}'.format(args.log_file))
-    os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
-    log_f = open(args.log_file, 'w', buffering=args.buffering_mode)
-    log_f.write(LOGFILEHEADER)
-    log_writer = csv.writer(log_f)
-    args.chkpt_path = "./data/checkpoints/" + args.name
-    os.makedirs("./data/checkpoints", exist_ok=True)
 
     # ========= Preparing Model ========= #
 
@@ -347,6 +355,25 @@ def main():
                            betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
     if args.lr_scheduling:
         optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
+    transformer, optimizer, resumed = load_model(transformer, optimizer, args)
+
+    # ========= Preparing Log and Checkpoint Files ========= #
+
+    if not args.log:
+        args.log_file = "./data/logs/" + args.name + '.train'
+    else:
+        args.log_file = "./data/logs/" + args.log + '.train'
+    print(args, "\n")
+    args.chkpt_path = "./data/checkpoints/" + args.name
+    os.makedirs("./data/checkpoints", exist_ok=True)
+    print('[Info] Training performance will be written to file: {}'.format(args.log_file))
+    os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
+    if resumed:
+        log_f = open(args.log_file, 'a', buffering=args.buffering_mode)
+    else:
+        log_f = open(args.log_file, 'w', buffering=args.buffering_mode)
+        log_f.write(LOGFILEHEADER)
+    log_writer = csv.writer(log_f)
 
     train(transformer, training_data, validation_data, test_data, optimizer, device, args, log_writer)
     log_f.close()
