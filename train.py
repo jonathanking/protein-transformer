@@ -11,7 +11,7 @@ import torch.utils.data
 from tqdm import tqdm
 
 from dataset import paired_collate_fn, ProteinDataset
-from losses import drmsd_loss_from_angles, drmsd_loss_from_coords, mse_loss, combine_drmsd_mse
+from losses import drmsd_loss_from_angles, drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 
@@ -87,14 +87,14 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         pbar = training_data
 
     for batch in pbar:
-        src_seq, src_pos, tgt_seq, tgt_pos, tgt_crds, _ = map(lambda x: x.to(device), batch)
-        gold = tgt_seq[:]
+        src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
 
         optimizer.zero_grad()
-        pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-        # d_loss = drmsd_loss_from_angles(pred, gold, src_seq, device)
+        tgt_ang_no_nan = tgt_ang.clone().detach()
+        tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
+        pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
         d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
-        m_loss = mse_loss(pred, gold)
+        m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
         c_loss = combine_drmsd_mse(d_loss, m_loss, w=0.8)
         if opt.combined_loss:
             loss = c_loss
@@ -142,13 +142,12 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
 
     with torch.no_grad():
         for batch in pbar:
-            src_seq, src_pos, tgt_seq, tgt_pos, tgt_crds, _ = map(lambda x: x.to(device), batch)
-            gold = tgt_seq[:]
-            pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            # d_loss, r_loss = drmsd_loss_from_angles(pred, gold, src_seq, device,
-            #                             return_rmsd=True)  # When evaluating the epoch, only use DRMSD loss
+            src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+            tgt_ang_no_nan = tgt_ang.clone().detach()
+            tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
+            pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
             d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
-            m_loss = mse_loss(pred, gold)
+            m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
             c_loss = combine_drmsd_mse(d_loss, m_loss)
             total_drmsd_loss += d_loss.item()
             total_mse_loss += m_loss.item()
@@ -355,7 +354,6 @@ def main():
                            betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
     if args.lr_scheduling:
         optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
-    transformer, optimizer, resumed = load_model(transformer, optimizer, args)
 
     # ========= Preparing Log and Checkpoint Files ========= #
 
@@ -368,6 +366,7 @@ def main():
     os.makedirs("./data/checkpoints", exist_ok=True)
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
+    transformer, optimizer, resumed = load_model(transformer, optimizer, args)
     if resumed:
         log_f = open(args.log_file, 'a', buffering=args.buffering_mode)
     else:

@@ -2,8 +2,10 @@ import numpy as np
 import prody as pr
 import torch
 
-from protein.Sidechains import NUM_PREDICTED_ANGLES
+from protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 from protein.Structure import generate_coords
+
+BATCH_PAD_CHAR = 0
 
 
 def combine_drmsd_mse(d, mse, w=.5):
@@ -40,30 +42,9 @@ def copy_padding_from_gold(pred, gold, device):
     return pred_unpadded, gold_unpadded
 
 
-def determine_pad_loc(padded_tensor):
-    """ Returns the position where the tensor becomes padded with all 0s across the first dimension. """
-    paddings = torch.all(padded_tensor == 0, dim=1)
-    if torch.all(paddings == 0).item() == 1:
-        return padded_tensor.shape[0]
-    else:
-        return torch.argmin(paddings) + 1
-
-
-def determine_pad_loc_test():
-    """ Test for determin_pad_loc. """
-    # TODO use more official test suite
-    a = np.random.rand(54, 12)
-    b = np.random.rand(63, 12)
-    a[11:] = np.zeros(shape=(a.shape[0] - 11, 12))
-    b[33:] = np.zeros(shape=(b.shape[0] - 33, 12))
-    at = torch.tensor(a)
-    bt = torch.tensor(b)
-    assert determine_pad_loc(at).item() == 11
-    assert determine_pad_loc(bt).item() == 33
-
-
 def drmsd_loss_from_angles(pred, gold, input_seq, device, return_rmsd=False):
     """ Calculate DRMSD loss. """
+    raise Exception("Fix pad location before using.")
     device = torch.device("cpu")
     pred, gold = pred.to(device), gold.to(device)
 
@@ -74,7 +55,7 @@ def drmsd_loss_from_angles(pred, gold, input_seq, device, return_rmsd=False):
     rmsds = []
     # TODO: determine which loss functions benefit from GPU vs CPU
     for pred_item, gold_item, input_item in zip(pred, gold, input_seq):
-        pad_loc = determine_pad_loc(gold_item)
+        pad_loc = 0
         gold_item = gold_item[:pad_loc]
         pred_item = pred_item[:pad_loc]
         input_item = input_item[:pad_loc]
@@ -90,7 +71,7 @@ def drmsd_loss_from_angles(pred, gold, input_seq, device, return_rmsd=False):
         return torch.mean(torch.stack(losses))
 
 
-def drmsd_loss_from_coords(pred_angs, gold_coords, input_seq, device, return_rmsd=False):
+def drmsd_loss_from_coords(pred_angs, gold_coords, input_seqs, device, return_rmsd=False):
     """
     Calculate DRMSD loss by first generating predicted coordinates. Then, these coordinates
     are compared with the true coordinate tensor provided to the function.
@@ -102,36 +83,34 @@ def drmsd_loss_from_coords(pred_angs, gold_coords, input_seq, device, return_rms
 
     losses = []
     rmsds = []
-    # TODO: gracefully handle losses when batchsize is 1.
-    for pred_item, gold_item, input_item in zip(pred_angs, gold_coords, input_seq):
-        pad_loc = input_item.eq(0).all(1).argmax().item()
-        if pad_loc == 0: pad_loc = input_item.shape[0]
-        pred_item = pred_item[:pad_loc]
-        # TODO: replace magic number 13 with global variable for # atoms per residue
-        gold_item = gold_item[:pad_loc*13]
-        input_item = input_item[:pad_loc]
-        pred_coords = generate_coords(pred_item, pad_loc, input_item, device)
+    for pred_item, gold_item, input_seq in zip(pred_angs, gold_coords, input_seqs):
+        batch_mask = input_seq.ne(0).any(dim=1)
+        pred_item = pred_item[batch_mask]
+        gold_item = gold_item[:pred_item.shape[0]*NUM_PREDICTED_COORDS]
+        input_seq = input_seq[batch_mask]
+        pred_coords = generate_coords(pred_item, pred_item.shape[0], input_seq, device)
         # TODO the generated coordinates from gold do not match what is expected from the input seq
-        loss = drmsd(pred_coords, gold_item, pad_from_b=True)
+        gold_item_non_nan = torch.isnan(gold_item).eq(0)
+        pred_subset = pred_coords[gold_item_non_nan].reshape(-1, 3)
+        gold_subset = gold_item[gold_item_non_nan].reshape(-1, 3)
+        loss = drmsd(pred_subset, gold_subset)
         losses.append(loss)
         if return_rmsd:
-            rmsds.append(rmsd(pred_coords.data.numpy(), gold_item.data.numpy()))
+            rmsds.append(rmsd(pred_subset.data.numpy(), gold_subset.data.numpy()))
     if return_rmsd:
         return torch.mean(torch.stack(losses)), np.mean(rmsds)
     else:
         return torch.mean(torch.stack(losses))
 
 
-def mse_loss(pred, gold, over_angles=True):
-    """ Computes MSE loss over non-zero elements only."""
-    # TODO Implement nan padding so that mse can be computed appropriately in both angle and sin/cos cases
-    device = torch.device("cpu")
-    pred, gold = pred.to(device), gold.to(device)
-    if over_angles:
-        pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
-        pred, gold = copy_padding_from_gold(pred, gold, device)
-    mse = ((pred - gold) ** 2).sum() / torch.nonzero(gold).size(0)
-    return mse
+def mse_over_angles(pred, true):
+    """ Given a predicted angle tensor and a true angle tensor (batch-padded with zeros,
+        and missing-item-padded with nans), this function first removes batch then item
+        padding before using torch's built-in MSE loss function. """
+    ang_non_zero = true.ne(0).any(dim=2)
+    tgt_ang_non_zero = true[ang_non_zero]
+    ang_non_nans = torch.isnan(tgt_ang_non_zero).eq(0)
+    return torch.nn.functional.mse_loss(pred[ang_non_zero][ang_non_nans], true[ang_non_zero][ang_non_nans])
 
 
 def pairwise_internal_dist(coords):
@@ -146,12 +125,6 @@ def pairwise_internal_dist(coords):
 def drmsd(a, b, pad_from_b=False):
     """ Given two coordinate tensors, returns the dRMSD score between them.
         Both tensors must be the exact same shape. """
-    mask = b.ne(0).any(1)
-    b = b[mask]
-    if not pad_from_b:
-        mask = a.ne(0).any(1)
-    a = a[mask]
-
     a_ = pairwise_internal_dist(a)
     b_ = pairwise_internal_dist(b)
 

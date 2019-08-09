@@ -2,6 +2,7 @@ import numpy as np
 import torch
 
 NUM_PREDICTED_ANGLES = 12
+NUM_PREDICTED_COORDS = 13
 
 BONDLENS = {'cc-cv': 1.375,
             'c8-cx': 1.526,
