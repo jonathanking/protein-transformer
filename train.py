@@ -88,7 +88,6 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
 
     for batch in pbar:
         src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-
         optimizer.zero_grad()
         tgt_ang_no_nan = tgt_ang.clone().detach()
         tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
@@ -173,9 +172,12 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
         print(f'[ Epoch {display_epoch} ]')
 
         start = time.time()
-        _, _ = train_epoch(model, training_data, optimizer, device, opt, log_writer)
-        train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model, training_data, device,
-                                                                                        opt, mode="Train")
+        train_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
+        if opt.eval_train:
+            train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model, training_data,
+                                                                                            device, opt, mode="Train")
+        else:
+            train_comb_loss, train_rmsd_loss = 111, 111
         train_combined_losses.append(train_comb_loss)
         train_drmsd_losses.append(train_drmsd_loss)
         cur_lr = optimizer.cur_lr if opt.lr_scheduling else 0
@@ -302,6 +304,8 @@ def main():
                                                                      '"original paper.')
     parser.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
+    parser.add_argument('--eval_train', action='store_true',
+                        help="Perform an evaluation of the entire training set after a training epoch.")
 
     # Model parameters
     parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
