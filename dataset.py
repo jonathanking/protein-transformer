@@ -2,7 +2,8 @@ import numpy as np
 import torch
 import torch.utils.data
 
-from protein.Sidechains import NUM_PREDICTED_ANGLES
+from protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
+MAXDATALEN = 500
 
 
 def paired_collate_fn(insts):
@@ -13,11 +14,11 @@ def paired_collate_fn(insts):
     sequences, angles, coords = list(zip(*insts))
     sequences = collate_fn(sequences, pad_dim=20)
     angles = collate_fn(angles, pad_dim=NUM_PREDICTED_ANGLES * 2)
-    coords = collate_fn(coords, pad_dim=3)
+    coords = collate_fn(coords, pad_dim=3, coords=True)
     return (*sequences, *angles, *coords)
 
 
-def collate_fn(insts, pad_dim):
+def collate_fn(insts, pad_dim, coords=False):
     """ Pad the instance to the max seq length in batch """
 
     max_len = max(len(inst) for inst in insts)
@@ -27,6 +28,10 @@ def collate_fn(insts, pad_dim):
         c = np.concatenate((inst, z), axis=0)
         batch_seq.append(c)
     batch_seq = np.array(batch_seq)
+    if coords:
+        batch_seq = batch_seq[:,:MAXDATALEN*NUM_PREDICTED_COORDS]
+    else:
+        batch_seq = batch_seq[:,:MAXDATALEN]
 
     batch_pos = np.array([
         [pos_i+1 if w_i.any() else 0
