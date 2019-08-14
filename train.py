@@ -14,6 +14,7 @@ from dataset import paired_collate_fn, ProteinDataset
 from losses import drmsd_loss_from_angles, drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
+from rnn import MyRNN
 
 LOGFILEHEADER = ''
 START_EPOCH = 0
@@ -308,6 +309,7 @@ def main():
                         help="Perform an evaluation of the entire training set after a training epoch.")
 
     # Model parameters
+    parser.add_argument('-rnn', '--rnn', action='store_true')
     parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
     parser.add_argument('-dm', '--d_model', type=int, default=512)
     parser.add_argument('-dih', '--d_inner_hid', type=int, default=2048)
@@ -340,23 +342,27 @@ def main():
     # ========= Loading Dataset ========= #
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
-
     training_data, validation_data, test_data = prepare_dataloaders(data, args)
 
     # ========= Preparing Model ========= #
 
     device = torch.device('cuda' if args.cuda else 'cpu')
-    transformer = Transformer(args,
-                              d_k=args.d_k,
-                              d_v=args.d_v,
-                              d_model=args.d_model,
-                              d_inner=args.d_inner_hid,
-                              n_layers=args.n_layers,
-                              n_head=args.n_head,
-                              dropout=args.dropout).to(device)
-    # optimizer = optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
+    if not args.rnn:
+        model = Transformer(args,
+                                  d_k=args.d_k,
+                                  d_v=args.d_v,
+                                  d_model=args.d_model,
+                                  d_inner=args.d_inner_hid,
+                                  n_layers=args.n_layers,
+                                  n_head=args.n_head,
+                                  dropout=args.dropout).to(device)
+    else:
+        print("[Info] Training a RNN model instead of the Transformer model.")
+        latent_dim, n_layers, bidi = 250, 2, True
+        model = MyRNN(latent_dim, num_layers=n_layers, bidirectional=bidi).to(device)
+    # optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
     #                        betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
-    optimizer = optim.SGD(filter(lambda x: x.requires_grad, transformer.parameters()), lr=args.learning_rate)
+    optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=args.learning_rate)
     if args.lr_scheduling:
         optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
 
@@ -371,7 +377,7 @@ def main():
     os.makedirs("./data/checkpoints", exist_ok=True)
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
-    transformer, optimizer, resumed = load_model(transformer, optimizer, args)
+    model, optimizer, resumed = load_model(model, optimizer, args)
     if resumed:
         log_f = open(args.log_file, 'a', buffering=args.buffering_mode)
     else:
@@ -379,7 +385,7 @@ def main():
         log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
 
-    train(transformer, training_data, validation_data, test_data, optimizer, device, args, log_writer)
+    train(model, training_data, validation_data, test_data, optimizer, device, args, log_writer)
     log_f.close()
 
 
