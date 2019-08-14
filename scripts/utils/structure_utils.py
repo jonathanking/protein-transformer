@@ -1,8 +1,58 @@
 import numpy as np
 import prody as pr
+import re
 
 from protein.Sidechains import NUM_PREDICTED_ANGLES, SC_DATA
-from structure_exceptions import NonStandardAminoAcidError, IncompleteStructureError
+from structure_exceptions import NonStandardAminoAcidError, IncompleteStructureError, MissingBackboneAtomsError, \
+    SequenceError, ContigMultipleMatchingError, ShortStructureError
+
+GLOBAL_PAD_CHAR = np.nan
+NUM_PREDICTED_COORDS = 13
+
+
+def parse_astral_summary_file(path):
+    """ Given a path to the ASTRAL database summary file, this function parses
+        that file and returns a dictionary that maps ASTRAL IDs to (pdbid, chain). """
+    d = {}
+    for line in open(path, "r").readlines():
+        if line.startswith("#"):
+            continue
+        line_items = line.split()
+        if line_items[3] == "-":
+            continue
+        d[line_items[3]] = (line_items[4], line_items[5])
+    return d
+
+
+def get_chain_from_astral_id(astral_id, d):
+    """ Given an ASTRAL ID and the ASTRAL->PDB/chain mapping dictionary, this
+        function attempts to return the relevant, parsed ProDy object. """
+    pdbid, chain = d[astral_id]
+    assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
+    chain, resnums = chain.split(":")
+    a = pr.parsePDB(pdbid, chain=chain)
+    if resnums != "":
+        if resnums[0] == "-":
+            # Ranges with negative numbers must be escaped with ` character
+            a = a.select(f"resnum `{resnums[0] + resnums[1:].replace('-', ' to ')}`")
+        else:
+            a = a.select(f"resnum {resnums.replace('-', ' to ')}")
+    return a
+
+
+def get_header_seq_from_astral_id(astral_id, d):
+    """ Attempts to return the sequence associated with a given ASTRAL ID.
+        Requires the ASTRAL->PDB/chain mapping dictionary. """
+    pdbid, chain = d[astral_id]
+    assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
+    chain, resnums = chain.split(":")
+    resnums = ''.join(i for i in resnums if (i.isdigit() or i == "-"))
+    a, h = pr.parsePDB(pdbid, chain=chain, header=True)
+    if resnums == "":
+        return h[chain].sequence
+    else:
+        # This means the ASTRAL id is a substructure, and I can't use the seqres record directly
+        raise SequenceError
 
 
 def angle_list_to_sin_cos(angs, reshape=True):
@@ -27,9 +77,21 @@ def seq_to_onehot(seq):
     vector_array = []
     for aa in seq:
         one_hot = np.zeros(len(AA_MAP), dtype=bool)
-        one_hot[AA_MAP[aa]] = 1
+        if aa in AA_MAP.keys():
+            one_hot[AA_MAP[aa]] = 1
+        else:
+            one_hot -= 1
         vector_array.append(one_hot)
     return np.asarray(vector_array)
+
+
+def onehot_to_seq(oh):
+    """ Given a vector of one-hot vectors, returns its corresponding AA sequence."""
+    seq = ""
+    for aa in oh:
+        idx = aa.argmax()
+        seq += AA_MAP_INV[idx]
+    return seq
 
 
 def check_standard_continuous(residue, prev_res_num):
@@ -41,8 +103,19 @@ def check_standard_continuous(residue, prev_res_num):
     return True
 
 
-def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bondangles, next_res,
-                              pad_char=0):
+def determine_sidechain_atomnames(_res):
+    """ Given a residue from ProDy, returns a list of sidechain atom names
+        that must be recorded."""
+    if _res.getResname() is "GLY":
+        atom_names = []
+    elif _res.getResname() in SC_DATA.keys():
+        atom_names = ["N", "CA"] + SC_DATA[_res.getResname()]["predicted"]
+    else:
+        raise NonStandardAminoAcidError
+    return atom_names
+
+
+def compute_sidechain_dihedrals(residue, prev_residue, next_res):
     """
     Computes all angles to predict for a given residue. If the residue is the first in the
     protein chain, a fictitious C atom is placed before the first N. This is used to compute a [
@@ -50,34 +123,34 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
     residue's C is used instead. Then, each group of 4 atoms in atom_names is used to generate a
     list of dihedral angles for this residue.
     """
+    atom_names = determine_sidechain_atomnames(residue)
+
     res_dihedrals = []
     if len(atom_names) > 0:
+        # The first residue has no previous residue, so use the next residue to calculate the (N+1)-C-CA-CB dihedral
         if prev_residue is None:
             atoms = [residue.select("name " + an) for an in atom_names]
-
             try:
-                res_dihedrals = [get_dihedral(next_res.select("name N").getCoords()[0],
-                                              residue.select("name C").getCoords()[0],
-                                              residue.select("name CA").getCoords()[0],
-                                              residue.select("name CB").getCoords()[0],
-                                              radian=True)]
+                cb_dihedral = get_dihedral(next_res.select("name N").getCoords()[0],
+                                           residue.select("name C").getCoords()[0],
+                                           residue.select("name CA").getCoords()[0],
+                                           residue.select("name CB").getCoords()[0],
+                                           radian=True)
             except AttributeError:
-                raise IncompleteStructureError(
-                    f'Mising atoms at start of residue {residue} or {next_res}.')
+                cb_dihedral = GLOBAL_PAD_CHAR
+            res_dihedrals.append(cb_dihedral)
+        # If there is a previous residue, use its C to calculate the C-N-CA-CB dihedral
         elif prev_residue is not None:
-            atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in
-                                                       atom_names]
+            atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in atom_names]
 
-        if (prev_residue is not None and len(atoms) != len(atom_names) + 1) \
-                or (prev_residue is None and len(atoms) != len(atom_names)) or None in atoms:
-            raise IncompleteStructureError(f'Missing atoms in residue {residue}.')
         for n in range(len(atoms) - 3):
             dihe_atoms = atoms[n:n + 4]
             res_dihedrals.append(compute_single_dihedral(dihe_atoms))
+
     resname = residue.getResname()
     if resname not in ["LEU", "ILE", "VAL", "THR"]:
-        return backbone + bondangles + res_dihedrals + (
-                    NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
+        return res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [GLOBAL_PAD_CHAR]
+    # Extra angles to predict that are not included in SC_DATA[RES]["predicted"]
     if resname == "LEU":
         first_three = ["CA", "CB", "CG"]
         next_atom = "CD2"
@@ -91,118 +164,221 @@ def compute_all_res_dihedrals(atom_names, residue, prev_residue, backbone, bonda
         first_three = ["N", "CA", "CB"]
         next_atom = "OG1"
     atom_selections = [residue.select("name " + an) for an in first_three + [next_atom]]
-    if len(atom_selections) != 4 or None in atom_selections:
-        raise IncompleteStructureError('Missing sidechain atoms.')
     res_dihedrals.append(compute_single_dihedral(atom_selections))
-    assert len(res_dihedrals) + len(backbone + bondangles) == 10 and resname in ["ILE",
-                                                                                 "LEU"] or len(
-        res_dihedrals) + \
-           len(backbone + bondangles) == 9 and resname in ["VAL", "THR"], \
+    assert len(res_dihedrals) == 4 and resname in ["ILE","LEU"] or len(res_dihedrals) == 3 and resname in ["VAL",
+                                                                                                           "THR"], \
         "Angle position in array must match what is assumed in Sidechains:extend_any_sidechain."
 
-    return backbone + bondangles + res_dihedrals + (
-                NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [pad_char]
+    return res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [GLOBAL_PAD_CHAR]
 
 
-def get_angles_from_chain(chain):
-    """ Given a ProDy Chain object (from a Hierarchical View), return a numpy array of
-        angles. Returns None if the PDB should be ignored due to weird artifacts. Also measures
-        the bond angles along the peptide backbone, since they account for significat variation.
-        i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, chi3, chi4, chi5], [...] ...] """
-
-    dihedrals = []
-    if chain.nonstdaa:
-        raise NonStandardAminoAcidError
-    sequence = chain.getSequence()
-    chain = chain.select("protein and not hetero").copy()
-    # TODO remove references to previous residue - not necessary, instead use next residue
-    all_residues = list(chain.iterResidues())
-    prev = all_residues[0].getResnum()
-    prev_res = None
-    for res_id, res in enumerate(all_residues):
-        check_standard_continuous(res, prev)
-        if len(res.backbone) < 3:
-            raise IncompleteStructureError(f"Incomplete backbone for residue {res}.")
-        prev = res.getResnum() + 1
-
-        res_backbone = measure_phi_psi_omega(res)
-        res_bond_angles = measure_bond_angles(res, res_id, all_residues)
-
-        atom_names = ["N", "CA"]
-        # TODO verify correctness of GLY, PRO atom_names
-        if res.getResname() is "GLY":
-            atom_names = SC_DATA[res.getResname()]["predicted"]
-        else:
-            atom_names += SC_DATA[res.getResname()]["predicted"]
-        if res_id == 0:
-            next_res = all_residues[1]
-        else:
-            next_res = None
-        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, prev_res, res_backbone,
-                                                         res_bond_angles, next_res)
-        dihedrals.append(calculated_dihedrals)
-        prev_res = res
-
-    dihedrals_np = np.asarray(dihedrals)
-    return dihedrals_np, sequence
-
-
-def get_angles_and_coords_from_chain(chain):
+def get_atom_coords_by_names(residue, atom_names):
     """
-    Given a ProDy Chain object (from a Hierarchical View), return a tuple (angles, coords).
+    Given a ProDy Residue and a list of atom names, this attempts to select and return all the atoms. If atoms are
+    not present, it substitutes the pad character in lieu of their coordinates.
+    """
+    coords = []
+    pad_coord = np.asarray([GLOBAL_PAD_CHAR]*3)
+    for an in atom_names:
+        a = residue.select(f"name {an}")
+        if a:
+            coords.append(a.getCoords()[0])
+        else:
+            coords.append(pad_coord)
+    return coords
+
+
+def measure_res_coordinates(_res):
+    """ Given a ProDy residue, measure all relevant coordinates. """
+    _atom_names = determine_sidechain_atomnames(_res)
+    bbcoords = get_atom_coords_by_names(_res, ["N", "CA", "C"])
+    sccoords = get_atom_coords_by_names(_res, set(_atom_names) - {"N", "CA", "C", "H"})
+    coord_padding = np.zeros((NUM_PREDICTED_COORDS - len(bbcoords) - len(sccoords), 3))
+    coord_padding[:] = GLOBAL_PAD_CHAR
+    return np.concatenate((np.stack(bbcoords + sccoords), coord_padding))
+
+
+def empty_coord():
+    """ Return an empty coordinate tensor, representing 1 padding character at the residue level."""
+    coord_padding = np.zeros((NUM_PREDICTED_COORDS, 3))
+    coord_padding[:] = GLOBAL_PAD_CHAR
+    return coord_padding
+
+
+def empty_ang():
+    """ Return an empty angle tensor, representing 1 padding character at the residue level."""
+    dihe_padding = np.zeros(NUM_PREDICTED_ANGLES)
+    dihe_padding[:] = GLOBAL_PAD_CHAR
+    return dihe_padding
+
+
+def find_contig_locations(contigs, true_seq):
+    """ Given a list of contigs, returns their positions within true_seq. Raises errors if the matching is ambiguous
+        or if the observed sequence contains residues not found in the true seq. """
+    contig_locs = []
+    search_seq = str(true_seq)
+    for i in range(len(contigs)):
+        loc = search_seq.find(contigs[i])
+        if len(re.findall(contigs[i], search_seq)) > 1:
+            print(f"Multiple matches of {contigs[i]} found in {search_seq}.")
+            raise ContigMultipleMatchingError
+        if loc == -1:
+            print(f"Can't find contig in search_seq.\n{contigs[i]}\n{search_seq}")
+            raise SequenceError
+        search_seq = search_seq[loc + len(contigs[i]):]
+        if len(contig_locs) == 0:
+            contig_locs.append(loc)
+        else:
+            contig_locs.append(contig_locs[-1] + len(contigs[i - 1]) + loc)
+    return contig_locs
+
+
+def trim_mask_and_true_seqs(mask_seq, true_seq):
+    """ Given a mask and true sequence of the same length, this removes gaps
+        from the ends of both. """
+    mask_seq_no_left = mask_seq.lstrip('-')
+    mask_seq_no_right = mask_seq.rstrip('-')
+    n_removed_left = len(mask_seq) - len(mask_seq_no_left)
+    n_removed_right = len(mask_seq) - len(mask_seq_no_right)
+    n_removed_right = None if n_removed_right == 0 else -n_removed_right
+    true_seq = true_seq[n_removed_left:n_removed_right]
+    mask_seq = mask_seq.strip("-")
+    return mask_seq, true_seq
+
+
+def use_mask_to_pad_coords_dihedrals(mask_seq, coords, dihedrals):
+    """ Given a mask sequence ('-' for gap, '+' for present), and python lists
+        of coordinates and dihedrals, this function places gaps in the relevant
+        locations for each before returning. At the end, both should have the
+        same length as the mask_seq. """
+    new_coords = []
+    new_angs = []
+    coords = iter(coords)
+    dihedrals = iter(dihedrals)
+    for m in mask_seq:
+        if m == "+":
+            new_coords.append(next(coords))
+            new_angs.append(next(dihedrals))
+        else:
+            new_coords.append(empty_coord())
+            new_angs.append(empty_ang())
+    return new_coords, new_angs
+
+
+def use_contigs_to_compute_mask(contigs, true_seq, observed_sequence):
+    """ Given a list of contigs, aka contiguous sequence portions from a protein
+        structure, along with the true sequence and an obs. sequence that may
+        contain gaps, this function returns the mask and true sequence.
+        The mask has '-' for gaps and '+' for present items w.r.t. the true
+        sequence. """
+    mask_seq = "-" * len(true_seq)
+    # If there are no gaps in the structure, then keep the observed sequence
+    if len(contigs) == 1:
+        true_seq = observed_sequence
+        mask_seq = "+" * len(observed_sequence)
+    else:
+        # Compute the best contig locations
+        contig_locs = find_contig_locations(contigs, true_seq)
+
+        # Use the contig locations to create our mask
+        for contig, c_loc in zip(contigs, contig_locs):
+            mask_seq = mask_seq[:c_loc] + "+" * len(contig) + mask_seq[c_loc + len(contig):]
+
+        # Now that we have our mask sequence, we can trim its ends and fill in pad chars for residues
+        mask_seq, true_seq = trim_mask_and_true_seqs(mask_seq, true_seq)
+    return mask_seq, true_seq
+
+
+def get_seq_and_masked_coords_and_angles(chain, true_seq):
+    """
+    Given a ProDy Chain object (from a Hierarchical View), return a tuple (angles, coords, sequence).
     Returns None if the PDB should be ignored due to weird artifacts. Also measures the
     bond angles along the peptide backbone, since they account for significant variation.
     i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, chi3, chi4, chi5], [...] ...]
     """
+    chain = chain.select("protein and not hetero and not hetatm")
+    if chain is None or chain.nonstdaa:
+        raise NonStandardAminoAcidError
+    chain = chain.copy()
+
     coords = []
     dihedrals = []
-    if chain.nonstdaa:
-        raise NonStandardAminoAcidError
-    sequence = chain.getSequence()
-    chain = chain.select("protein and not hetero").copy()
-    # TODO remove references to previous residue - not necessary, instead use next residue
+    observed_sequence = ""
     all_residues = list(chain.iterResidues())
-    prev = all_residues[0].getResnum()
+    if len(all_residues) < 2:
+        raise ShortStructureError
     prev_res = None
+    next_res = all_residues[1]
+
+    # Mask info
+    current_contig = ""
+    contigs = []
+
     for res_id, res in enumerate(all_residues):
-        check_standard_continuous(res, prev)
-        if len(res.backbone) < 3:
-            raise IncompleteStructureError(f"Incomplete backbone for residue {res}.")
-        prev = res.getResnum() + 1
+        if not res.stdaa:
+            raise NonStandardAminoAcidError
+        # Measure basic angles
+        bb_angles = measure_phi_psi_omega(res)
+        bond_angles = measure_bond_angles(res, res_id, all_residues)
 
-        res_backbone = measure_phi_psi_omega(res)
-        res_bond_angles = measure_bond_angles(res, res_id, all_residues)
+        # Measure sidechain angles
+        all_res_angles = bb_angles + bond_angles + compute_sidechain_dihedrals(res, prev_res, next_res)
 
-        atom_names = ["N", "CA"]
-        # TODO verify correctness of GLY, PRO atom_names
-        if res.getResname() is "GLY":
-            atom_names = SC_DATA[res.getResname()]["predicted"]
-        else:
-            atom_names += SC_DATA[res.getResname()]["predicted"]
-        if res_id == 0:
-            next_res = all_residues[1]
-        else:
-            next_res = None
-        calculated_dihedrals = compute_all_res_dihedrals(atom_names, res, prev_res, res_backbone,
-                                                         res_bond_angles, next_res)
+        # Measure coordinates
+        rescoords = measure_res_coordinates(res)
 
-        bbcoords = [res.select(f"name {n}").getCoords()[0] for n in ["N", "CA", "C"]]
-        sccoords = [res.select(f"name {n}").getCoords()[0] for n in set(atom_names) - {"N", "CA", "C", "H"}]
-        rescoords = np.concatenate((np.stack(bbcoords + sccoords), np.zeros((10 - len(sccoords), 3))))
-
+        # Update records
         coords.append(rescoords)
-        dihedrals.append(calculated_dihedrals)
+        dihedrals.append(all_res_angles)
         prev_res = res
+        observed_sequence += res.getSequence()[0]
+
+        if current_contig == "":
+            current_contig = res.getSequence()[0]
+        if res_id < len(all_residues) - 1 and residues_are_contiguous(res, all_residues[res_id+1]):
+            # The residues are connected
+            current_contig += all_residues[res_id+1].getSequence()[0]
+        elif res_id < len(all_residues) - 1 and not residues_are_contiguous(res, all_residues[res_id+1]):
+            # The residues are not connected
+            contigs.append(current_contig)
+            current_contig = ""
+    if current_contig != "":
+        contigs.append(current_contig)
+
+    mask_seq, true_seq = use_contigs_to_compute_mask(contigs, true_seq, observed_sequence)
+
+    assert mask_seq.count("+") == len(coords), f"The number of coords ({len(coords)}) must match the number of '+'s in mask_seq {mask_seq.count('+')}, {mask_seq}.\n{observed_sequence}\n{true_seq}"
+    assert mask_seq.count("+") == len(dihedrals), f"The number of dihedrals ({len(dihedrals)}) must match the number of '+'s in mask_seq {mask_seq.count('+')}, {mask_seq}."
+
+    # Use the mask to fill in missing residues
+    coords, dihedrals = use_mask_to_pad_coords_dihedrals(mask_seq, coords, dihedrals)
+    assert len(coords) == len(true_seq), "True sequence and coordinates must be same size at end of analysis"
 
     dihedrals_np = np.asarray(dihedrals)
     coords_np = np.concatenate(coords)
-    assert coords_np.shape[0] == len(sequence) * 13, f"Coords shape {coords_np.shape} does not match len(seq)*13 = {len(sequence) * 13}"
-    return dihedrals_np, coords_np, sequence
+
+    if coords_np.shape[0] != len(true_seq) * NUM_PREDICTED_COORDS:
+        print(f"Coords shape {coords_np.shape} does not match len(seq)*13 = {len(true_seq) * NUM_PREDICTED_COORDS},\n"
+              "OBS: {observed_sequence}\nTRU: {true_seq}\n{chain}")
+        raise SequenceError
+    return dihedrals_np, coords_np, true_seq
+
+
+def residues_are_contiguous(resA, resB):
+    """ Returns True if resA is connected to resB. """
+    contiguous_threshold = 2  # The maximum allowed distance for a peptide bond
+    try:
+        cur_coords = resA.select("name C").getCoords()
+        next_coords = resB.select("name N").getCoords()
+    except AttributeError as e:
+        # raise MissingBackboneAtomsError("Residue")
+        return resA.getResnum() + 1 == resB.getResnum()
+    return np.linalg.norm(cur_coords - next_coords) <= contiguous_threshold
 
 
 def additional_checks(matrix):
     """ Returns true if a matrix does not contain NaNs, infs, or all 0s."""
-    return not np.any(np.isnan(matrix)) and not np.any(np.isinf(matrix)) and np.any(matrix)
+    return not np.any(np.isinf(matrix)) and np.any(matrix)
 
 
 def zero_runs(arr):
@@ -223,45 +399,58 @@ def zero_runs(arr):
 
 
 def get_bond_angles(res, next_res):
-    """ Given 2 residues, returns the ncac, cacn, and cnca bond angles between them."""
-    atoms = res.backbone.copy()
-    atoms_next = next_res.backbone.copy()
-    if len(atoms) < 3 or len(atoms_next) < 3:
-        raise IncompleteStructureError('Missing backbone atoms.')
-    ncac = pr.calcAngle(atoms[0], atoms[1], atoms[2], radian=True)
-    cacn = pr.calcAngle(atoms[1], atoms[2], atoms_next[0], radian=True)
-    cnca = pr.calcAngle(atoms[2], atoms_next[0], atoms_next[1], radian=True)
+    """
+    Given 2 residues, returns the ncac, cacn, and cnca bond angles between them. If any atoms are not present,
+    the corresponding angles are set to the GLOBAL_PAD_CHAR. If next_res is None, then only NCAC is measured.
+    """
+    # First residue angles
+    n1, ca1, c1 = tuple(res.select(f"name {a}") for a in ["N", "CA", "C"])
+    if n1 and ca1 and c1:
+        ncac = pr.calcAngle(n1, ca1, c1, radian=True)[0]
+    else:
+        ncac = GLOBAL_PAD_CHAR
+
+    # Second residue angles
+    if next_res is None:
+        return ncac, GLOBAL_PAD_CHAR, GLOBAL_PAD_CHAR
+    n2, ca2 = (next_res.select(f"name {a}") for a in ["N", "CA"])
+    if ca1 and c1 and n2:
+        cacn = pr.calcAngle(ca1, c1, n2, radian=True)[0]
+    else:
+        cacn = GLOBAL_PAD_CHAR
+    if c1 and n2 and ca2:
+        cnca = pr.calcAngle(c1, n2, ca2, radian=True)[0]
+    else:
+        cnca = GLOBAL_PAD_CHAR
     return ncac, cacn, cnca
 
 
 def measure_bond_angles(residue, res_idx, all_res):
     """ Given a residue, measure the ncac, cacn, and cnca bond angles. """
     if res_idx == len(all_res) - 1:
-        atoms = residue.backbone.copy()
-        ncac = pr.calcAngle(atoms[0], atoms[1], atoms[2], radian=True)
-        bondangles = [ncac, 0, 0]
+        next_res = None
     else:
-        bondangles = list(get_bond_angles(residue, all_res[res_idx + 1]))
-    return bondangles
+        next_res = all_res[res_idx + 1]
+    return list(get_bond_angles(residue, next_res))
 
 
-def measure_phi_psi_omega(residue, outofboundchar=0):
+def measure_phi_psi_omega(residue):
     """
     Returns phi, psi, omega for a residue, replacing out-of-bounds angles with
-    outofboundchar.
+    GLOBAL_PAD_CHAR.
     """
     try:
         phi = pr.calcPhi(residue, radian=True, dist=None)
     except ValueError:
-        phi = outofboundchar
+        phi = GLOBAL_PAD_CHAR
     try:
         psi = pr.calcPsi(residue, radian=True, dist=None)
     except ValueError:
-        psi = outofboundchar
+        psi = GLOBAL_PAD_CHAR
     try:
         omega = pr.calcOmega(residue, radian=True, dist=None)
     except ValueError:
-        omega = outofboundchar
+        omega = GLOBAL_PAD_CHAR
     return [phi, psi, omega]
 
 
@@ -270,8 +459,11 @@ def compute_single_dihedral(atoms):
     Given an iterable of 4 Atoms, uses Prody to calculate the dihedral angle between them in
     radians.
     """
-    atoms = [a.getCoords()[0] for a in atoms]
-    return get_dihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)
+    if None in atoms:
+        return GLOBAL_PAD_CHAR
+    else:
+        atoms = [a.getCoords()[0] for a in atoms]
+        return get_dihedral(atoms[0], atoms[1], atoms[2], atoms[3], radian=True)
 
 
 def get_dihedral(coords1, coords2, coords3, coords4, radian=False):
@@ -314,3 +506,4 @@ AA_MAP = {'A': 0, 'C': 1, 'D': 2, 'E': 3,
           'K': 8, 'L': 9, 'M': 10, 'N': 11,
           'P': 12, 'Q': 13, 'R': 14, 'S': 15,
           'T': 16, 'V': 17, 'W': 18, 'Y': 19}
+AA_MAP_INV = {v: k for k, v in AA_MAP.items()}

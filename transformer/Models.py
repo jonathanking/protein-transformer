@@ -43,7 +43,7 @@ def get_attn_key_pad_mask(seq_k, seq_q):
 
     # Expand to fit the shape of key query attention matrix.
     len_q = seq_q.size(1)
-    # padding_mask = seq_k.eq(Constants.PAD)
+    # TODO add ability to use np.nan within model, i.e. padding_mask = torch.isnan(seq_k).all(dim=-1)
     padding_mask = (seq_k == 0).all(dim=-1)
     padding_mask = padding_mask.unsqueeze(1).expand(-1, len_q, -1)  # b x lq x lk
 
@@ -87,6 +87,7 @@ class Encoder(nn.Module):
         enc_slf_attn_list = []
 
         # -- Prepare masks
+        # TODO mofidy masks to allow for np.nan
         slf_attn_mask = get_attn_key_pad_mask(seq_k=src_seq, seq_q=src_seq)
         non_pad_mask = get_non_pad_mask(src_seq)
 
@@ -190,8 +191,8 @@ class Transformer(nn.Module):
         # Initialize output linear layer bias with angle means
         if init_w_angle_means:
             self.tgt_angle_prj.bias = nn.Parameter(torch.FloatTensor(np.arctanh(self.load_angle_means(data_path))))
-            nn.init.zeros_(self.tgt_angle_prj.weight)
-
+            # TODO is it better to init with nn.init.zeros_(self.tgt_angle_prj.weight) ?
+            nn.init.xavier_normal_(self.tgt_angle_prj.weight)
         self.tanh = nn.Tanh()
 
     def load_angle_means(self, data_path):
