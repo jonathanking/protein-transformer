@@ -91,8 +91,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         optimizer.zero_grad()
         if opt.rnn:
             lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-            h, c = model.init_hidden(len(lens))
-            pred = model(src_seq, lens, h, c)
+            pred = model(src_seq, lens)
         else:
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
             tgt_ang_no_nan = tgt_ang.clone().detach()
@@ -150,8 +149,7 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
             if opt.rnn:
                 lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device),
                                                                                                batch)
-                h, c = model.init_hidden(len(lens))
-                pred = model(src_seq, lens, h, c)
+                pred = model(src_seq, lens)
             else:
                 src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
                 tgt_ang_no_nan = tgt_ang.clone().detach()
@@ -221,7 +219,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
             loss_to_compare = train_drmsd_loss
             losses_to_compare = train_drmsd_losses
 
-        if opt.early_stopping and loss_to_compare < best_valid_loss_so_far:
+        if loss_to_compare < best_valid_loss_so_far:
             best_valid_loss_so_far = loss_to_compare
             epoch_last_improved = epoch_i
         elif opt.early_stopping and epoch_i - epoch_last_improved > opt.early_stopping:
@@ -242,14 +240,16 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
 
 def save_model(opt, optimizer, model, valid_loss, valid_losses, epoch_i):
     """ Records model state according to a checkpointing policy. Defaults to best validation set performance. """
-    model_state_dict = model.state_dict()
-    checkpoint = {
-        'model_state_dict': model_state_dict,
-        'settings': opt,
-        'epoch': epoch_i,
-        'optimizer_state_dict': optimizer.state_dict(),
-        'loss': valid_loss}
-
+    did_save = False
+    if opt.save_mode == 'all' or len(valid_losses) == 1 or valid_loss < min(valid_losses[:-1]):
+        model_state_dict = model.state_dict()
+        checkpoint = {
+            'model_state_dict': model_state_dict,
+            'settings': opt,
+            'epoch': epoch_i,
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': valid_loss}
+        did_save = True
     if opt.save_mode == 'all':
         chkpt_file_name = opt.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, valid_loss)
         torch.save(checkpoint, chkpt_file_name)
@@ -257,6 +257,7 @@ def save_model(opt, optimizer, model, valid_loss, valid_losses, epoch_i):
         chkpt_file_name = opt.chkpt_path + "_best.chkpt"
         torch.save(checkpoint, chkpt_file_name)
         print('\r    - [Info] The checkpoint file has been updated.')
+    return did_save
 
 
 def load_model(model, optimizer, args):
@@ -266,14 +267,19 @@ def load_model(model, optimizer, args):
     global START_EPOCH
     chkpt_file_name = args.chkpt_path + "_best.chkpt"
     if os.path.exists(chkpt_file_name) and not args.restart:
-        print(f"Attempting to load model from {chkpt_file_name}.")
+        print(f"[Info] Attempting to load model from {chkpt_file_name}.")
     else:
         return model, optimizer, False
     checkpoint = torch.load(chkpt_file_name)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    try:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    except RuntimeError as e:
+        print("[Info] Error loading model.")
+        print(e)
+        exit(1)
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    START_EPOCH = checkpoint['epoch']
-    print(f"Resuming model training from Epoch {checkpoint['epoch']}. Previous validation loss"
+    START_EPOCH = checkpoint['epoch'] + 1
+    print(f"[Info] Resuming model training from end of Epoch {checkpoint['epoch']}. Previous validation loss"
           f" = {checkpoint['loss']:.4f}.")
     return model, optimizer, True
 
@@ -374,7 +380,7 @@ def main():
                             dropout=args.dropout).to(device)
     else:
         print("[Info] Training a RNN model instead of the Transformer model.")
-        latent_dim, n_layers, bidi = 250, 2, True
+        latent_dim, n_layers, bidi = 500, 2, True
         model = MyRNN(args, latent_dim, num_layers=n_layers, bidirectional=bidi, device=device).to(device)
     # optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
     #                        betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)

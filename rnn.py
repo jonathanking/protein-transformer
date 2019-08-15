@@ -30,7 +30,8 @@ class MyRNN(nn.Module):
                 Variable(torch.zeros(self.num_layers * self.num_direction, batch_size, self.hidden_dim)).to(self.device))
         return h, c
 
-    def forward(self, sequence, lengths, h, c):
+    def forward(self, sequence, lengths):
+        h, c = self.init_hidden(len(lengths))
         sequence = nn.utils.rnn.pack_padded_sequence(sequence, lengths, batch_first=True)
         output, (h, c) = self.lstm(sequence, (h, c))
         output, output_lengths = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)

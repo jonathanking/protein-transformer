@@ -77,7 +77,7 @@ def drmsd_loss_from_coords(pred_angs, gold_coords, input_seqs, device, return_rm
     are compared with the true coordinate tensor provided to the function.
     """
     device = torch.device("cpu")
-    pred_angs, gold_coords = pred_angs.to(device), gold_coords.to(device)
+    pred_angs, gold_coords, input_seqs = pred_angs.to(device), gold_coords.to(device), input_seqs.to(device)
 
     pred_angs = inverse_trig_transform(pred_angs)
 
