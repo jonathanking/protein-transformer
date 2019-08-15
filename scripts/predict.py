@@ -6,6 +6,7 @@ import os
 import sys
 
 sys.path.append("/home/jok120/protein-transformer/")
+sys.path.append("/home/jok120/protein-transformer/scripts")
 
 import torch
 from tqdm import tqdm
@@ -15,10 +16,14 @@ from os.path import basename, splitext
 
 import transformer.Models
 import torch.utils.data
-from dataset import ProteinDataset, paired_collate_fn
+from dataset import ProteinDataset, paired_collate_fn, paired_collate_fn_with_len
 from protein.Structure import generate_coords_with_tuples
-from losses import inverse_trig_transform, copy_padding_from_gold, drmsd_loss, mse_loss, combine_drmsd_mse
+from losses import inverse_trig_transform, copy_padding_from_gold, drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from protein.Sidechains import SC_DATA
+from rnn import MyRNN
+from proteinnet2pytorch import get_chain_from_proteinnetid
+
+VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
 
 
 def load_model(args):
@@ -27,44 +32,68 @@ def load_model(args):
     # TODO remove try/except clause for loading model
     chkpt = torch.load(args.model_chkpt, map_location=device)
     model_args = chkpt['settings']
-    try:
-        model_state = chkpt['model']
-    except KeyError:
-        model_state = chkpt['model_state_dict']
+    model_state = chkpt['model_state_dict']
     if args.data is None:
         args.data = model_args.data
 
-    the_model = transformer.Models.Transformer(model_args,
-                                               d_k=model_args.d_k,
-                                               d_v=model_args.d_v,
-                                               d_model=model_args.d_model,
-                                               d_inner=model_args.d_inner_hid,
-                                               n_layers=model_args.n_layers,
-                                               n_head=model_args.n_head,
-                                               dropout=model_args.dropout)
+    try:
+        if model_args.rnn is None:
+            model_args.rnn = False
+            args.rnn = False
+    except AttributeError:
+        model_args.rnn = False
+        args.rnn = False
+
+    if not args.rnn:
+        the_model = transformer.Models.Transformer(model_args,
+                                                   d_k=model_args.d_k,
+                                                   d_v=model_args.d_v,
+                                                   d_model=model_args.d_model,
+                                                   d_inner=model_args.d_inner_hid,
+                                                   n_layers=model_args.n_layers,
+                                                   n_head=model_args.n_head,
+                                                   dropout=model_args.dropout)
+    else:
+        latent_dim, n_layers, bidi = model_args.d_model, model_args.n_layers, True
+        the_model = MyRNN(model_args, latent_dim, num_layers=n_layers, bidirectional=bidi, device=device)
     the_model.load_state_dict(model_state)
     return args, the_model
 
 
-def get_data_loader(data_dict, dataset, n):
-    """ Given a complete dataset as a python dictionary file and one of {train/test/val/all} to make predictions from,
+def get_data_loader(args, data_subset, n):
+    """ Given a subset of a dataset as a python dictionary file to make predictions from,
         this function selects n items at random from that dataset to predict. It then returns a DataLoader for those
         items, along with a list of ids.
         """
-    if dataset == "all":
-        data_dict["all"] = {"ids": data_dict["train"]["ids"] + data_dict["test"]["ids"] + data_dict["valid"]["ids"],
-                            "seq": data_dict["train"]["seq"] + data_dict["test"]["seq"] + data_dict["valid"]["seq"],
-                            "ang": data_dict["train"]["ang"] + data_dict["test"]["ang"] + data_dict["valid"]["ang"]}
-    to_predict = set(
-        [s.upper() for s in np.random.choice(data_dict[dataset]["ids"], n)])  # ["2NLP_D", "3ASK_Q", "1SZA_C"]
+    if not args.rnn:
+        collate = paired_collate_fn
+    else:
+        collate = paired_collate_fn_with_len
+    if n is 0:
+        train_loader = torch.utils.data.DataLoader(
+            ProteinDataset(
+                seqs=data_subset['seq'],
+                crds=data_subset['crd'],
+                angs=data_subset['ang'],
+                ),
+            num_workers=2,
+            batch_size=1,
+            collate_fn=collate,
+            shuffle=False)
+        return train_loader, data_subset["ids"]
+
+    # We just want to predict a few examples
+    to_predict = set([s.upper() for s in np.random.choice(data_subset["ids"], n)])  # ["2NLP_D", "3ASK_Q", "1SZA_C"]
     will_predict = []
     ids = []
     seqs = []
     angs = []
-    for i, prot in enumerate(data_dict[dataset]["ids"]):
+    crds = []
+    for i, prot in enumerate(data_subset["ids"]):
         if prot.upper() in to_predict and prot.upper() not in will_predict:
-            seqs.append(data_dict[dataset]["seq"][i])
-            angs.append(data_dict[dataset]["ang"][i])
+            seqs.append(data_subset["seq"][i])
+            angs.append(data_subset["ang"][i])
+            crds.append(data_subset["crd"][i])
             ids.append(prot)
             will_predict.append(prot.upper())
     assert len(seqs) == n and len(angs) == n or (len(seqs) == len(angs) and len(seqs) < n)
@@ -72,10 +101,11 @@ def get_data_loader(data_dict, dataset, n):
     data_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=seqs,
-            angs=angs),
+            angs=angs,
+            crds=crds),
         num_workers=2,
         batch_size=1,
-        collate_fn=paired_collate_fn,
+        collate_fn=collate,
         shuffle=False)
     return data_loader, ids
 
@@ -94,35 +124,43 @@ def make_predictions(args, the_model, data_loader, pdb_ids, build_true=False):
     with torch.no_grad():
         for pdb_id, batch in zip(pdb_ids, tqdm(data_loader, mininterval=2, desc=' - (Evaluation ', leave=False)):
             # prepare data
-            src_seq, src_pos, tgt_seq, tgt_pos = batch
-            gold = tgt_seq[:]
+            if args.rnn:
+                lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device),
+                                                                                               batch)
+            else:
+                src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
 
             # forward
             if args.reconstruct or build_true:
-                pred = tgt_seq
+                pred = tgt_ang
+            elif args.rnn:
+                pred = the_model(src_seq, lens)
             else:
-                pred = the_model(src_seq, src_pos, tgt_seq, tgt_pos)
+                tgt_ang_no_nan = tgt_ang.clone().detach()
+                tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
+                pred = the_model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
+
             # TODO return backbone vs sidechain losses
-            d_loss, r_loss = drmsd_loss(pred, gold, src_seq, torch.device('cpu'),
-                                        return_rmsd=True)  # When evaluating the epoch, only use DRMSD loss
-            m_loss = mse_loss(pred, gold)
+            try:
+                d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
+                m_loss = mse_over_angles(pred, tgt_ang)
+            except (AssertionError, ValueError):
+                continue
             c_loss = combine_drmsd_mse(d_loss, m_loss)
             losses["drmsd"].append(d_loss.item())
             losses["mse"].append(m_loss.item())
             losses["rmsd"].append(r_loss)
             losses["combined"].append(c_loss.item())
 
-            np.save(os.path.join(args.outdir, pdb_id + '_l{0:.2f}.npy'.format(r_loss)), pred.numpy()[0])
 
-            pred, gold = inverse_trig_transform(pred), inverse_trig_transform(gold)
+            pred, gold = inverse_trig_transform(pred), inverse_trig_transform(tgt_ang)
             pred, gold = copy_padding_from_gold(pred, gold, torch.device('cpu'))
 
             all, bb, bb_tups, sc, aa_codes, atom_names = generate_coords_with_tuples(pred[0], pred.shape[1], src_seq[0],
                                                                                      torch.device('cpu'))
             coords_list.append((np.asarray(bb), bb_tups, sc, float(r_loss), aa_codes, atom_names, pred[0]))
     print("Avg Loss = {0:.2f}".format(np.mean(losses["drmsd"])))
-    if not build_true:
-        torch.save(losses, f"{splitext(basename(args.model_chkpt))[0]}_trans-evalution.tch")
+    torch.save(losses, os.path.join(args.outdir, f"{splitext(basename(args.model_chkpt))[0]}_{args.dataset}_trans-evalution.tch"))
     return coords_list
 
 
@@ -243,10 +281,12 @@ def set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id,
             res_num_str = str(res_num)
         this_sidechain = prot_sidechains.select('sidechain and resnum ' + res_num_str)
         if this_sidechain is None:
-            print('this_sidechain is None')
-            raise Exception("The sidechain could not be selected for " + res_code)
+            # print('this_sidechain is None')
+            # raise Exception("The sidechain could not be selected for " + res_code)
+            continue
         for name, coord in sidechain_coords:
-            this_sidechain.select("name " + name).setCoords(coord)
+            s = this_sidechain.select("name " + name)
+            if s: s.setCoords(coord)
     return prot
 
 
@@ -267,19 +307,27 @@ def make_pdbs(id_coords_dict, outdir):
     # Build PDBs
     for pdb_chain, data in id_coords_dict.items():
         bb_coords, bb_tups, sc_tups, loss, aa_codes, atom_names, angles = data
-        pdb_id = pdb_chain.split('_')[0]
-        chain_id = pdb_chain.split("_")[1]
-        print("Building", pdb_id, chain_id)
+        print("Building", pdb_chain)
+        # pdb_id = pdb_chain.split('_')[0]
+        # chain_id = pdb_chain.split("_")[1]
+        chain_id = pdb_chain.split("_")[-1]
 
-        prot = clean_multiple_coordsets(parsePDB(pdb_id))
 
-        backbone = set_backbone_coords(prot, chain_id, bb_coords, pdb_chain, peptide_bond)
+        prot = get_chain_from_proteinnetid(pdb_chain)
+        if not prot:
+            continue
+        try:
+            backbone = set_backbone_coords(prot, chain_id, bb_coords, pdb_chain, peptide_bond)
+        except AssertionError:
+            print(f'backbone mismatch for {pdb_chain}.')
+            continue
         if args.backbone_only:
             writePDB(os.path.join(outdir, pdb_chain + '_l{0:.2f}.pdb'.format(loss)), backbone)
             continue
         try:
             prot = set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains, angles)
-        except AttributeError:
+        except AttributeError as e:
+            print(e)
             continue
         all_sidechains = prot.select('protein and chain ' + chain_id + ' and sidechain')
         all_atoms = all_sidechains + backbone
@@ -303,7 +351,7 @@ if __name__ == "__main__":
     parser.add_argument("-data", type=str, required=False,
                         help="Path to data dictionary to predict. Defaults to test set from the data file that the" + \
                              " model was originally associated with.")
-    parser.add_argument("-dataset", type=str, choices=["train", "valid", "test", "all"], default="test",
+    parser.add_argument("-dataset", type=str, choices=["train", "test", "all"] + ["valid-" + str(i) for i in VALID_SPLITS], default="test",
                         help="Which dataset within the data file to predict on.")
     parser.add_argument("-n", type=int, default=5, required=False,
                         help="How many items to randomly predict from dataset.")
@@ -324,7 +372,13 @@ if __name__ == "__main__":
     args, the_model = load_model(args)
 
     # Acquire seqs and angles to predict / compare from
-    data_loader, ids = get_data_loader(torch.load(args.data), args.dataset, n=args.n)
+    data = torch.load(args.data)
+    if 'valid' in args.dataset:
+        v, num = args.dataset.split("-")
+        data_subset = data[v][int(num)]
+    else:
+        data_subset = data[args.dataset]
+    data_loader, ids = get_data_loader(args, data_subset, n=args.n)
 
     # Make predictions as coordinates
     coords_list = make_predictions(args, the_model, data_loader, ids)
