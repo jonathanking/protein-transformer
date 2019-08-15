@@ -1,0 +1,8 @@
+python train.py -lr 0.0001 -e 10 --cluster -b 2 -cl -dm 16 -nh 1 -nl 1 -dk 20 -dv 8 -cg 1 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_pnbest_01
+python train.py -lr 0.0001 -e 10 --cluster -b 2 -cl -dm 22 -nh 4 -nl 1 -dk 20 -dv 52 -cg 1 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_pnbest_02
+python train.py -lr 0.001 -e 10 --cluster -b 2 -cl -dm 22 -nh 4 -nl 1 -dk 20 -dv 52 -cg 1 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_pnbest_03
+python train.py -lr 0.0001 -e 10 --cluster -b 2 -cl -dm 16 -nh 6 -nl 1 -dk 8 -dv 8 -cg 0.5 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_pnbest_04
+python train.py -lr 0.00001 -e 10 --cluster -b 2 -cl -dm 16 -nh 6 -nl 8 -dk 8 -dv 256 -cg 0.5 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_pnbest_05
+python train.py -lr 0.00001 -e 10 --cluster -b 2 -cl -dm 256 -nh 4 -nl 2 -dk 8 -dv 8 -cg 0.5 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_pnbest_06
+python train.py -lr 0.00001 -e 10 --cluster -b 2 -cl -dm 256 -nh 1 -nl 4 -dk 20 -dv 20 -cg 1 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_pnbest_07
+
