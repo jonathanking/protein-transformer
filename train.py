@@ -350,7 +350,7 @@ def main():
     args = parser.parse_args()
     args.cuda = not args.no_cuda
     args.d_word_vec = args.d_model
-    args.buffering_mode = None if args.cluster else 1
+    args.buffering_mode = -1 if args.cluster else 1
     LOGFILEHEADER = prepare_log_header(args)
     if args.save_mode == "all" and not args.restart:
         print("You cannot resume this model because it was saved with mode 'all'.")
