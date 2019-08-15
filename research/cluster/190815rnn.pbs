@@ -1,10 +1,10 @@
 #!/bin/bash
-#PBS -N trans-hp-q1
+#PBS -N proteinrnn
 #PBS -j oe
 #PBS -l nodes=1:ppn=2:gpus=1
 #PBS -l mem=10gb
 #PBS -l walltime=1:00:00:00
-#PBS -q any_gpu
+#PBS -q dept_gpu_12GB
 
 
 ############################
