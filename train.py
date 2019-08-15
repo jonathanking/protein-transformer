@@ -380,7 +380,7 @@ def main():
                             dropout=args.dropout).to(device)
     else:
         print("[Info] Training a RNN model instead of the Transformer model.")
-        latent_dim, n_layers, bidi = 500, 2, True
+        latent_dim, n_layers, bidi = args.d_model, args.n_layers, True
         model = MyRNN(args, latent_dim, num_layers=n_layers, bidirectional=bidi, device=device).to(device)
     # optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
     #                        betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
