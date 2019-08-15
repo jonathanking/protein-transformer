@@ -10,7 +10,7 @@ import torch.optim as optim
 import torch.utils.data
 from tqdm import tqdm
 
-from dataset import paired_collate_fn, ProteinDataset
+from dataset import paired_collate_fn, paired_collate_fn_with_len, ProteinDataset
 from losses import drmsd_loss_from_angles, drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
@@ -88,11 +88,16 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         pbar = training_data
 
     for batch in pbar:
-        src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
         optimizer.zero_grad()
-        tgt_ang_no_nan = tgt_ang.clone().detach()
-        tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
-        pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
+        if opt.rnn:
+            lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+            h, c = model.init_hidden(len(lens))
+            pred = model(src_seq, lens, h, c)
+        else:
+            src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+            tgt_ang_no_nan = tgt_ang.clone().detach()
+            tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
+            pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
         d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device).to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
         c_loss = combine_drmsd_mse(d_loss, m_loss, w=0.8)
@@ -142,10 +147,16 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
 
     with torch.no_grad():
         for batch in pbar:
-            src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-            tgt_ang_no_nan = tgt_ang.clone().detach()
-            tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
-            pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
+            if opt.rnn:
+                lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device),
+                                                                                               batch)
+                h, c = model.init_hidden(len(lens))
+                pred = model(src_seq, lens, h, c)
+            else:
+                src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+                tgt_ang_no_nan = tgt_ang.clone().detach()
+                tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
+                pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
             d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
             c_loss = combine_drmsd_mse(d_loss, m_loss)
@@ -338,6 +349,11 @@ def main():
     if args.save_mode == "all" and not args.restart:
         print("You cannot resume this model because it was saved with mode 'all'.")
         exit(1)
+    if not args.log:
+        args.log_file = "./data/logs/" + args.name + '.train'
+    else:
+        args.log_file = "./data/logs/" + args.log + '.train'
+    print(args, "\n")
 
     # ========= Loading Dataset ========= #
     data = torch.load(args.data)
@@ -349,17 +365,17 @@ def main():
     device = torch.device('cuda' if args.cuda else 'cpu')
     if not args.rnn:
         model = Transformer(args,
-                                  d_k=args.d_k,
-                                  d_v=args.d_v,
-                                  d_model=args.d_model,
-                                  d_inner=args.d_inner_hid,
-                                  n_layers=args.n_layers,
-                                  n_head=args.n_head,
-                                  dropout=args.dropout).to(device)
+                            d_k=args.d_k,
+                            d_v=args.d_v,
+                            d_model=args.d_model,
+                            d_inner=args.d_inner_hid,
+                            n_layers=args.n_layers,
+                            n_head=args.n_head,
+                            dropout=args.dropout).to(device)
     else:
         print("[Info] Training a RNN model instead of the Transformer model.")
         latent_dim, n_layers, bidi = 250, 2, True
-        model = MyRNN(latent_dim, num_layers=n_layers, bidirectional=bidi).to(device)
+        model = MyRNN(args, latent_dim, num_layers=n_layers, bidirectional=bidi, device=device).to(device)
     # optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
     #                        betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
     optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=args.learning_rate)
@@ -368,11 +384,6 @@ def main():
 
     # ========= Preparing Log and Checkpoint Files ========= #
 
-    if not args.log:
-        args.log_file = "./data/logs/" + args.name + '.train'
-    else:
-        args.log_file = "./data/logs/" + args.log + '.train'
-    print(args, "\n")
     args.chkpt_path = "./data/checkpoints/" + args.name
     os.makedirs("./data/checkpoints", exist_ok=True)
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
@@ -391,7 +402,10 @@ def main():
 
 def prepare_dataloaders(data, opt):
     """ data is a dictionary containing all necessary training data."""
-    # ========= Preparing DataLoader =========#
+    if not opt.rnn:
+        collate = paired_collate_fn
+    else:
+        collate = paired_collate_fn_with_len
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=data['train']['seq'],
@@ -400,7 +414,7 @@ def prepare_dataloaders(data, opt):
             ),
         num_workers=2,
         batch_size=opt.batch_size,
-        collate_fn=paired_collate_fn,
+        collate_fn=collate,
         shuffle=True)
 
     # TODO: load one or multiple validation sets
@@ -413,7 +427,7 @@ def prepare_dataloaders(data, opt):
                 ),
             num_workers=2,
             batch_size=opt.batch_size,
-            collate_fn=paired_collate_fn)
+            collate_fn=collate)
     else:
         valid_loader = torch.utils.data.DataLoader(
             ProteinDataset(
@@ -423,7 +437,7 @@ def prepare_dataloaders(data, opt):
                 ),
             num_workers=2,
             batch_size=opt.batch_size,
-            collate_fn=paired_collate_fn)
+            collate_fn=collate)
 
     test_loader = torch.utils.data.DataLoader(
         ProteinDataset(
@@ -433,7 +447,7 @@ def prepare_dataloaders(data, opt):
             ),
         num_workers=2,
         batch_size=opt.batch_size,
-        collate_fn=paired_collate_fn)
+        collate_fn=collate)
     return train_loader, valid_loader, test_loader
 
 
