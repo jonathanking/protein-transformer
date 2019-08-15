@@ -10,10 +10,11 @@ import torch.optim as optim
 import torch.utils.data
 from tqdm import tqdm
 
-from dataset import paired_collate_fn, ProteinDataset
+from dataset import paired_collate_fn, paired_collate_fn_with_len, ProteinDataset
 from losses import drmsd_loss_from_angles, drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
+from rnn import MyRNN
 
 LOGFILEHEADER = ''
 START_EPOCH = 0
@@ -87,11 +88,15 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         pbar = training_data
 
     for batch in pbar:
-        src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
         optimizer.zero_grad()
-        tgt_ang_no_nan = tgt_ang.clone().detach()
-        tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
-        pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
+        if opt.rnn:
+            lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+            pred = model(src_seq, lens)
+        else:
+            src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+            tgt_ang_no_nan = tgt_ang.clone().detach()
+            tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
+            pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
         d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device).to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
         c_loss = combine_drmsd_mse(d_loss, m_loss, w=0.8)
@@ -141,10 +146,15 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
 
     with torch.no_grad():
         for batch in pbar:
-            src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-            tgt_ang_no_nan = tgt_ang.clone().detach()
-            tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
-            pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
+            if opt.rnn:
+                lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device),
+                                                                                               batch)
+                pred = model(src_seq, lens)
+            else:
+                src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+                tgt_ang_no_nan = tgt_ang.clone().detach()
+                tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
+                pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
             d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
             c_loss = combine_drmsd_mse(d_loss, m_loss)
@@ -209,7 +219,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
             loss_to_compare = train_drmsd_loss
             losses_to_compare = train_drmsd_losses
 
-        if opt.early_stopping and loss_to_compare < best_valid_loss_so_far:
+        if loss_to_compare < best_valid_loss_so_far:
             best_valid_loss_so_far = loss_to_compare
             epoch_last_improved = epoch_i
         elif opt.early_stopping and epoch_i - epoch_last_improved > opt.early_stopping:
@@ -230,14 +240,16 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
 
 def save_model(opt, optimizer, model, valid_loss, valid_losses, epoch_i):
     """ Records model state according to a checkpointing policy. Defaults to best validation set performance. """
-    model_state_dict = model.state_dict()
-    checkpoint = {
-        'model_state_dict': model_state_dict,
-        'settings': opt,
-        'epoch': epoch_i,
-        'optimizer_state_dict': optimizer.state_dict(),
-        'loss': valid_loss}
-
+    did_save = False
+    if opt.save_mode == 'all' or len(valid_losses) == 1 or valid_loss < min(valid_losses[:-1]):
+        model_state_dict = model.state_dict()
+        checkpoint = {
+            'model_state_dict': model_state_dict,
+            'settings': opt,
+            'epoch': epoch_i,
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': valid_loss}
+        did_save = True
     if opt.save_mode == 'all':
         chkpt_file_name = opt.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, valid_loss)
         torch.save(checkpoint, chkpt_file_name)
@@ -245,6 +257,7 @@ def save_model(opt, optimizer, model, valid_loss, valid_losses, epoch_i):
         chkpt_file_name = opt.chkpt_path + "_best.chkpt"
         torch.save(checkpoint, chkpt_file_name)
         print('\r    - [Info] The checkpoint file has been updated.')
+    return did_save
 
 
 def load_model(model, optimizer, args):
@@ -254,14 +267,19 @@ def load_model(model, optimizer, args):
     global START_EPOCH
     chkpt_file_name = args.chkpt_path + "_best.chkpt"
     if os.path.exists(chkpt_file_name) and not args.restart:
-        print(f"Attempting to load model from {chkpt_file_name}.")
+        print(f"[Info] Attempting to load model from {chkpt_file_name}.")
     else:
         return model, optimizer, False
     checkpoint = torch.load(chkpt_file_name)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    try:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    except RuntimeError as e:
+        print("[Info] Error loading model.")
+        print(e)
+        exit(1)
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    START_EPOCH = checkpoint['epoch']
-    print(f"Resuming model training from Epoch {checkpoint['epoch']}. Previous validation loss"
+    START_EPOCH = checkpoint['epoch'] + 1
+    print(f"[Info] Resuming model training from end of Epoch {checkpoint['epoch']}. Previous validation loss"
           f" = {checkpoint['loss']:.4f}.")
     return model, optimizer, True
 
@@ -308,6 +326,7 @@ def main():
                         help="Perform an evaluation of the entire training set after a training epoch.")
 
     # Model parameters
+    parser.add_argument('-rnn', '--rnn', action='store_true')
     parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
     parser.add_argument('-dm', '--d_model', type=int, default=512)
     parser.add_argument('-dih', '--d_inner_hid', type=int, default=2048)
@@ -331,47 +350,51 @@ def main():
     args = parser.parse_args()
     args.cuda = not args.no_cuda
     args.d_word_vec = args.d_model
-    args.buffering_mode = None if args.cluster else 1
+    args.buffering_mode = -1 if args.cluster else 1
     LOGFILEHEADER = prepare_log_header(args)
     if args.save_mode == "all" and not args.restart:
         print("You cannot resume this model because it was saved with mode 'all'.")
         exit(1)
-
-    # ========= Loading Dataset ========= #
-    data = torch.load(args.data)
-    args.max_token_seq_len = data['settings']["max_len"]
-
-    training_data, validation_data, test_data = prepare_dataloaders(data, args)
-
-    # ========= Preparing Model ========= #
-
-    device = torch.device('cuda' if args.cuda else 'cpu')
-    transformer = Transformer(args,
-                              d_k=args.d_k,
-                              d_v=args.d_v,
-                              d_model=args.d_model,
-                              d_inner=args.d_inner_hid,
-                              n_layers=args.n_layers,
-                              n_head=args.n_head,
-                              dropout=args.dropout).to(device)
-    # optimizer = optim.Adam(filter(lambda x: x.requires_grad, transformer.parameters()),
-    #                        betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
-    optimizer = optim.SGD(filter(lambda x: x.requires_grad, transformer.parameters()), lr=args.learning_rate)
-    if args.lr_scheduling:
-        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
-
-    # ========= Preparing Log and Checkpoint Files ========= #
-
     if not args.log:
         args.log_file = "./data/logs/" + args.name + '.train'
     else:
         args.log_file = "./data/logs/" + args.log + '.train'
     print(args, "\n")
+
+    # ========= Loading Dataset ========= #
+    data = torch.load(args.data)
+    args.max_token_seq_len = data['settings']["max_len"]
+    training_data, validation_data, test_data = prepare_dataloaders(data, args)
+
+    # ========= Preparing Model ========= #
+
+    device = torch.device('cuda' if args.cuda else 'cpu')
+    if not args.rnn:
+        model = Transformer(args,
+                            d_k=args.d_k,
+                            d_v=args.d_v,
+                            d_model=args.d_model,
+                            d_inner=args.d_inner_hid,
+                            n_layers=args.n_layers,
+                            n_head=args.n_head,
+                            dropout=args.dropout).to(device)
+    else:
+        print("[Info] Training a RNN model instead of the Transformer model.")
+        latent_dim, n_layers, bidi = 500, 2, True
+        model = MyRNN(args, latent_dim, num_layers=n_layers, bidirectional=bidi, device=device).to(device)
+    # optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
+    #                        betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
+    optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=args.learning_rate)
+    if args.lr_scheduling:
+        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
+
+    # ========= Preparing Log and Checkpoint Files ========= #
+
     args.chkpt_path = "./data/checkpoints/" + args.name
     os.makedirs("./data/checkpoints", exist_ok=True)
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
-    transformer, optimizer, resumed = load_model(transformer, optimizer, args)
+    model, optimizer, resumed = load_model(model, optimizer, args)
     if resumed:
         log_f = open(args.log_file, 'a', buffering=args.buffering_mode)
     else:
@@ -379,13 +402,16 @@ def main():
         log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
 
-    train(transformer, training_data, validation_data, test_data, optimizer, device, args, log_writer)
+    train(model, training_data, validation_data, test_data, optimizer, device, args, log_writer)
     log_f.close()
 
 
 def prepare_dataloaders(data, opt):
     """ data is a dictionary containing all necessary training data."""
-    # ========= Preparing DataLoader =========#
+    if not opt.rnn:
+        collate = paired_collate_fn
+    else:
+        collate = paired_collate_fn_with_len
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=data['train']['seq'],
@@ -394,7 +420,7 @@ def prepare_dataloaders(data, opt):
             ),
         num_workers=2,
         batch_size=opt.batch_size,
-        collate_fn=paired_collate_fn,
+        collate_fn=collate,
         shuffle=True)
 
     # TODO: load one or multiple validation sets
@@ -407,7 +433,7 @@ def prepare_dataloaders(data, opt):
                 ),
             num_workers=2,
             batch_size=opt.batch_size,
-            collate_fn=paired_collate_fn)
+            collate_fn=collate)
     else:
         valid_loader = torch.utils.data.DataLoader(
             ProteinDataset(
@@ -417,7 +443,7 @@ def prepare_dataloaders(data, opt):
                 ),
             num_workers=2,
             batch_size=opt.batch_size,
-            collate_fn=paired_collate_fn)
+            collate_fn=collate)
 
     test_loader = torch.utils.data.DataLoader(
         ProteinDataset(
@@ -427,7 +453,7 @@ def prepare_dataloaders(data, opt):
             ),
         num_workers=2,
         batch_size=opt.batch_size,
-        collate_fn=paired_collate_fn)
+        collate_fn=collate)
     return train_loader, valid_loader, test_loader
 
 

@@ -18,6 +18,25 @@ def paired_collate_fn(insts):
     return (*sequences, *angles, *coords)
 
 
+def paired_collate_fn_with_len(insts):
+    """ This function creates mini-batches (4-tuples) of src_seq/pos,
+        trg_seq/pos Tensors. insts is a list of tuples, each containing one src
+        and one target seq.
+        """
+    sequences, angles, coords = list(zip(*insts))
+    seq_seq, seq_pos = collate_fn(sequences, pad_dim=20)
+    ang_seq, ang_pos = collate_fn(angles, pad_dim=NUM_PREDICTED_ANGLES * 2)
+    crd_seq, crd_pos = collate_fn(coords, pad_dim=3, coords=True)
+    # Compute sorted lengths
+    lens = torch.LongTensor([min(MAXDATALEN, len(s)) for s in sequences])
+    sorted_lengths, indices = torch.sort(lens.view(-1), dim=0, descending=True)
+    # Sort data by lengths, as needed for an RNN and pack_padded_sequence
+    seq_seq, seq_pos = seq_seq[indices], seq_pos[indices]
+    ang_seq, ang_pos = ang_seq[indices][:, :sorted_lengths[0]], ang_pos[indices][:, :sorted_lengths[0]]
+    crd_seq, crd_pos = crd_seq[indices][:, :sorted_lengths[0]*NUM_PREDICTED_COORDS], crd_pos[indices][:, :sorted_lengths[0]*NUM_PREDICTED_COORDS]
+    return sorted_lengths, seq_seq, seq_pos, ang_seq, ang_pos, crd_seq, crd_pos
+
+
 def collate_fn(insts, pad_dim, coords=False):
     """ Pad the instance to the max seq length in batch """
 
