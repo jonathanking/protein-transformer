@@ -8,6 +8,9 @@ preds/*
 *.tch
 console.txt
 *.o*-*
+*.train
+*.cif
+*.cif.gz
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
