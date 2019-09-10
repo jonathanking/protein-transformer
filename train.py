@@ -324,6 +324,7 @@ def main():
                         help="Do not initialize the model with pre-computed angle means.")
     parser.add_argument('--eval_train', action='store_true',
                         help="Perform an evaluation of the entire training set after a training epoch.")
+    parser.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='adam')
 
     # Model parameters
     parser.add_argument('-rnn', '--rnn', action='store_true')
@@ -382,9 +383,11 @@ def main():
         print("[Info] Training a RNN model instead of the Transformer model.")
         latent_dim, n_layers, bidi = args.d_model, args.n_layers, True
         model = MyRNN(args, latent_dim, num_layers=n_layers, bidirectional=bidi, device=device).to(device)
-    # optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
-    #                        betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
-    optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=args.learning_rate)
+    if args.optimizer == "adam":
+        optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
+                               betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
+    elif args.optimizer == "sgd":
+        optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=args.learning_rate)
     if args.lr_scheduling:
         optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
 
