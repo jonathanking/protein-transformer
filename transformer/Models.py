@@ -196,7 +196,7 @@ class Transformer(nn.Module):
         if init_w_angle_means:
             self.tgt_angle_prj.bias = nn.Parameter(torch.FloatTensor(np.arctanh(self.load_angle_means(data_path))))
             # TODO is it better to init with nn.init.zeros_(self.tgt_angle_prj.weight) ?
-            nn.init.xavier_normal_(self.tgt_angle_prj.weight)
+            nn.init.xavier_normal_(self.tgt_angle_prj.weight, gain=0.00001)
         self.tanh = nn.Tanh()
 
     def load_angle_means(self, data_path):
