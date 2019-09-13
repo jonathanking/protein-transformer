@@ -95,10 +95,9 @@ class Encoder(nn.Module):
         enc_output = src_seq + self.position_enc(src_pos)
 
         for enc_layer in self.layer_stack:
-            enc_output, enc_slf_attn = enc_layer(
-                enc_output,
-                non_pad_mask=non_pad_mask,
-                slf_attn_mask=slf_attn_mask)
+            enc_output, enc_slf_attn = enc_layer(enc_output,
+                                                 non_pad_mask=non_pad_mask,
+                                                 slf_attn_mask=slf_attn_mask)
             if return_attns:
                 enc_slf_attn_list += [enc_slf_attn]
 
@@ -119,13 +118,12 @@ class Decoder(nn.Module):
         super().__init__()
         n_position = len_max_seq + 1
 
-        self.position_enc = nn.Embedding.from_pretrained(
-            get_sinusoid_encoding_table(n_position, d_model, padding_idx=0),
-            freeze=True)
+        self.position_enc = nn.Embedding.from_pretrained(get_sinusoid_encoding_table(n_position, d_model,
+                                                                                     padding_idx=0),
+                                                         freeze=True)
 
-        self.layer_stack = nn.ModuleList([
-            DecoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
-            for _ in range(n_layers)])
+        self.layer_stack = nn.ModuleList([DecoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
+                                          for _ in range(n_layers)])
 
     def forward(self, tgt_seq, tgt_pos, src_seq, enc_output, return_attns=False):
 
@@ -144,12 +142,11 @@ class Decoder(nn.Module):
         dec_output = tgt_seq + self.position_enc(tgt_pos)
 
         for dec_layer in self.layer_stack:
-            dec_output, dec_slf_attn, dec_enc_attn = dec_layer(
-                dec_output, enc_output,
-                non_pad_mask=non_pad_mask,
-                slf_attn_mask=slf_attn_mask,
-                dec_enc_attn_mask=dec_enc_attn_mask)
-
+            dec_output, dec_slf_attn, dec_enc_attn = dec_layer(dec_output,
+                                                               enc_output,
+                                                               non_pad_mask=non_pad_mask,
+                                                               slf_attn_mask=slf_attn_mask,
+                                                               dec_enc_attn_mask=dec_enc_attn_mask)
             if return_attns:
                 dec_slf_attn_list += [dec_slf_attn]
                 dec_enc_attn_list += [dec_enc_attn]
@@ -169,17 +166,24 @@ class Transformer(nn.Module):
 
         super().__init__()
         init_w_angle_means, data_path, len_max_seq = not args.without_angle_means, args.data, args.max_token_seq_len
-        self.encoder = Encoder(
-            len_max_seq=len_max_seq,
-            d_word_vec=d_word_vec, d_model=d_model, d_inner=d_inner,
-            n_layers=n_layers, n_head=n_head, d_k=d_k, d_v=d_v,
-            dropout=dropout)
+        self.encoder = Encoder(len_max_seq=len_max_seq,
+                               d_word_vec=d_word_vec,
+                               d_model=d_model,
+                               d_inner=d_inner,
+                               n_layers=n_layers,
+                               n_head=n_head,
+                               d_k=d_k,
+                               d_v=d_v,
+                               dropout=dropout)
 
-        self.decoder = Decoder(
-            len_max_seq=len_max_seq,
-            d_model=d_model, d_inner=d_inner,
-            n_layers=n_layers, n_head=n_head, d_k=d_k, d_v=d_v,
-            dropout=dropout)
+        self.decoder = Decoder(len_max_seq=len_max_seq,
+                               d_model=d_model,
+                               d_inner=d_inner,
+                               n_layers=n_layers,
+                               n_head=n_head,
+                               d_k=d_k,
+                               d_v=d_v,
+                               dropout=dropout)
 
         self.input_embedding = nn.Linear(d_word_vec, d_model)  # nn.Embedding(d_word_vec, d_angle)
         self.tgt_angle_prj = nn.Linear(d_model, d_angle)
