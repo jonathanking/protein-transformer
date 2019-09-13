@@ -6,6 +6,7 @@ from transformer.Modules import ScaledDotProductAttention
 
 __author__ = "Yu-Hsiang Huang"
 
+
 class MultiHeadAttention(nn.Module):
     ''' Multi-Head Attention module '''
 
@@ -31,7 +32,6 @@ class MultiHeadAttention(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
-
     def forward(self, q, k, v, mask=None):
 
         d_k, d_v, n_head = self.d_k, self.d_v, self.n_head
@@ -42,9 +42,9 @@ class MultiHeadAttention(nn.Module):
 
         residual = q
 
-        q = self.w_qs(q).view(sz_b, len_q, n_head, d_k)
-        k = self.w_ks(k).view(sz_b, len_k, n_head, d_k)
-        v = self.w_vs(v).view(sz_b, len_v, n_head, d_v)
+        q = self.w_qs(self.layer_norm(q)).view(sz_b, len_q, n_head, d_k)
+        k = self.w_ks(self.layer_norm(k)).view(sz_b, len_k, n_head, d_k)
+        v = self.w_vs(self.layer_norm(v)).view(sz_b, len_v, n_head, d_v)
 
         q = q.permute(2, 0, 1, 3).contiguous().view(-1, len_q, d_k) # (n*b) x lq x dk
         k = k.permute(2, 0, 1, 3).contiguous().view(-1, len_k, d_k) # (n*b) x lk x dk
@@ -56,10 +56,11 @@ class MultiHeadAttention(nn.Module):
         output = output.view(n_head, sz_b, len_q, d_v)
         output = output.permute(1, 2, 0, 3).contiguous().view(sz_b, len_q, -1) # b x lq x (n*dv)
 
-        output = self.dropout(self.fc(output))
-        output = self.layer_norm(output + residual)
+        output = self.fc(output)
+        output = self.dropout(output) + residual
 
         return output, attn
+
 
 class PositionwiseFeedForward(nn.Module):
     ''' A two-feed-forward-layer module '''
@@ -73,9 +74,9 @@ class PositionwiseFeedForward(nn.Module):
 
     def forward(self, x):
         residual = x
-        output = x.transpose(1, 2)
+        output = self.layer_norm(x).transpose(1, 2)
         output = self.w_2(F.relu(self.w_1(output)))
         output = output.transpose(1, 2)
         output = self.dropout(output)
-        output = self.layer_norm(output + residual)
+        output = output + residual
         return output
