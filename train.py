@@ -27,15 +27,16 @@ def print_status(mode, opt, items):
     'train_val', or 'train_test'.
     """
     if mode == "train_epoch":
-        pbar, loss, d_loss, training_losses, cur_lr, m_loss, c_loss = items
+        pbar, loss, d_loss, d_loss_norm, training_losses, cur_lr, m_loss, c_loss = items
         lr_string = f", LR = {cur_lr:.7f}" if opt.lr_scheduling else ""
         if not opt.cluster and len(training_losses) > 32:
-            pbar.set_description('\r  - (Train) drmsd = {0:.6f}, rmse = {3:.6f}, 32avg = {1:.6f}, comb = {4:.6f}{'
-                                 '2}'.format(float(d_loss), np.mean(training_losses[-32:]), lr_string,
-                                                       np.sqrt(float(m_loss)), float(c_loss)))
+            pbar.set_description('\r  - (Train) drmsd = {0:.6f}, ln-drmsd = {lnd:0.6f}, rmse = {3:.6f}, 32avg = {1:.6f}'
+                                 ', comb = {4:.6f}{2}'.format(float(d_loss), np.mean(training_losses[-32:]), lr_string,
+                                                              np.sqrt(float(m_loss)), float(c_loss), lnd=d_loss_norm))
         elif not opt.cluster:
-            pbar.set_description('\r  - (Train) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}{1}'.format(
-                float(d_loss), lr_string, np.sqrt(float(m_loss)), float(c_loss)))
+            pbar.set_description('\r  - (Train) drmsd = {0:.6f}, ln-drmsd = {lnd:0.6f}, rmse = {2:.6f}, comb = '
+                                 '{3:.6f}{1}'.format(float(d_loss), lr_string, np.sqrt(float(m_loss)), float(c_loss),
+                                                     lnd=d_loss_norm))
         if opt.cluster and len(training_losses) > 32:
             print('Loss = {0:.6f}, 32avg = {1:.6f}{2}'.format(
                 float(loss), np.mean(training_losses[-32:]), lr_string))
@@ -79,6 +80,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     model.train()
 
     total_drmsd_loss = 0
+    total_ln_drmsd_loss = 0
     total_mse_loss = 0
     n_batches = 0.0
     training_losses = []
@@ -90,20 +92,22 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
     for batch in pbar:
         optimizer.zero_grad()
         if opt.rnn:
-            lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+            lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device),
+                                                                                           batch)
             pred = model(src_seq, lens)
         else:
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
             tgt_ang_no_nan = tgt_ang.clone().detach()
             tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
             pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
-        d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device).to('cpu')
+        d_loss, d_loss_normalized = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
+        d_loss, d_loss_normalized = d_loss.to('cpu'), d_loss_normalized.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
-        c_loss = combine_drmsd_mse(d_loss, m_loss, w=0.8)
+        c_loss = combine_drmsd_mse(d_loss_normalized, m_loss, w=0.5)
         if opt.combined_loss:
             loss = c_loss
         else:
-            loss = d_loss
+            loss = d_loss_normalized
         loss.backward()
         training_losses.append(float(loss))
 
@@ -116,17 +120,19 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
 
         # note keeping
         total_drmsd_loss += d_loss.item()
+        total_ln_drmsd_loss += d_loss_normalized.item()
         total_mse_loss += m_loss.item()
         n_batches += 1
         cur_lr = optimizer.cur_lr if opt.lr_scheduling else 0
-        print_status("train_epoch", opt, (pbar, loss, d_loss, training_losses, cur_lr, m_loss, c_loss))
-        log_batch(log_writer, d_loss.item(), m_loss.item(), None, c_loss.item(), cur_lr, is_val=False,
-                  end_of_epoch=False, t=time.time())
+        print_status("train_epoch", opt, (pbar, loss, d_loss, d_loss_normalized, training_losses, cur_lr, m_loss,
+                                          c_loss))
+        log_batch(log_writer, d_loss.item(), d_loss_normalized.item(), m_loss.item(), None, c_loss.item(), cur_lr,
+                  is_val=False, end_of_epoch=False, t=time.time())
         if np.isnan(loss.item()):
             print("A nan loss has occurred. Exiting training.")
             sys.exit(1)
 
-    return total_drmsd_loss / n_batches, total_mse_loss / n_batches
+    return total_drmsd_loss / n_batches, total_ln_drmsd_loss / n_batches, total_mse_loss / n_batches
 
 
 def eval_epoch(model, validation_data, device, opt, mode="Val"):
@@ -135,6 +141,7 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
     model.eval()
 
     total_drmsd_loss = 0
+    total_ln_drmsd_loss = 0
     total_mse_loss = 0
     total_rmsd_loss = 0
     total_combined_loss = 0
@@ -155,17 +162,20 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
                 tgt_ang_no_nan = tgt_ang.clone().detach()
                 tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
                 pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
-            d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
+            d_loss, d_loss_normalized, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device,
+                                                                       return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
             c_loss = combine_drmsd_mse(d_loss, m_loss)
             total_drmsd_loss += d_loss.item()
+            total_ln_drmsd_loss += d_loss_normalized.item()
             total_mse_loss += m_loss.item()
             total_rmsd_loss += r_loss
             total_combined_loss += c_loss.item()
             n_batches += 1
             print_status("eval_epoch", opt, (pbar, d_loss, mode, m_loss, c_loss))
 
-    return (x / n_batches for x in [total_drmsd_loss, total_mse_loss, total_rmsd_loss, total_combined_loss])
+    return (x / n_batches for x in [total_drmsd_loss, total_ln_drmsd_loss, total_mse_loss, total_rmsd_loss,
+                                    total_combined_loss])
 
 
 def train(model, training_data, validation_data, test_data, optimizer, device, opt, log_writer):
@@ -182,10 +192,11 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
         print(f'[ Epoch {display_epoch} ]')
 
         start = time.time()
-        train_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
+        train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
         if opt.eval_train:
-            train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model, training_data,
-                                                                                            device, opt, mode="Train")
+            train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model,
+                                                                                            training_data, device, opt,
+                                                                                            mode="Train")
         else:
             train_comb_loss, train_rmsd_loss = 111, 111
         train_combined_losses.append(train_comb_loss)
@@ -196,15 +207,18 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
 
         if not opt.train_only:
             start = time.time()
-            val_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss = eval_epoch(model, validation_data, device, opt)
+            val_drmsd_loss, val_ln_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss = eval_epoch(model,
+                                                                                                       validation_data,
+                                                                                                       device,
+                                                                                                       opt)
             print_status("train_val", opt, (val_drmsd_loss,val_mse_loss,start,val_rmsd_loss,val_comb_loss))
-            log_batch(log_writer, val_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss, cur_lr,
+            log_batch(log_writer, val_drmsd_loss, val_ln_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss, cur_lr,
                       is_val=True, end_of_epoch=True)
             valid_drmsd_losses.append(val_drmsd_loss)
             valid_combined_losses.append(val_comb_loss)
 
-        log_batch(log_writer, train_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss, cur_lr,
-                  is_val=False, end_of_epoch=True)
+        log_batch(log_writer, train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss,
+                  cur_lr, is_val=False, end_of_epoch=True)
 
         if opt.combined_loss and not opt.train_only:
             loss_to_compare = val_comb_loss
@@ -231,11 +245,13 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
     if not opt.train_only:
         # Evaluate model on test set
         t = time.time()
-        test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss = eval_epoch(model, test_data, device, opt, mode="Test")
+        test_drmsd_loss, test_ln_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss = eval_epoch(model,
+                                                                                                        test_data,
+                                                                                                        device, opt,
+                                                                                                        mode="Test")
         print_status("train_test", opt, (test_drmsd_loss, test_mse_loss, t, test_comb_loss, test_rmsd_loss))
-        log_batch(log_writer, test_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss, cur_lr,
-                  is_val=True,
-                  end_of_epoch=True)
+        log_batch(log_writer, test_drmsd_loss, test_ln_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss,
+                  cur_lr, is_val=True, end_of_epoch=True)
 
 
 def save_model(opt, optimizer, model, valid_loss, valid_losses, epoch_i):
@@ -284,17 +300,18 @@ def load_model(model, optimizer, args):
     return model, optimizer, True
 
 
-def log_batch(log_writer, drmsd, mse, rmsd, combined, cur_lr, is_val=False, end_of_epoch=False, t=time.time()):
+def log_batch(log_writer, drmsd, ln_drmsd, mse, rmsd, combined, cur_lr, is_val=False, end_of_epoch=False,
+              t=time.time()):
     """ Logs training info to a predetermined log. """
-    log_writer.writerow([drmsd, np.sqrt(mse), rmsd, combined, cur_lr, is_val, end_of_epoch, t])
+    log_writer.writerow([drmsd, ln_drmsd, np.sqrt(mse), rmsd, combined, cur_lr, is_val, end_of_epoch, t])
 
 
 def prepare_log_header(opt):
     """ Returns the column ordering for the logfile. """
     if opt.combined_loss:
-        return 'drmsd,rmse,rmsd,combined,lr,is_val,is_end_of_epoch,time\n'
+        return 'drmsd,ln_drmsd,rmse,rmsd,combined,lr,is_val,is_end_of_epoch,time\n'
     else:
-        return 'drmsd,rmse,rmsd,lr,is_val,is_end_of_epoch,time\n'
+        return 'drmsd,ln_drmsd,rmse,rmsd,lr,is_val,is_end_of_epoch,time\n'
 
 
 def main():

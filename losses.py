@@ -82,6 +82,7 @@ def drmsd_loss_from_coords(pred_angs, gold_coords, input_seqs, device, return_rm
     pred_angs = inverse_trig_transform(pred_angs)
 
     losses = []
+    len_normalized_losses = []
     rmsds = []
     for pred_item, gold_item, input_seq in zip(pred_angs, gold_coords, input_seqs):
         batch_mask = input_seq.ne(0).any(dim=1)
@@ -95,12 +96,13 @@ def drmsd_loss_from_coords(pred_angs, gold_coords, input_seqs, device, return_rm
         gold_subset = gold_item[gold_item_non_nan].reshape(-1, 3)
         loss = drmsd(pred_subset, gold_subset)
         losses.append(loss)
+        len_normalized_losses.append(loss / pred_subset.shape[0])
         if return_rmsd:
             rmsds.append(rmsd(pred_subset.data.numpy(), gold_subset.data.numpy()))
     if return_rmsd:
-        return torch.mean(torch.stack(losses)), np.mean(rmsds)
+        return torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses)), np.mean(rmsds)
     else:
-        return torch.mean(torch.stack(losses))
+        return torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses))
 
 
 def mse_over_angles(pred, true):
