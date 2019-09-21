@@ -317,6 +317,7 @@ def prepare_log_header(opt):
 def main():
     """ Main function """
     global LOGFILEHEADER
+    torch.set_printoptions(precision=5, sci_mode=False)
     parser = argparse.ArgumentParser()
 
     # Required args
