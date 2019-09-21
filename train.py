@@ -293,7 +293,8 @@ def load_model(model, optimizer, args):
         print("[Info] Error loading model.")
         print(e)
         exit(1)
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    if not args.restart_opt:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     START_EPOCH = checkpoint['epoch'] + 1
     print(f"[Info] Resuming model training from end of Epoch {checkpoint['epoch']}. Previous validation loss"
           f" = {checkpoint['loss']:.4f}.")
@@ -364,6 +365,8 @@ def main():
     parser.add_argument('--cluster', action='store_true', help="Set of parameters to facilitate training on a remote" +
                                                                " cluster. Limited I/O, etc.")
     parser.add_argument('--restart', action='store_true', help="Does not resume training.")
+    parser.add_argument('--restart_opt', action='store_true', help="Resumes training but does not load the optimizer"
+                                                                   "state. ")
 
     # Temporary args
     parser.add_argument('--proteinnet', action='store_true')
