@@ -11,10 +11,11 @@ BATCH_PAD_CHAR = 0
 def combine_drmsd_mse(d, mse, w=.5):
     """ Returns a combination of drmsd and mse loss that first normalizes their scales, and then computes
         w * drmsd + (1 - w) * mse."""
-    d_norm, m_norm = 8, 2
-    d = d / d_norm
-    mse = mse / m_norm
-    return w * d + (1 - w) * mse
+    d_norm, m_norm = 0.01, 0.3
+    d = w * (d / d_norm)
+    mse = (1 - w) * (mse / m_norm)
+    #print(f"mse: {mse:.5f}, d: {d:.5f}")
+    return d + mse
 
 
 def inverse_trig_transform(t):
