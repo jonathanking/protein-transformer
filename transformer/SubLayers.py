@@ -10,9 +10,9 @@ __author__ = "Yu-Hsiang Huang"
 class MultiHeadAttention(nn.Module):
     ''' Multi-Head Attention module '''
 
-    def __init__(self, n_head, d_model, d_k, d_v, dropout=0.1):
+    def __init__(self, n_head, d_model, d_k, d_v, postnorm, dropout=0.1):
         super().__init__()
-
+        self.postnorm = postnorm
         self.n_head = n_head
         self.d_k = d_k
         self.d_v = d_v
@@ -42,9 +42,12 @@ class MultiHeadAttention(nn.Module):
 
         residual = q
 
-        q = self.w_qs(self.layer_norm(q)).view(sz_b, len_q, n_head, d_k)
-        k = self.w_ks(self.layer_norm(k)).view(sz_b, len_k, n_head, d_k)
-        v = self.w_vs(self.layer_norm(v)).view(sz_b, len_v, n_head, d_v)
+        if not self.postnorm:
+            q, k, v = self.layer_norm(q), self.layer_norm(k), self.layer_norm(v)
+
+        q = self.w_qs(q).view(sz_b, len_q, n_head, d_k)
+        k = self.w_ks(k).view(sz_b, len_k, n_head, d_k)
+        v = self.w_vs(v).view(sz_b, len_v, n_head, d_v)
 
         q = q.permute(2, 0, 1, 3).contiguous().view(-1, len_q, d_k) # (n*b) x lq x dk
         k = k.permute(2, 0, 1, 3).contiguous().view(-1, len_k, d_k) # (n*b) x lk x dk
@@ -56,8 +59,12 @@ class MultiHeadAttention(nn.Module):
         output = output.view(n_head, sz_b, len_q, d_v)
         output = output.permute(1, 2, 0, 3).contiguous().view(sz_b, len_q, -1) # b x lq x (n*dv)
 
-        output = self.fc(output)
-        output = self.dropout(output) + residual
+        if not self.postnorm:
+            output = self.dropout(self.fc(output))
+            output = output + residual
+        else:
+            output = self.dropout(self.fc(output))
+            output = self.layer_norm(output + residual)
 
         return output, attn
 
@@ -65,8 +72,9 @@ class MultiHeadAttention(nn.Module):
 class PositionwiseFeedForward(nn.Module):
     ''' A two-feed-forward-layer module '''
 
-    def __init__(self, d_in, d_hid, dropout=0.1):
+    def __init__(self, d_in, d_hid, postnorm, dropout=0.1):
         super().__init__()
+        self.postnorm = postnorm
         self.w_1 = nn.Conv1d(d_in, d_hid, 1) # position-wise
         self.w_2 = nn.Conv1d(d_hid, d_in, 1) # position-wise
         self.layer_norm = nn.LayerNorm(d_in)
@@ -74,9 +82,14 @@ class PositionwiseFeedForward(nn.Module):
 
     def forward(self, x):
         residual = x
-        output = self.layer_norm(x).transpose(1, 2)
+        if not self.postnorm:
+            x = self.layer_norm(x)
+        output = x.transpose(1, 2)
         output = self.w_2(F.relu(self.w_1(output)))
         output = output.transpose(1, 2)
         output = self.dropout(output)
         output = output + residual
-        return output
+        if not self.postnorm:
+            return output
+        else:
+            return self.layer_norm(output)
