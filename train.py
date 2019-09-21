@@ -336,6 +336,8 @@ def main():
     parser.add_argument('-nh', '--n_head', type=int, default=8)
     parser.add_argument('-nl', '--n_layers', type=int, default=6)
     parser.add_argument('-do', '--dropout', type=float, default=0)
+    parser.add_argument('--postnorm', action='store_true', help="Use post-layer normalization, as depicted in the "
+                        "original figure for the Transformer model. May not train as well as pre-layer normalization.")
 
     # Saving args
     parser.add_argument('--log', default=None, nargs=1)

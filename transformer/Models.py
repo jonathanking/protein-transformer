@@ -68,7 +68,7 @@ class Encoder(nn.Module):
             self,
             len_max_seq, d_word_vec,
             n_layers, n_head, d_k, d_v,
-            d_model, d_inner, dropout=0.1):
+            d_model, d_inner, postnorm, dropout=0.1):
 
         super().__init__()
 
@@ -79,7 +79,7 @@ class Encoder(nn.Module):
             freeze=True)
 
         self.layer_stack = nn.ModuleList([
-            EncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
+            EncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout, postnorm=postnorm)
             for _ in range(n_layers)])
 
     def forward(self, src_seq, src_pos, return_attns=False):
@@ -113,7 +113,7 @@ class Decoder(nn.Module):
             self,
             len_max_seq,
             n_layers, n_head, d_k, d_v,
-            d_model, d_inner, dropout=0.1):
+            d_model, d_inner, postnorm, dropout=0.1):
 
         super().__init__()
         n_position = len_max_seq + 1
@@ -122,7 +122,7 @@ class Decoder(nn.Module):
                                                                                      padding_idx=0),
                                                          freeze=True)
 
-        self.layer_stack = nn.ModuleList([DecoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
+        self.layer_stack = nn.ModuleList([DecoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout, postnorm=postnorm)
                                           for _ in range(n_layers)])
 
     def forward(self, tgt_seq, tgt_pos, src_seq, enc_output, return_attns=False):
@@ -174,6 +174,7 @@ class Transformer(nn.Module):
                                n_head=n_head,
                                d_k=d_k,
                                d_v=d_v,
+                               postnorm=args.postnorm,
                                dropout=dropout)
 
         self.decoder = Decoder(len_max_seq=len_max_seq,
@@ -183,6 +184,7 @@ class Transformer(nn.Module):
                                n_head=n_head,
                                d_k=d_k,
                                d_v=d_v,
+                               postnorm=args.postnorm,
                                dropout=dropout)
 
         self.input_embedding = nn.Linear(d_word_vec, d_model)  # nn.Embedding(d_word_vec, d_angle)
