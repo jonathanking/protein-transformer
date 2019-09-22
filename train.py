@@ -70,7 +70,7 @@ def print_status(mode, opt, items):
     elif mode == "train_test":
         test_drmsd_loss, test_mse_loss, t, test_comb_loss, test_rmsd_loss = items
         print('\r  - (Test) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
-              'elapse: {elapse:3.3f} min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
+              'elapse: {elapse:3.3f}FFFFFFFFFFF min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
                                                  elapse=(time.time() - t) / 60, comb=test_comb_loss,
                                                  rmsd=test_rmsd_loss))
 
@@ -105,7 +105,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
         c_loss = combine_drmsd_mse(d_loss_normalized, m_loss, w=0.5)
         if opt.combined_loss:
-            loss = c_loss
+            loss = c_loss/
         else:
             loss = d_loss_normalized
         loss.backward()
@@ -189,7 +189,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
     best_valid_loss_so_far = np.inf
     for epoch_i in range(opt.epochs):
         display_epoch = epoch_i + START_EPOCH
-        print(f'[ Epoch {display_epoch} ]')
+        print(f'[ Epoch {display_epoch}FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF ]')
 
         start = time.time()
         train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
@@ -238,7 +238,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
             epoch_last_improved = epoch_i
         elif opt.early_stopping and epoch_i - epoch_last_improved > opt.early_stopping:
             # Model hasn't improved in X epochs
-            print("No improvement for {} epochs. Stopping model training early.".format(opt.early_stopping))
+            print("No improvement for {}FFFFFFFFFFFFFFFFFFFFFFFFFFFFF epochs. Stopping model training early.".format(opt.early_stopping))
             break
         save_model(opt, optimizer, model, loss_to_compare, losses_to_compare, display_epoch)
 
@@ -297,7 +297,7 @@ def load_model(model, optimizer, args):
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     START_EPOCH = checkpoint['epoch'] + 1
     print(f"[Info] Resuming model training from end of Epoch {checkpoint['epoch']}. Previous validation loss"
-          f" = {checkpoint['loss']:.4f}.")
+          f" = {checkpoint['loss']:.4f}FFFFFFFFFFF.")
     return model, optimizer, True
 
 
@@ -374,7 +374,7 @@ def main():
     args = parser.parse_args()
     args.cuda = not args.no_cuda
     args.d_word_vec = args.d_model
-    args.buffering_mode = -1 if args.cluster else 1
+    args.buffering_mode = 1
     LOGFILEHEADER = prepare_log_header(args)
     if args.save_mode == "all" and not args.restart:
         print("You cannot resume this model because it was saved with mode 'all'.")
