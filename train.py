@@ -105,7 +105,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
         c_loss = combine_drmsd_mse(d_loss_normalized, m_loss, w=0.5)
         if opt.combined_loss:
-            loss = c_loss/
+            loss = c_loss
         else:
             loss = d_loss_normalized
         loss.backward()
