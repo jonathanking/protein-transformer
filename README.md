@@ -4,6 +4,8 @@ This repository is a fork from [https://github.com/jadore801120/attention-is-all
 
 The code takes as arguments a plethora of different architecture and training settings. Two positional arguments are required, the training data location and the model name.
 
+The training data is based on Mohammed AlQuraishi's [ProteinNet](https://github.com/aqlaboratory/proteinnet). Preprocessed data can be downloaded [here](https://pitt.box.com/s/1jc66xcs4ddfi9o2ik8ozozcswen43fh). See below for more information. 
+
 Example:
 ```
 python train.py data/proteinnet/casp12.pt model01 -lr -0.01 -e 30 -b 12 -cl -cg 1 -dm 50 --proteinnet 
@@ -14,11 +16,11 @@ Complete info:
 usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
                 [-es EARLY_STOPPING] [-nws N_WARMUP_STEPS] [-cg CLIP] [-cl]
                 [--train_only] [--lr_scheduling] [--without_angle_means]
-                [--eval_train] [-dwv D_WORD_VEC] [-dm D_MODEL]
-                [-dih D_INNER_HID] [-dk D_K] [-dv D_V] [-nh N_HEAD]
-                [-nl N_LAYERS] [-do DROPOUT] [--log LOG]
-                [--save_mode {all,best}] [--no_cuda] [--cluster] [--restart]
-                [--proteinnet]
+                [--eval_train] [-opt {adam,sgd}] [-rnn] [-dwv D_WORD_VEC]
+                [-dm D_MODEL] [-dih D_INNER_HID] [-dk D_K] [-dv D_V]
+                [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT] [--postnorm]
+                [--log LOG] [--save_mode {all,best}] [--no_cuda] [--cluster]
+                [--restart] [--restart_opt] [--proteinnet]
                 data name
 
 positional arguments:
@@ -45,6 +47,8 @@ optional arguments:
                         means.
   --eval_train          Perform an evaluation of the entire training set after
                         a training epoch.
+  -opt {adam,sgd}, --optimizer {adam,sgd}
+  -rnn, --rnn
   -dwv D_WORD_VEC, --d_word_vec D_WORD_VEC
   -dm D_MODEL, --d_model D_MODEL
   -dih D_INNER_HID, --d_inner_hid D_INNER_HID
@@ -53,12 +57,34 @@ optional arguments:
   -nh N_HEAD, --n_head N_HEAD
   -nl N_LAYERS, --n_layers N_LAYERS
   -do DROPOUT, --dropout DROPOUT
+  --postnorm            Use post-layer normalization, as depicted in the
+                        original figure for the Transformer model. May not
+                        train as well as pre-layer normalization.
   --log LOG
   --save_mode {all,best}
   --no_cuda
   --cluster             Set of parameters to facilitate training on a remote
                         cluster. Limited I/O, etc.
   --restart             Does not resume training.
+  --restart_opt         Resumes training but does not load the optimizerstate.
   --proteinnet
 
+
+```
+
+## Notes on Training Data
+My data uses the same train/test/validation sets as ProteinNet. While, like ProteinNet, tt includes protein sequences and coordinates, I have modified it to include information about the entire protien structure (both backbone and sidechain atoms). Thus, each protein in the dataset includes information for sequence, interior torsional/bond angles, and coordinates. It does not include multiple sequence alignments or secondary structure annotation.
+
+The data is saved with PyTorch and stored in a Python dictionary like so:
+```python
+data = {"train": {"seq": [seq1, seq2, ...],
+                  "ang": [ang1, ang2, ...],
+                  "crd": [crd1, crd2, ...],
+                  "ids": [id1, id2, ...]
+                  },
+        "valid-30": {...},
+            ...
+        "valid-90": {...},
+        "test": {...}
+        }
 ```
