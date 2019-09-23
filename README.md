@@ -73,7 +73,7 @@ optional arguments:
 ```
 
 ## Notes on Training Data
-My data uses the same train/test/validation sets as ProteinNet. While, like ProteinNet, tt includes protein sequences and coordinates, I have modified it to include information about the entire protien structure (both backbone and sidechain atoms). Thus, each protein in the dataset includes information for sequence, interior torsional/bond angles, and coordinates. It does not include multiple sequence alignments or secondary structure annotation.
+My data uses the same train/test/validation sets as ProteinNet. While, like ProteinNet, it includes protein sequences and coordinates, I have modified it to include information about the entire protein structure (both backbone and sidechain atoms). Thus, each protein in the dataset includes information for sequence, interior torsional/bond angles, and coordinates. It does not include multiple sequence alignments or secondary structure annotation.
 
 The data is saved with PyTorch and stored in a Python dictionary like so:
 ```python
