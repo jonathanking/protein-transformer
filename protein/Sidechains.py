@@ -240,7 +240,7 @@ def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False, first_sc=Fals
 
 def generate_sidechain_dihedrals(angles, i):
     """ Returns a generator that iteratively produces the sidechain dihedral angles for residue (i) in (angles). """
-    assert len(angles.shape) == 2 and angles.shape[1] == NUM_PREDICTED_ANGLES
+    assert len(angles.shape) == 2 and angles.shape[1] == NUM_PREDICTED_ANGLES, print("Improper shape for angles:", angles.shape)
     angle_idx = 6
     while angle_idx < angles.shape[-1]:
         yield angles[i, angle_idx]
