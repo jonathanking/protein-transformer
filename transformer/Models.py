@@ -235,9 +235,6 @@ class Transformer(nn.Module):
     def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):
         """
         Makes predictions using teacher forcing, if requested. Otherwise, uses sequential decoding.
-
-            fraction_complete_tf: Fraction of the time to use teacher forcing for every timestep of the batch
-            fraction_subseq_tf:   Fraction of the time to use teacher forcing on a per-timestep basis.
         """
         # Switch to the full teacher forcing function if requested
         if self.fraction_complete_tf == 1 or self.fraction_subseq_tf == 1 or random.random() < self.fraction_complete_tf:
