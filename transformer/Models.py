@@ -4,6 +4,7 @@ import os.path as path
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 
 from transformer.Layers import EncoderLayer, DecoderLayer
 from protein.Sidechains import NUM_PREDICTED_ANGLES
@@ -223,4 +224,35 @@ class Transformer(nn.Module):
         angles = self.tgt_angle_prj(dec_output)
         angles = self.tanh(angles)
         return angles
+
+    def predict(self, src_seq, src_pos):
+        """
+        Uses the model to make a prediction/do inference given only the src_seq. This is in contrast to training
+        when the model is allowed to make use of the tgt_seq for teacher forcing.
+        """
+        src_seq = self.input_embedding(src_seq)
+        enc_output, *_ = self.encoder(src_seq, src_pos)
+
+        # Construct a placeholder for the data, starting with a special value of -1
+        output_seq_full = Variable(torch.ones((src_seq.shape[0], src_seq.shape[1], NUM_PREDICTED_ANGLES*2)) * -1)
+
+        for t in range(1, src_seq.shape[1]+1):
+            print(f"\rtime step: {t}", end="")
+
+            # Slice the relevant subset of the output to provide as input
+            output_seq = Variable(output_seq_full.data[:, :t])
+            output_pos = Variable(src_pos.data[:, :t])
+
+            # Embed the output so far into the decoder's input space, and run the decoder one step
+            output_seq = self.tgt_embedding(output_seq)
+            output_seq, *_ = self.decoder(output_seq, output_pos, src_seq, enc_output)
+            angles = self.tgt_angle_prj(output_seq)
+            angles = self.tanh(angles)
+
+            # Update our placeholder with the predicted angles thus far
+            output_seq_full.data[:, :t] = angles.data
+
+        assert output_seq_full.data.shape[1] == src_seq.shape[1], "The time dimension must match for output and src."
+        return output_seq_full.data
+
 
