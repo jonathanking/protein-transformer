@@ -4,6 +4,7 @@ import torch.utils.data
 
 from protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 MAXDATALEN = 500
+# TODO inspect max size - is 500 appropriate?
 
 
 def paired_collate_fn(insts):
