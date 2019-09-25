@@ -344,6 +344,11 @@ def main():
     parser.add_argument('--eval_train', action='store_true',
                         help="Perform an evaluation of the entire training set after a training epoch.")
     parser.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='adam')
+    parser.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
+                        help="Fraction of the time to use teacher forcing for every timestep of the batch. Model trains"
+                             "fastest when this is 1.")
+    parser.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
+                        help="Fraction of the time to use teacher forcing on a per-timestep basis.")
 
     # Model parameters
     parser.add_argument('-rnn', '--rnn', action='store_true')
@@ -401,7 +406,9 @@ def main():
                             d_inner=args.d_inner_hid,
                             n_layers=args.n_layers,
                             n_head=args.n_head,
-                            dropout=args.dropout).to(device)
+                            dropout=args.dropout,
+                            complete_tf=args.fraction_complete_tf,
+                            subseq_tf=args.fraction_subseq_tf).to(device)
     else:
         print("[Info] Training a RNN model instead of the Transformer model.")
         latent_dim, n_layers, bidi = args.d_model, args.n_layers, True

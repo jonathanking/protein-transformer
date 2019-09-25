@@ -1,5 +1,6 @@
 ''' Define the Transformer model '''
 import os.path as path
+import random
 
 import numpy as np
 import torch
@@ -157,15 +158,16 @@ class Decoder(nn.Module):
         return dec_output,
 
 
+# noinspection PyArgumentList
 class Transformer(nn.Module):
     ''' A sequence to sequence model with attention mechanism. '''
 
-    def __init__(self, args, d_angle=NUM_PREDICTED_ANGLES * 2,
-                 d_word_vec=20, d_model=512,
-                 d_inner=2048,
-                 n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1):
+    def __init__(self, args, d_angle=NUM_PREDICTED_ANGLES * 2, d_word_vec=20, d_model=512, d_inner=2048,
+                 n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1, complete_tf=1, subseq_tf=1):
 
         super().__init__()
+        self.fraction_complete_tf = complete_tf
+        self.fraction_subseq_tf = subseq_tf
         init_w_angle_means, data_path, len_max_seq = not args.without_angle_means, args.data, args.max_token_seq_len
         self.encoder = Encoder(len_max_seq=len_max_seq,
                                d_word_vec=d_word_vec,
@@ -216,7 +218,11 @@ class Transformer(nn.Module):
         angle_means = np.load(angle_mean_path)
         return angle_means
 
-    def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):
+
+    def forward_tf(self, src_seq, src_pos, tgt_seq, tgt_pos):
+        """
+        Makes predictions with teacher forcing. This is only appropriate for training.
+        """
         src_seq = self.input_embedding(src_seq)
         tgt_seq = self.tgt_embedding(tgt_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
@@ -224,6 +230,43 @@ class Transformer(nn.Module):
         angles = self.tgt_angle_prj(dec_output)
         angles = self.tanh(angles)
         return angles
+
+
+    def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):
+        """
+        Makes predictions using teacher forcing, if requested. Otherwise, uses sequential decoding.
+
+            fraction_complete_tf: Fraction of the time to use teacher forcing for every timestep of the batch
+            fraction_subseq_tf:   Fraction of the time to use teacher forcing on a per-timestep basis.
+        """
+        # Switch to the full teacher forcing function if requested
+        if self.fraction_complete_tf == 1 or self.fraction_subseq_tf == 1 or random.random() < self.fraction_complete_tf:
+            return self.forward_tf(src_seq, src_pos, tgt_seq, tgt_pos)
+
+        # Otherwise, proceed with a method that will use sub-sequence level teacher forcing
+        src_seq = self.input_embedding(src_seq)
+        enc_output, *_ = self.encoder(src_seq, src_pos)
+
+        # Construct a placeholder for the data, starting with the tgt_seq
+        output_seq_full = Variable(tgt_seq.data, requires_grad=True)
+        print("")
+        for t in range(1, tgt_seq.shape[1] + 1):
+            # Slice the relevant subset of the output to provide as input
+            output_seq = Variable(output_seq_full.data[:, :t], requires_grad=True)
+            output_pos = Variable(tgt_pos.data[:, :t])
+
+            # Embed the output so far into the decoder's input space, and run the decoder one step
+            output_seq = self.tgt_embedding(output_seq)
+            output_seq, *_ = self.decoder(output_seq, output_pos, src_seq, enc_output)
+            angles = self.tgt_angle_prj(output_seq)
+            angles = self.tanh(angles)
+
+            # Stochastically update output_seq_full with the model's predictions
+            feed_prediction = random.random() > self.fraction_subseq_tf
+            if feed_prediction:
+                output_seq_full.data[:, :t] = angles.data
+
+        return output_seq_full
 
     def predict(self, src_seq, src_pos):
         """
