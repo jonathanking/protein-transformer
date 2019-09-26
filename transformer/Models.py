@@ -134,8 +134,8 @@ class Decoder(nn.Module):
         # -- Prepare masks
         non_pad_mask = get_non_pad_mask(tgt_seq)
 
-        slf_attn_mask_subseq = get_subsequent_mask(tgt_seq)
-        slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=tgt_seq, seq_q=tgt_seq)
+        slf_attn_mask_subseq = get_subsequent_mask(tgt_seq).byte()
+        slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=tgt_seq, seq_q=tgt_seq).byte()
         slf_attn_mask = (slf_attn_mask_keypad + slf_attn_mask_subseq).gt(0)
 
         dec_enc_attn_mask = get_attn_key_pad_mask(seq_k=src_seq, seq_q=tgt_seq)
@@ -223,7 +223,6 @@ class Transformer(nn.Module):
         """
         Makes predictions with teacher forcing. This is only appropriate for training.
         """
-        # print("tgt_seq", tgt_seq[0, :2])
         src_seq = self.input_embedding(src_seq)
         tgt_seq = self.tgt_embedding(tgt_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
@@ -250,21 +249,21 @@ class Transformer(nn.Module):
         output_seq_full = Variable(tgt_seq.data, requires_grad=True)
         for t in range(1, src_seq.shape[1]):
             # Slice the relevant subset of the output to provide as input
-            output_seq = Variable(output_seq_full.data[:, :t], requires_grad=True)
+            dec_input = Variable(output_seq_full.data[:, :t], requires_grad=True)
             output_pos = Variable(tgt_pos.data[:, :t])
 
             # Embed the output so far into the decoder's input space, and run the decoder one step
-            output_seq = self.tgt_embedding(output_seq)
-            output_seq, *_ = self.decoder(output_seq, output_pos, src_seq, enc_output)
-            angles = self.tgt_angle_prj(output_seq)
+            dec_input = self.tgt_embedding(dec_input)
+            dec_output, *_ = self.decoder(dec_input, output_pos, src_seq, enc_output)
+            angles = self.tgt_angle_prj(dec_output)
             angles = self.tanh(angles)
 
             # Stochastically update output_seq_full with the model's predictions
             # Also feed the prediction if the curre
-            feed_prediction = (random.random() > self.fraction_subseq_tf) or \
-                              (output_seq_full.data[:,t-1:t].eq(0).all(dim=-1))
+            feed_prediction = t+1 < src_seq.shape[1] and ((random.random() > self.fraction_subseq_tf) or \
+                              (output_seq_full.data[:,t:t+1].eq(0).all(dim=-1)))
             if feed_prediction:
-                output_seq_full.data[:, :t] = angles.data
+                output_seq_full.data[:, t:t+1] = angles.data[:, t-1:t]
 
         return output_seq_full
 
