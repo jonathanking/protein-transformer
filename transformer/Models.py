@@ -261,7 +261,7 @@ class Transformer(nn.Module):
             # Stochastically update output_seq_full with the model's predictions
             # Also feed the prediction if the curre
             feed_prediction = t+1 < src_seq.shape[1] and ((random.random() > self.fraction_subseq_tf) or \
-                              (output_seq_full.data[:,t:t+1].eq(0).all(dim=-1)))
+                              (output_seq_full.data[:,t:t+1].eq(0).all(dim=-1).any()))
             if feed_prediction:
                 output_seq_full.data[:, t:t+1] = angles.data[:, t-1:t]
 
