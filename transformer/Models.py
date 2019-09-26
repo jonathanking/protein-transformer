@@ -223,6 +223,7 @@ class Transformer(nn.Module):
         """
         Makes predictions with teacher forcing. This is only appropriate for training.
         """
+        # print("tgt_seq", tgt_seq[0, :2])
         src_seq = self.input_embedding(src_seq)
         tgt_seq = self.tgt_embedding(tgt_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
@@ -232,12 +233,13 @@ class Transformer(nn.Module):
         return angles
 
 
-    def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):
+    def forward(self, src_seq, src_pos, tgt_seq, tgt_pos, has_missing_residues=False):
         """
         Makes predictions using teacher forcing, if requested. Otherwise, uses sequential decoding.
         """
-        # Switch to the full teacher forcing function if requested
-        if self.fraction_complete_tf == 1 or self.fraction_subseq_tf == 1 or random.random() < self.fraction_complete_tf:
+        # Switch to the full teacher forcing function if requested and no missing residues
+        if (not has_missing_residues) and (self.fraction_complete_tf == 1 or self.fraction_subseq_tf == 1 or \
+                random.random() < self.fraction_complete_tf):
             return self.forward_tf(src_seq, src_pos, tgt_seq, tgt_pos)
 
         # Otherwise, proceed with a method that will use sub-sequence level teacher forcing
@@ -246,8 +248,7 @@ class Transformer(nn.Module):
 
         # Construct a placeholder for the data, starting with the tgt_seq
         output_seq_full = Variable(tgt_seq.data, requires_grad=True)
-        print("")
-        for t in range(1, tgt_seq.shape[1] + 1):
+        for t in range(1, src_seq.shape[1]):
             # Slice the relevant subset of the output to provide as input
             output_seq = Variable(output_seq_full.data[:, :t], requires_grad=True)
             output_pos = Variable(tgt_pos.data[:, :t])
@@ -259,7 +260,9 @@ class Transformer(nn.Module):
             angles = self.tanh(angles)
 
             # Stochastically update output_seq_full with the model's predictions
-            feed_prediction = random.random() > self.fraction_subseq_tf
+            # Also feed the prediction if the curre
+            feed_prediction = (random.random() > self.fraction_subseq_tf) or \
+                              (output_seq_full.data[:,t-1:t].eq(0).all(dim=-1))
             if feed_prediction:
                 output_seq_full.data[:, :t] = angles.data
 
@@ -276,7 +279,7 @@ class Transformer(nn.Module):
         # Construct a placeholder for the data, starting with a special value of -1
         output_seq_full = Variable(torch.ones((src_seq.shape[0], src_seq.shape[1], NUM_PREDICTED_ANGLES*2)) * -1)
 
-        for t in range(1, src_seq.shape[1]+1):
+        for t in range(1, src_seq.shape[1]):
             print(f"\rtime step: {t}", end="")
 
             # Slice the relevant subset of the output to provide as input

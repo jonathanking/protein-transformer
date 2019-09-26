@@ -4,6 +4,7 @@ import torch.utils.data
 
 from protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 MAXDATALEN = 500
+SOS = -3
 # TODO inspect max size - is 500 appropriate?
 
 
@@ -69,8 +70,11 @@ class ProteinDataset(torch.utils.data.Dataset):
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
 
-        self._seqs = seqs
-        self._angs = angs
+        # We must add "start of sentence" characters to the sequences that are fed to the Transformer.
+        # This enables us to input time t and expect the model to predict time t+1.
+        # Coordinates do not need this requirement since they are not directly input to the transformer.
+        self._seqs = [add_start_char(s) for s in seqs]
+        self._angs = [add_start_char(a) for a in angs]
         self._crds = crds
 
     @property
@@ -85,3 +89,9 @@ class ProteinDataset(torch.utils.data.Dataset):
         if self._angs is not None:
             return self._seqs[idx], self._angs[idx], self._crds[idx]
         return self._seqs[idx]
+
+
+def add_start_char(two_dim_array, sos_char=SOS):
+    """ Add a special 'start of sentence' character to each sequence. """
+    start = np.asarray([sos_char] * two_dim_array.shape[1]).reshape(1, two_dim_array.shape[1])
+    return np.concatenate([start, two_dim_array])

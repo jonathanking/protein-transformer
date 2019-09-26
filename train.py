@@ -99,11 +99,14 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
             tgt_ang_no_nan = tgt_ang.clone().detach()
             tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
-            pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
-        d_loss, d_loss_normalized = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
+            # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
+            pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:,:-1], tgt_pos_enc[:,:-1],
+                         has_missing_residues=np.isnan(tgt_ang.detach().numpy()).all(axis=-1).any())
+        d_loss, d_loss_normalized = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device)
         d_loss, d_loss_normalized = d_loss.to('cpu'), d_loss_normalized.to('cpu')
-        m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
+        m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
         c_loss = combine_drmsd_mse(d_loss_normalized, m_loss, w=0.5)
+
         if opt.combined_loss:
             loss = c_loss
         else:
@@ -161,10 +164,11 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
                 src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
                 tgt_ang_no_nan = tgt_ang.clone().detach()
                 tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
-                pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
-            d_loss, d_loss_normalized, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device,
+                # We don't provide the entire output seq to the model because it will be given t-1 and should predict t
+                pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:, :-1], tgt_pos_enc[:, :-1])
+            d_loss, d_loss_normalized, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device,
                                                                        return_rmsd=True)
-            m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
+            m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
             c_loss = combine_drmsd_mse(d_loss, m_loss)
             total_drmsd_loss += d_loss.item()
             total_ln_drmsd_loss += d_loss_normalized.item()
