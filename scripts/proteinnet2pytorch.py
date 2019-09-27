@@ -22,13 +22,14 @@ import torch
 import tqdm
 
 sys.path.append("/home/jok120/protein-transformer/scripts/utils/")
+sys.path.extend("../protein/")
 from structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
     additional_checks, zero_runs, parse_astral_summary_file, \
 get_chain_from_astral_id, get_header_seq_from_astral_id
 from proteinnet_parsing import parse_raw_proteinnet
 from structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError, SequenceError, ContigMultipleMatchingError, ShortStructureError
 
-sys.path.extend("../protein/")
+
 
 pr.confProDy(verbosity='error')
 m = multiprocessing.Manager()
@@ -384,7 +385,7 @@ if __name__ == "__main__":
     PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT = None, None, None
     ASTRAL_FILE = "/home/jok120/protein-transformer/data/dir.des.scope.2.07-stable.txt"
     ASTRAL_ID_MAPPING = parse_astral_summary_file(ASTRAL_FILE)
-    SUFFIX = str(datetime.datetime.today().strftime("%y%m%d")) + f"_{args.training_set}" + "xsmall"
+    SUFFIX = str(datetime.datetime.today().strftime("%y%m%d")) + f"_{args.training_set}"
     match = re.search(r"casp\d+", args.input_dir, re.IGNORECASE)
     assert match, "The input_dir is not titled with 'caspX'."
     CASP_VERSION = match.group(0)
