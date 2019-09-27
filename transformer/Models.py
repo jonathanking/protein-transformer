@@ -267,6 +267,7 @@ class Transformer(nn.Module):
 
         return output_seq_full
 
+
     def predict(self, src_seq, src_pos):
         """
         Uses the model to make a prediction/do inference given only the src_seq. This is in contrast to training
@@ -274,25 +275,26 @@ class Transformer(nn.Module):
         """
         src_seq = self.input_embedding(src_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
+        max_len = src_seq.shape[1]
 
         # Construct a placeholder for the data, starting with a special value of -3
-        working_input_seq = torch.ones((src_seq.shape[0], 1, NUM_PREDICTED_ANGLES*2)) * -3
+        working_input_seq = Variable(torch.ones((src_seq.shape[0], max_len, NUM_PREDICTED_ANGLES*2), device='cuda', requires_grad=True) * -3)
 
-        for t in range(1, src_seq.shape[1] - 1):
+        for t in range(1, max_len):
             # Slice the relevant subset of the output to provide as input. t == 1 : SOS, else: decoder output
-            dec_input = Variable(working_input_seq.data, requires_grad=True)
-            dec_input_pos = Variable(src_pos.data[:, :t])
+            dec_input = Variable(working_input_seq.data[:, :t])
+            dec_input_pos = Variable(src_pos[:, :t])
 
             # Embed the output so far into the decoder's input space, and run the decoder one step
             dec_input = self.tgt_embedding(dec_input)
             dec_output, *_ = self.decoder(dec_input, dec_input_pos, src_seq, enc_output)
-            angles = self.tgt_angle_prj(dec_output[:,-1:,:])
+            angles = self.tgt_angle_prj(dec_output[:,-1])
             angles = self.tanh(angles)
 
             # Update our placeholder with the predicted angles thus far
-            working_input_seq = torch.cat([working_input_seq, angles], dim=1)
+            if t+1 < max_len:
+                working_input_seq.data[:, t] = angles.data
 
-
-        return working_input_seq
+        return self.tanh(self.tgt_angle_prj(dec_output))
 
 
