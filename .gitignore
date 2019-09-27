@@ -2,7 +2,7 @@ data/*.pkl
 data/*.torch
 checkpoints/*
 logs/*
-coords/*
+data/prev/coords/*
 preds/*
 *.pdb
 *.tch

@@ -4,6 +4,12 @@ import torch
 NUM_PREDICTED_ANGLES = 12
 NUM_PREDICTED_COORDS = 13
 
+ONE_TO_THREE_LETTER_MAP = {"R": "ARG", "H": "HIS", "K": "LYS", "D": "ASP", "E": "GLU", "S": "SER", "T": "THR",
+                           "N": "ASN", "Q": "GLN", "C": "CYS", "G": "GLY", "P": "PRO", "A": "ALA", "V": "VAL",
+                           "I": "ILE", "L": "LEU", "M": "MET", "F": "PHE", "Y": "TYR", "W": "TRP"}
+
+THREE_TO_ONE_LETTER_MAP = {v: k for k, v in ONE_TO_THREE_LETTER_MAP.items()}
+
 BONDLENS = {'cc-cv': 1.375,
             'c8-cx': 1.526,
             '2c-ca': 1.51,

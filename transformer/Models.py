@@ -1,12 +1,15 @@
 ''' Define the Transformer model '''
 import os.path as path
+import random
 
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 
 from transformer.Layers import EncoderLayer, DecoderLayer
 from protein.Sidechains import NUM_PREDICTED_ANGLES
+SOS = 0
 
 __author__ = "Yu-Hsiang Huang"
 
@@ -132,8 +135,8 @@ class Decoder(nn.Module):
         # -- Prepare masks
         non_pad_mask = get_non_pad_mask(tgt_seq)
 
-        slf_attn_mask_subseq = get_subsequent_mask(tgt_seq)
-        slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=tgt_seq, seq_q=tgt_seq)
+        slf_attn_mask_subseq = get_subsequent_mask(tgt_seq).byte()
+        slf_attn_mask_keypad = get_attn_key_pad_mask(seq_k=tgt_seq, seq_q=tgt_seq).byte()
         slf_attn_mask = (slf_attn_mask_keypad + slf_attn_mask_subseq).gt(0)
 
         dec_enc_attn_mask = get_attn_key_pad_mask(seq_k=src_seq, seq_q=tgt_seq)
@@ -156,15 +159,16 @@ class Decoder(nn.Module):
         return dec_output,
 
 
+# noinspection PyArgumentList
 class Transformer(nn.Module):
     ''' A sequence to sequence model with attention mechanism. '''
 
-    def __init__(self, args, d_angle=NUM_PREDICTED_ANGLES * 2,
-                 d_word_vec=20, d_model=512,
-                 d_inner=2048,
-                 n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1):
+    def __init__(self, args, d_angle=NUM_PREDICTED_ANGLES * 2, d_word_vec=20, d_model=512, d_inner=2048,
+                 n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1, complete_tf=1, subseq_tf=1):
 
         super().__init__()
+        self.fraction_complete_tf = complete_tf
+        self.fraction_subseq_tf = subseq_tf
         init_w_angle_means, data_path, len_max_seq = not args.without_angle_means, args.data, args.max_token_seq_len
         self.encoder = Encoder(len_max_seq=len_max_seq,
                                d_word_vec=d_word_vec,
@@ -215,7 +219,11 @@ class Transformer(nn.Module):
         angle_means = np.load(angle_mean_path)
         return angle_means
 
-    def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):
+
+    def forward_tf(self, src_seq, src_pos, tgt_seq, tgt_pos):
+        """
+        Makes predictions with teacher forcing. This is only appropriate for training.
+        """
         src_seq = self.input_embedding(src_seq)
         tgt_seq = self.tgt_embedding(tgt_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
@@ -223,4 +231,75 @@ class Transformer(nn.Module):
         angles = self.tgt_angle_prj(dec_output)
         angles = self.tanh(angles)
         return angles
+
+
+    def forward(self, src_seq, src_pos, tgt_seq, tgt_pos, has_missing_residues=False):
+        """
+        Makes predictions using teacher forcing, if requested. Otherwise, uses sequential decoding.
+        """
+        # Switch to the full teacher forcing function if requested and no missing residues
+        if (not has_missing_residues) and (self.fraction_complete_tf == 1 or self.fraction_subseq_tf == 1 or \
+                random.random() < self.fraction_complete_tf):
+            return self.forward_tf(src_seq, src_pos, tgt_seq, tgt_pos)
+
+        # Otherwise, proceed with a method that will use sub-sequence level teacher forcing
+        src_seq = self.input_embedding(src_seq)
+        enc_output, *_ = self.encoder(src_seq, src_pos)
+        max_len = src_seq.shape[1]
+
+        # Construct a placeholder for the data, starting with a special value of -3
+        working_input_seq = Variable(
+            torch.ones((src_seq.shape[0], max_len - 1, NUM_PREDICTED_ANGLES * 2), device='cuda',
+                       requires_grad=True) * SOS)
+
+        for t in range(1, max_len):
+            # Slice the relevant subset of the output to provide as input. t == 1 : SOS, else: decoder output
+            dec_input = Variable(working_input_seq.data[:, :t])
+            dec_input_pos = Variable(src_pos[:, :t])
+
+            # Embed the output so far into the decoder's input space, and run the decoder one step
+            dec_input = self.tgt_embedding(dec_input)
+            dec_output, *_ = self.decoder(dec_input, dec_input_pos, src_seq, enc_output)
+            angles = self.tgt_angle_prj(dec_output[:, -1])
+            angles = self.tanh(angles)
+
+            # Update the next timestep in the placeholder with predicted angle randomly or if the next res is missing
+            feed_prediction = t + 1 < max_len and ((random.random() > self.fraction_subseq_tf) or
+                                                   working_input_seq.data[:, t].eq(0).all(dim=-1).any()) # missing t + 1
+            if t + 1 < max_len and feed_prediction:
+                working_input_seq.data[:, t] = angles.data
+
+        return self.tanh(self.tgt_angle_prj(dec_output))
+
+
+    def predict(self, src_seq, src_pos):
+        """
+        Uses the model to make a prediction/do inference given only the src_seq. This is in contrast to training
+        when the model is allowed to make use of the tgt_seq for teacher forcing.
+        """
+        src_seq = self.input_embedding(src_seq)
+        enc_output, *_ = self.encoder(src_seq, src_pos)
+        max_len = src_seq.shape[1]
+
+        # Construct a placeholder for the data, starting with a special value of -3
+        working_input_seq = Variable(torch.ones((src_seq.shape[0], max_len-1, NUM_PREDICTED_ANGLES*2),
+                                                device='cuda', requires_grad=True) * SOS)
+
+        for t in range(1, max_len):
+            # Slice the relevant subset of the output to provide as input. t == 1 : SOS, else: decoder output
+            dec_input = Variable(working_input_seq.data[:, :t])
+            dec_input_pos = Variable(src_pos[:, :t])
+
+            # Embed the output so far into the decoder's input space, and run the decoder one step
+            dec_input = self.tgt_embedding(dec_input)
+            dec_output, *_ = self.decoder(dec_input, dec_input_pos, src_seq, enc_output)
+            angles = self.tgt_angle_prj(dec_output[:,-1])
+            angles = self.tanh(angles)
+
+            # Update our placeholder with the predicted angles thus far
+            if t+1 < max_len:
+                working_input_seq.data[:, t] = angles.data
+
+        return self.tanh(self.tgt_angle_prj(dec_output))
+
 
