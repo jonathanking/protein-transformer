@@ -9,6 +9,7 @@ from torch.autograd import Variable
 
 from transformer.Layers import EncoderLayer, DecoderLayer
 from protein.Sidechains import NUM_PREDICTED_ANGLES
+SOS = 0
 
 __author__ = "Yu-Hsiang Huang"
 
@@ -244,28 +245,31 @@ class Transformer(nn.Module):
         # Otherwise, proceed with a method that will use sub-sequence level teacher forcing
         src_seq = self.input_embedding(src_seq)
         enc_output, *_ = self.encoder(src_seq, src_pos)
+        max_len = src_seq.shape[1]
 
-        # Construct a placeholder for the data, starting with the tgt_seq
-        output_seq_full = Variable(tgt_seq.data, requires_grad=True)
-        for t in range(1, src_seq.shape[1]):
-            # Slice the relevant subset of the output to provide as input
-            dec_input = Variable(output_seq_full.data[:, :t], requires_grad=True)
-            output_pos = Variable(tgt_pos.data[:, :t])
+        # Construct a placeholder for the data, starting with a special value of -3
+        working_input_seq = Variable(
+            torch.ones((src_seq.shape[0], max_len - 1, NUM_PREDICTED_ANGLES * 2), device='cuda',
+                       requires_grad=True) * SOS)
+
+        for t in range(1, max_len):
+            # Slice the relevant subset of the output to provide as input. t == 1 : SOS, else: decoder output
+            dec_input = Variable(working_input_seq.data[:, :t])
+            dec_input_pos = Variable(src_pos[:, :t])
 
             # Embed the output so far into the decoder's input space, and run the decoder one step
             dec_input = self.tgt_embedding(dec_input)
-            dec_output, *_ = self.decoder(dec_input, output_pos, src_seq, enc_output)
-            angles = self.tgt_angle_prj(dec_output)
+            dec_output, *_ = self.decoder(dec_input, dec_input_pos, src_seq, enc_output)
+            angles = self.tgt_angle_prj(dec_output[:, -1])
             angles = self.tanh(angles)
 
-            # Stochastically update output_seq_full with the model's predictions
-            # Also feed the prediction if the curre
-            feed_prediction = t+1 < src_seq.shape[1] and ((random.random() > self.fraction_subseq_tf) or \
-                              (output_seq_full.data[:,t:t+1].eq(0).all(dim=-1).any()))
-            if feed_prediction:
-                output_seq_full.data[:, t:t+1] = angles.data[:, t-1:t]
+            # Update the next timestep in the placeholder with predicted angle randomly or if the next res is missing
+            feed_prediction = t + 1 < max_len and ((random.random() > self.fraction_subseq_tf) or
+                                                   working_input_seq.data[:, t].eq(0).all(dim=-1).any()) # missing t + 1
+            if t + 1 < max_len and feed_prediction:
+                working_input_seq.data[:, t] = angles.data
 
-        return output_seq_full
+        return self.tanh(self.tgt_angle_prj(dec_output))
 
 
     def predict(self, src_seq, src_pos):
@@ -278,7 +282,8 @@ class Transformer(nn.Module):
         max_len = src_seq.shape[1]
 
         # Construct a placeholder for the data, starting with a special value of -3
-        working_input_seq = Variable(torch.ones((src_seq.shape[0], max_len, NUM_PREDICTED_ANGLES*2), device='cuda', requires_grad=True) * -3)
+        working_input_seq = Variable(torch.ones((src_seq.shape[0], max_len-1, NUM_PREDICTED_ANGLES*2),
+                                                device='cuda', requires_grad=True) * SOS)
 
         for t in range(1, max_len):
             # Slice the relevant subset of the output to provide as input. t == 1 : SOS, else: decoder output

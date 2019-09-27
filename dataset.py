@@ -3,8 +3,8 @@ import torch
 import torch.utils.data
 
 from protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
+from transformer.Models import SOS
 MAXDATALEN = 500
-SOS = -3
 # TODO inspect max size - is 500 appropriate?
 
 
