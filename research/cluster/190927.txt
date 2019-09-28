@@ -1,0 +1,4 @@
+python train.py data/proteinnet/casp12_190809_30xsmall.pt better_tf_01 -e 10 -b 8 -cl -cg 1 -dm 64 -dk 12 -dv 12 -dih 64 --cluster -lr 0.0001 --proteinnet -fctf 0.7 -fsstf 0.5
+python train.py data/proteinnet/casp12_190809_30xsmall.pt better_tf_02 -e 10 -b 8 -cl -cg 1 -dm 64 -dk 12 -dv 12 -dih 64 --cluster -lr 0.0001 --proteinnet -fctf 0.7 -fsstf 0.5
+python train.py data/proteinnet/casp12_190809_30xsmall.pt better_tf_03_maxtf -e 10 -b 8 -cl -cg 1 -dm 64 -dk 12 -dv 12 -dih 64 --cluster -lr 0.0001 --proteinnet -fctf 1 -fsstf 0.5
+python train.py data/proteinnet/casp12_190809_30xsmall.pt better_tf_04_lowtf -e 10 -b 8 -cl -cg 1 -dm 64 -dk 12 -dv 12 -dih 64 --cluster -lr 0.0001 --proteinnet -fctf .1 -fsstf 0.2
