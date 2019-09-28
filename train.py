@@ -70,7 +70,7 @@ def print_status(mode, opt, items):
     elif mode == "train_test":
         test_drmsd_loss, test_mse_loss, t, test_comb_loss, test_rmsd_loss = items
         print('\r  - (Test) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
-              'elapse: {elapse:3.3f}FFFFFFFFFFF min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
+              'elapse: {elapse:3.3f} min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
                                                  elapse=(time.time() - t) / 60, comb=test_comb_loss,
                                                  rmsd=test_rmsd_loss))
 
@@ -99,11 +99,14 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
             tgt_ang_no_nan = tgt_ang.clone().detach()
             tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
-            pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
-        d_loss, d_loss_normalized = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
+            # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
+            pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:,:-1], tgt_pos_enc[:,:-1],
+                         has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
+        d_loss, d_loss_normalized = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device)
         d_loss, d_loss_normalized = d_loss.to('cpu'), d_loss_normalized.to('cpu')
-        m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
+        m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
         c_loss = combine_drmsd_mse(d_loss_normalized, m_loss, w=0.5)
+
         if opt.combined_loss:
             loss = c_loss
         else:
@@ -161,11 +164,13 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
                 src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
                 tgt_ang_no_nan = tgt_ang.clone().detach()
                 tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
-                pred = model(src_seq, src_pos_enc, tgt_ang_no_nan, tgt_pos_enc)
-            d_loss, d_loss_normalized, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device,
+                # We don't provide the entire output seq to the model because it will be given t-1 and should predict t
+                pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:, :-1], tgt_pos_enc[:, :-1],
+                             has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
+            d_loss, d_loss_normalized, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device,
                                                                        return_rmsd=True)
-            m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
-            c_loss = combine_drmsd_mse(d_loss, m_loss)
+            m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
+            c_loss = combine_drmsd_mse(d_loss_normalized, m_loss)
             total_drmsd_loss += d_loss.item()
             total_ln_drmsd_loss += d_loss_normalized.item()
             total_mse_loss += m_loss.item()
@@ -189,7 +194,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
     best_valid_loss_so_far = np.inf
     for epoch_i in range(opt.epochs):
         display_epoch = epoch_i + START_EPOCH
-        print(f'[ Epoch {display_epoch}FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF ]')
+        print(f'[ Epoch {display_epoch} ]')
 
         start = time.time()
         train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
@@ -238,7 +243,7 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
             epoch_last_improved = epoch_i
         elif opt.early_stopping and epoch_i - epoch_last_improved > opt.early_stopping:
             # Model hasn't improved in X epochs
-            print("No improvement for {}FFFFFFFFFFFFFFFFFFFFFFFFFFFFF epochs. Stopping model training early.".format(opt.early_stopping))
+            print("No improvement for {} epochs. Stopping model training early.".format(opt.early_stopping))
             break
         save_model(opt, optimizer, model, loss_to_compare, losses_to_compare, display_epoch)
 
@@ -297,7 +302,7 @@ def load_model(model, optimizer, args):
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     START_EPOCH = checkpoint['epoch'] + 1
     print(f"[Info] Resuming model training from end of Epoch {checkpoint['epoch']}. Previous validation loss"
-          f" = {checkpoint['loss']:.4f}FFFFFFFFFFF.")
+          f" = {checkpoint['loss']:.4f}.")
     return model, optimizer, True
 
 
@@ -344,6 +349,11 @@ def main():
     parser.add_argument('--eval_train', action='store_true',
                         help="Perform an evaluation of the entire training set after a training epoch.")
     parser.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='adam')
+    parser.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
+                        help="Fraction of the time to use teacher forcing for every timestep of the batch. Model trains"
+                             "fastest when this is 1.")
+    parser.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
+                        help="Fraction of the time to use teacher forcing on a per-timestep basis.")
 
     # Model parameters
     parser.add_argument('-rnn', '--rnn', action='store_true')
@@ -401,7 +411,9 @@ def main():
                             d_inner=args.d_inner_hid,
                             n_layers=args.n_layers,
                             n_head=args.n_head,
-                            dropout=args.dropout).to(device)
+                            dropout=args.dropout,
+                            complete_tf=args.fraction_complete_tf,
+                            subseq_tf=args.fraction_subseq_tf).to(device)
     else:
         print("[Info] Training a RNN model instead of the Transformer model.")
         latent_dim, n_layers, bidi = args.d_model, args.n_layers, True
