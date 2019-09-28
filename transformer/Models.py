@@ -167,6 +167,7 @@ class Transformer(nn.Module):
                  n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1, complete_tf=1, subseq_tf=1):
 
         super().__init__()
+        self.device = 'cuda' if args.cuda else 'cpu'
         self.fraction_complete_tf = complete_tf
         self.fraction_subseq_tf = subseq_tf
         init_w_angle_means, data_path, len_max_seq = not args.without_angle_means, args.data, args.max_token_seq_len
@@ -247,9 +248,9 @@ class Transformer(nn.Module):
         enc_output, *_ = self.encoder(src_seq, src_pos)
         max_len = src_seq.shape[1]
 
-        # Construct a placeholder for the data, starting with a special value of -3
+        # Construct a placeholder for the data, starting with a special value of SOS
         working_input_seq = Variable(
-            torch.ones((src_seq.shape[0], max_len - 1, NUM_PREDICTED_ANGLES * 2), device='cuda',
+            torch.ones((src_seq.shape[0], max_len - 1, NUM_PREDICTED_ANGLES * 2), device=self.device,
                        requires_grad=True) * SOS)
 
         for t in range(1, max_len):
@@ -281,9 +282,9 @@ class Transformer(nn.Module):
         enc_output, *_ = self.encoder(src_seq, src_pos)
         max_len = src_seq.shape[1]
 
-        # Construct a placeholder for the data, starting with a special value of -3
+        # Construct a placeholder for the data, starting with a special value of SOS
         working_input_seq = Variable(torch.ones((src_seq.shape[0], max_len-1, NUM_PREDICTED_ANGLES*2),
-                                                device='cuda', requires_grad=True) * SOS)
+                                                device=self.device, requires_grad=True) * SOS)
 
         for t in range(1, max_len):
             # Slice the relevant subset of the output to provide as input. t == 1 : SOS, else: decoder output
