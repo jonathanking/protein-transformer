@@ -5,3 +5,4 @@ python train.py data/proteinnet/casp12_190809_30xsmall.pt better_tf_04_lowtf -e 
 python train.py data/proteinnet/casp12_190809_30xsmall.pt better_tf_01_large -e 10 -b 8 -cl -cg 1 -dm 128 -dk 24 -dv 24 -dih 128 --cluster -lr 0.0001 --proteinnet -fctf 0.7 -fsstf 0.5
 python train.py data/proteinnet/casp12_190809_30xsmall.pt better_tf_02_large -e 10 -b 8 -cl -cg 1 -dm 128 -dk 24 -dv 24 -dih 128 --cluster -lr 0.0001 --proteinnet -fctf 0.7 -fsstf 0.5
 python train.py data/proteinnet/casp12_190927_100.pt better_tf_full_casp -e 10 -b 8 -cl -cg 1 -dm 64 -dk 24 -dv 24 -dih 128 --cluster -lr 0.0001 --proteinnet -fctf 0.7 -fsstf 0.5
+python train.py data/proteinnet/casp12_190809_30xsmall.pt starts_w_all_tf -e 10 -b 8 -cl -cg 1 -dm 64 -dk 12 -dv 12 -dih 32 --cluster -lr 0.0001 --proteinnet -fctf 1 -fsstf 1 --skip_missing_res_train

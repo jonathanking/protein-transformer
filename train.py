@@ -97,6 +97,8 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
             pred = model(src_seq, lens)
         else:
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+            if opt.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
+                continue
             tgt_ang_no_nan = tgt_ang.clone().detach()
             tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
             # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
@@ -162,8 +164,6 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
                 pred = model(src_seq, lens)
             else:
                 src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-                tgt_ang_no_nan = tgt_ang.clone().detach()
-                tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
                 # We don't provide the entire output seq to the model because it will be given t-1 and should predict t
                 pred = model.predict(src_seq, src_pos_enc)
             d_loss, d_loss_normalized, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device,
@@ -353,6 +353,9 @@ def main():
                              "fastest when this is 1.")
     parser.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
                         help="Fraction of the time to use teacher forcing on a per-timestep basis.")
+    parser.add_argument("--skip_missing_res_train", action="store_true",
+                        help="When training, skip over batches that have missing residues. This can make training"
+                             "faster if using teacher forcing.")
 
     # Model parameters
     parser.add_argument('-rnn', '--rnn', action='store_true')
