@@ -165,8 +165,7 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
                 tgt_ang_no_nan = tgt_ang.clone().detach()
                 tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
                 # We don't provide the entire output seq to the model because it will be given t-1 and should predict t
-                pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:, :-1], tgt_pos_enc[:, :-1],
-                             has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
+                pred = model.predict(src_seq, src_pos_enc)
             d_loss, d_loss_normalized, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device,
                                                                        return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
