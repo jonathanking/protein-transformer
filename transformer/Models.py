@@ -9,7 +9,7 @@ from torch.autograd import Variable
 
 from transformer.Layers import EncoderLayer, DecoderLayer
 from protein.Sidechains import NUM_PREDICTED_ANGLES
-SOS = 0
+SOS = -5
 
 __author__ = "Yu-Hsiang Huang"
 
