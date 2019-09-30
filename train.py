@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from dataset import paired_collate_fn, paired_collate_fn_with_len, ProteinDataset
 from losses import drmsd_loss_from_angles, drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
-from transformer.Models import Transformer
+from transformer.Models import Transformer, MISSING_CHAR
 from transformer.Optim import ScheduledOptim
 from rnn import MyRNN
 
@@ -100,7 +100,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
             if opt.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
                 continue
             tgt_ang_no_nan = tgt_ang.clone().detach()
-            tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
+            tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
             # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
             pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:,:-1], tgt_pos_enc[:,:-1],
                          has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())

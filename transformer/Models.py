@@ -266,8 +266,7 @@ class Transformer(nn.Module):
             angles = self.tanh(angles)
 
             # Update the next timestep in the placeholder with predicted angle randomly or if the next res is missing
-            feed_prediction = t + 1 < max_len and ((random.random() > self.fraction_subseq_tf) or
-                                                   working_input_seq.data[:, t].eq(0).all(dim=-1).any()) # missing t + 1
+            feed_prediction = t + 1 < max_len and ((random.random() > self.fraction_subseq_tf)) #or working_input_seq.data[:, t].eq(MISSING_CHAR).all(dim=-1).any()) # missing t + 1
             if t + 1 < max_len and feed_prediction:
                 working_input_seq.data[:, t] = angles.data
 
