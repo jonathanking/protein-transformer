@@ -9,7 +9,8 @@ from torch.autograd import Variable
 
 from transformer.Layers import EncoderLayer, DecoderLayer
 from protein.Sidechains import NUM_PREDICTED_ANGLES
-SOS = -5
+SOS_CHAR = -5
+MISSING_CHAR = 5
 
 __author__ = "Yu-Hsiang Huang"
 
@@ -251,7 +252,7 @@ class Transformer(nn.Module):
         # Construct a placeholder for the data, starting with a special value of SOS
         working_input_seq = Variable(
             torch.ones((src_seq.shape[0], max_len - 1, NUM_PREDICTED_ANGLES * 2), device=self.device,
-                       requires_grad=True) * SOS)
+                       requires_grad=True) * SOS_CHAR)
 
         for t in range(1, max_len):
             # Slice the relevant subset of the output to provide as input. t == 1 : SOS, else: decoder output

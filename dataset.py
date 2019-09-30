@@ -3,7 +3,7 @@ import torch
 import torch.utils.data
 
 from protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
-from transformer.Models import SOS
+from transformer.Models import SOS_CHAR
 MAXDATALEN = 500
 # TODO inspect max size - is 500 appropriate?
 
@@ -91,7 +91,7 @@ class ProteinDataset(torch.utils.data.Dataset):
         return self._seqs[idx]
 
 
-def add_start_char(two_dim_array, sos_char=SOS):
+def add_start_char(two_dim_array, sos_char=SOS_CHAR):
     """ Add a special 'start of sentence' character to each sequence. """
     start = np.asarray([sos_char] * two_dim_array.shape[1]).reshape(1, two_dim_array.shape[1])
     return np.concatenate([start, two_dim_array])
