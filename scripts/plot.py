@@ -44,7 +44,9 @@ def title_to_fn(title):
 
 def plot(dftrain, dfval, metric, title, outpath, smoothing=False, skip=None, include_val=False, ylim=(None, None)):
     """ Simple plotting function. Given train/val data and options, saves fig outpath. """
+    # TODO Increase figure size
     dftrain_new = dftrain.iloc[skip:]
+    dfval = dfval.loc[skip:]
 
     sns.lineplot(x=dftrain_new.index, y=metric, data=dftrain_new, label=metric, alpha=0.6)
     if smoothing:
@@ -73,6 +75,7 @@ def main():
 
     # Preprocess data
     dftrain.loc[dftrain.combined == 111, 'combined'] = dftrain["combined"].mean()
+
     # Plots are defined by a list of metrics
     metrics = ["drmsd", "rmse", "combined", "ln_drmsd"]
     titles = [m + " Loss" for m in metrics]
@@ -80,7 +83,7 @@ def main():
     for m in metrics:
         if args.limits and m in args.limits:
             pos = args.limits.index(m)
-            ymin = float(args.limits[pos+1]) if args.limits[pos+1] != "None" else None
+            ymin = float(args.limits[pos+1]) if args.limits[pos + 1] != "None" else None
             ymax = float(args.limits[pos + 2]) if args.limits[pos + 2] != "None" else None
             limits.append((ymin, ymax))
         else:
@@ -88,17 +91,15 @@ def main():
 
     # We then create 5-tuples to later feed into the plot fn. These contain:
     #    -- (metric, plt_title, smoothing, include_val, skip, limits)
-    all_plots = [(m, t, smoothing, args.val, None, l) for (m, t, l) in zip(metrics, titles, limits)]
+    all_plots = [(m, t, smoothing, args.val, args.skip_first, l) for (m, t, l) in zip(metrics, titles, limits)]
 
-    # This plots are the same as normal_plots, but they start at iteration args.skip_first.
+    # Add time skip to plot titles
     if args.skip_first:
-        skip_plots = []
-        for (metric, plt_title, _, _, _, lim) in all_plots:
-            skip_plots.append((metric, plt_title + f", t = [{args.skip_first}, )", smoothing, args.val, args.skip_first, lim))
-        all_plots += skip_plots
+        all_plots = [(metric, plt_title + f", t = [{args.skip_first}, )", s, v, skip, lim) for (metric, plt_title, s, v, skip, lim) in all_plots]
 
-    # Add model name to all plot titles
-    all_plots = [(metric, model_name + "\n" + plt_title, s, v, skip, lim) for (metric, plt_title, s, v, skip, lim) in all_plots]
+    # Add model name and validation status to all plot titles
+    val_str = ", val" if args.val else ""
+    all_plots = [(metric, model_name + "\n" + plt_title + val_str, s, v, skip, lim) for (metric, plt_title, s, v, skip, lim) in all_plots]
 
     # Make all plots
     for (metric, plt_title, sm, val, skip, lim) in all_plots:
