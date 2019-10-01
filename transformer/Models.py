@@ -284,7 +284,7 @@ class Transformer(nn.Module):
 
         # Construct a placeholder for the data, starting with a special value of SOS
         working_input_seq = Variable(torch.ones((src_seq.shape[0], max_len-1, NUM_PREDICTED_ANGLES*2),
-                                                device=self.device, requires_grad=True) * SOS)
+                                                device=self.device, requires_grad=True) * SOS_CHAR)
 
         for t in range(1, max_len):
             # Slice the relevant subset of the output to provide as input. t == 1 : SOS, else: decoder output
