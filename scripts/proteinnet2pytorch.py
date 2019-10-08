@@ -218,7 +218,7 @@ def validate_data(data):
     """
     Performs several checks on dictionary before saving.
     """
-    # Assert size of each datasubset matches
+    # Assert size of each data subset matches
     train_len = len(data["train"]["seq"])
     test_len = len(data["test"]["seq"])
     assert all([l == train_len
