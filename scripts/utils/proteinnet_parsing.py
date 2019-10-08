@@ -97,6 +97,7 @@ def parse_raw_proteinnet(input_dir, train_file):
         train_ids, valid_ids, test_ids = load_ids_from_text_files(torch_dict_dir.replace("/torch", "/raw"), train_file)
         return train_ids, valid_ids, test_ids
 
+    # If the torch-preprocessed ProteinNet dictionaries don't exist, create them.
     if not os.path.exists(torch_dict_dir):
         os.mkdir(torch_dict_dir)
 
