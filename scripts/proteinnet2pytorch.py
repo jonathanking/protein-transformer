@@ -230,61 +230,11 @@ def validate_data(data):
                                              "secondary"]])]), "Test lengths don't match."
 
 
-def create_data_dict_full(train_seq, test_seq, train_ang, test_ang, train_crd, test_crd, train_ids, test_ids, all_validation_data):
-    """
-    Given split data along with the query information that generated it, this function saves the
-    data as a Python dictionary, which is then saved to disk using torch.save.
-    """
-    # Create a dictionary data structure, using the sin/cos transformed angles
-    data = {"train": {"seq": train_seq,
-                      "ang": angle_list_to_sin_cos(train_ang),
-                      "ids": train_ids,
-                      "crd": train_crd,
-                      "mask": [np.asarray(PN_TRAIN_DICT[_id]["mask"]) for _id in train_ids],
-                      "evolutionary": [np.asarray(PN_TRAIN_DICT[_id]["evolutionary"]) for _id in train_ids],
-                      "secondary": [PN_TRAIN_DICT[_id]["secondary"]
-                                    if "secondary" in PN_TRAIN_DICT[_id].keys()
-                                    else None
-                                    for _id in train_ids]},
-            "valid": {split: dict() for split in VALID_SPLITS},
-            "test": {"seq": test_seq,
-                     "ang": angle_list_to_sin_cos(test_ang),
-                     "ids": test_ids,
-                     "crd": test_crd,
-                     "mask": [np.asarray(PN_TEST_DICT[_id]["mask"]) for _id in test_ids],
-                     "evolutionary": [np.asarray(PN_TEST_DICT[_id]["evolutionary"]) for _id in test_ids],
-                     "secondary": [PN_TEST_DICT[_id]["secondary"]
-                                   if "secondary" in PN_TEST_DICT[_id].keys()
-                                   else None
-                                   for _id in test_ids]},
-            "settings": {"max_len": max(map(len, train_seq + test_seq))},
-            "description": {f"ProteinNet {CASP_VERSION.upper()}"},
-            # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
-            "date": {datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")}}
-    for split, (seq_val, ang_val, crd_val, ids_val) in all_validation_data.items():
-        data["valid"][split]["seq"] = seq_val
-        data["valid"][split]["ang"] = angle_list_to_sin_cos(ang_val)
-        data["valid"][split]["crd"] = crd_val
-        data["valid"][split]["ids"] = ids_val
-        data["valid"][split]["mask"] = [np.asarray(PN_VALID_DICT[_id]["mask"]) for _id in ids_val]
-        data["valid"][split]["evolutionary"] = [np.asarray(PN_VALID_DICT[_id]["evolutionary"]) for _id in ids_val]
-        data["valid"][split]["secondary"] = [PN_VALID_DICT[_id]["secondary"]
-                                             if "secondary" in PN_VALID_DICT[_id].keys()
-                                             else None
-                                             for _id in ids_val]
-        data["settings"]["max_len"] = max(data["settings"]["max_len"], max(map(len, seq_val)))
-        valid_len = len(data["valid"][split]["seq"])
-        assert all([l == valid_len for l in map(len, [data["valid"][split][k]
-                                                      for k in ["ang", "ids", "mask", "evolutionary","secondary"]])]),\
-            "Valid lengths don't match."
-    validate_data(data)
-    return data
-
-
 def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_crd, train_ids, test_ids, all_validation_data):
     """
     Given split data along with the query information that generated it, this function saves the
     data as a Python dictionary, which is then saved to disk using torch.save.
+    See commit  d1935a0869720f85c00824f3aecbbfc6b947711c for a method that saves all relevant information.
     """
     # Create a dictionary data structure, using the sin/cos transformed angles
     data = {"train": {"seq": train_seq,
