@@ -289,12 +289,32 @@ def use_contigs_to_compute_mask(contigs, true_seq, observed_sequence):
     return mask_seq, true_seq
 
 
+def update_contigs(contigs, current_contig, all_residues, res_id):
+    """ This function updates the state variables `contigs` and `cur_contigs`
+        while get_seq_and_masked_coords_and_angles processes the protein.
+        These variables are later used to compute the missing residue masks for
+        protein. This works by recording all of the continuous regions of the
+        protein, and then attempting to identify what residues were missing
+        inbetween those contiguous regions.
+    """
+    res = all_residues[res_id]
+    if current_contig == "":
+        current_contig = res.getSequence()[0]
+    if res_id < len(all_residues) - 1 and residues_are_contiguous(res, all_residues[res_id + 1]):
+        # The residues are connected
+        current_contig += all_residues[res_id + 1].getSequence()[0]
+    elif res_id < len(all_residues) - 1 and not residues_are_contiguous(res, all_residues[res_id + 1]):
+        # The residues are not connected
+        contigs.append(current_contig)
+        current_contig = ""
+    return contigs, current_contig
+
 def get_seq_and_masked_coords_and_angles(chain, true_seq):
     """
     Given a ProDy Chain object (from a Hierarchical View), return a tuple (angles, coords, sequence).
     Returns None if the PDB should be ignored due to weird artifacts. Also measures the
     bond angles along the peptide backbone, since they account for significant variation.
-    i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, chi3, chi4, chi5], [...] ...]
+    i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, ... chi12], [...] ...]
     """
     chain = chain.select("protein and not hetero and not hetatm")
     if chain is None or chain.nonstdaa:
@@ -333,15 +353,8 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
         prev_res = res
         observed_sequence += res.getSequence()[0]
 
-        if current_contig == "":
-            current_contig = res.getSequence()[0]
-        if res_id < len(all_residues) - 1 and residues_are_contiguous(res, all_residues[res_id+1]):
-            # The residues are connected
-            current_contig += all_residues[res_id+1].getSequence()[0]
-        elif res_id < len(all_residues) - 1 and not residues_are_contiguous(res, all_residues[res_id+1]):
-            # The residues are not connected
-            contigs.append(current_contig)
-            current_contig = ""
+        contigs, current_contig = update_contigs(contigs, current_contig, all_residues, res_id)
+
     if current_contig != "":
         contigs.append(current_contig)
 
@@ -456,8 +469,7 @@ def measure_phi_psi_omega(residue):
 
 def compute_single_dihedral(atoms):
     """
-    Given an iterable of 4 Atoms, uses Prody to calculate the dihedral angle between them in
-    radians.
+    Given an iterable of 4 Atoms, calculate the dihedral angle between them in radians.
     """
     if None in atoms:
         return GLOBAL_PAD_CHAR
