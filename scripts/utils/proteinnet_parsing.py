@@ -107,4 +107,4 @@ def parse_raw_proteinnet(input_dir, train_file):
     with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
         p.map(process_file, input_files)
     print("Done.")
-    return parse_raw_proteinnet(input_dir)
+    return parse_raw_proteinnet(input_dir, train_file)
