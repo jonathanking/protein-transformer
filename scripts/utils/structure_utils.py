@@ -376,7 +376,7 @@ def residues_are_contiguous(resA, resB):
     return np.linalg.norm(cur_coords - next_coords) <= contiguous_threshold
 
 
-def additional_checks(matrix):
+def no_nans_infs_allzeros(matrix):
     """ Returns true if a matrix does not contain NaNs, infs, or all 0s."""
     return not np.any(np.isinf(matrix)) and np.any(matrix)
 

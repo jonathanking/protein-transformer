@@ -23,7 +23,7 @@ import tqdm
 sys.path.append("/home/jok120/protein-transformer/scripts/utils/")
 sys.path.extend("../protein/")
 from structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
-    additional_checks, zero_runs, parse_astral_summary_file, \
+    no_nans_infs_allzeros, zero_runs, parse_astral_summary_file, \
     get_chain_from_astral_id, get_header_seq_from_astral_id, GLOBAL_PAD_CHAR
 from proteinnet_parsing import parse_raw_proteinnet
 from structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError, SequenceError, ContigMultipleMatchingError, ShortStructureError
@@ -181,6 +181,7 @@ def work(pdbid_chain):
             MULTIPLE_CONTIG_ERRORS.append(1)
             return None
 
+    # If we've made it this far, we can unpack the data and return it
     dihedrals, coords, sequence = dihedrals_coords_sequence
 
     return dihedrals, coords, sequence, pdbid_chain
@@ -203,7 +204,7 @@ def unpack_processed_results(results):
             continue
         ang, coords, seq, i = r
         oh = seq_to_onehot(seq)
-        if additional_checks(oh) and additional_checks(ang) and additional_checks(coords):
+        if no_nans_infs_allzeros(oh) and no_nans_infs_allzeros(ang) and no_nans_infs_allzeros(coords):
             all_ohs.append(oh)
             all_angs.append(ang)
             all_crds.append(coords)
@@ -213,7 +214,7 @@ def unpack_processed_results(results):
     return all_ohs, all_angs, all_crds, all_ids
 
 
-def validate_data(data):
+def validate_data_dict(data):
     """
     Performs several checks on dictionary before saving.
     """
@@ -232,7 +233,6 @@ def validate_data(data):
         valid_len = len(data["valid"][split]["seq"])
         assert all([l == valid_len for l in map(len, [data["valid"][split][k] for k in ["ang", "ids", "crd"]])]), \
             "Valid lengths don't match."
-
 
 
 def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_crd, train_ids, test_ids, all_validation_data):
@@ -266,7 +266,7 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
         max_val_len = max_split_len if max_split_len > max_val_len else max_val_len
     data["settings"]["max_len"] = max(list(map(len, train_seq + test_seq)) + [max_val_len])
 
-    validate_data(data)
+    validate_data_dict(data)
     return data
 
 
