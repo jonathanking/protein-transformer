@@ -218,6 +218,7 @@ def validate_data(data):
     """
     Performs several checks on dictionary before saving.
     """
+    # Assert size of each datasubet matches
     train_len = len(data["train"]["seq"])
     test_len = len(data["test"]["seq"])
     assert all([l == train_len
@@ -228,6 +229,11 @@ def validate_data(data):
                 for l in map(len, [data["test"][k]
                                    for k in ["ang", "ids", "mask", "evolutionary",
                                              "secondary"]])]), "Test lengths don't match."
+    for split in VALID_SPLITS:
+        valid_len = len(data["valid"][split]["seq"])
+        assert all([l == valid_len for l in map(len, [data["valid"][split][k] for k in ["ang", "ids", "crd"]])]), \
+            "Valid lengths don't match."
+
 
 
 def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_crd, train_ids, test_ids, all_validation_data):
@@ -259,10 +265,8 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
         data["valid"][split]["ids"] = ids_val
         max_split_len = max(data["settings"]["max_len"], max(map(len, seq_val)))
         max_val_len = max_split_len if max_split_len > max_val_len else max_val_len
-        # Assert lengths match for each category of data
-        valid_len = len(data["valid"][split]["seq"])
-        assert all([l == valid_len for l in map(len, [data["valid"][split][k] for k in ["ang", "ids", "crd"]])]),\
-            "Valid lengths don't match."
+    data["settings"]["max_len"] = max(list(map(len, train_seq + test_seq)) + [max_val_len])
+
     validate_data(data)
     return data
 
