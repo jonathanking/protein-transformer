@@ -302,9 +302,9 @@ def save_data_dict(data):
     Saves a Python dictionary containing all training data to disk via Pickle or PyTorch.
     """
     if not args.out_file and args.pickle:
-        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pkl"
+        args.out_file = "/home/jok120/protein-transformer/data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pkl"
     elif not args.out_file and not args.pickle:
-        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pt"
+        args.out_file = "/home/jok120/protein-transformer/data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pt"
     if args.pickle:
         with open(args.out_file, "wb") as f:
             pickle.dump(data, f)
@@ -392,7 +392,7 @@ if __name__ == "__main__":
 
     pr.pathPDBFolder(args.pdb_dir)  # Set PDB download location
     np.set_printoptions(suppress=True)  # suppresses scientific notation when printing
-    np.set_printoptions(threshold=np.nan)  # suppresses '...' when printing
+    np.set_printoptions(threshold=sys.maxsize)  # suppresses '...' when printing
 
     try:
         main()
