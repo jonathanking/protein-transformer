@@ -11,7 +11,6 @@ import argparse
 import datetime
 import multiprocessing
 import os
-import pickle
 import re
 import sys
 from multiprocessing import Pool
@@ -291,15 +290,9 @@ def save_data_dict(data):
     """
     Saves a Python dictionary containing all training data to disk via Pickle or PyTorch.
     """
-    if not args.out_file and args.pickle:
-        args.out_file = "/home/jok120/protein-transformer/data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pkl"
-    elif not args.out_file and not args.pickle:
+    if not args.out_file:
         args.out_file = "/home/jok120/protein-transformer/data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pt"
-    if args.pickle:
-        with open(args.out_file, "wb") as f:
-            pickle.dump(data, f)
-    else:
-        torch.save(data, args.out_file)
+    torch.save(data, args.out_file)
     print(f"Data saved to {args.out_file}.")
 
 
@@ -362,10 +355,6 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.tch file)')
     parser.add_argument("--pdb_dir", default="/home/jok120/pdb/", type=str,
                         help="Path for ProDy-downloaded PDB files.")
-    parser.add_argument("-t", "--tertiary", action="store_true",
-                        help="Include tertiary (coordinate-level) data.", default=True)
-    parser.add_argument("-p", "--pickle", action="store_true",
-                        help="Save data as a pickled dictionary instead of a torch-dictionary.")
     parser.add_argument('--training_set', type=int, default=100, help='Which thinning of the training set to parse. '
                                                                       '{30,50,70,90,95,100}. Default 100.')
     args = parser.parse_args()
