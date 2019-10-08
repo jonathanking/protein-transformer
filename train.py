@@ -137,7 +137,7 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
             print("A nan loss has occurred. Exiting training.")
             sys.exit(1)
 
-    return total_drmsd_loss / n_batches, total_ln_drmsd_loss / n_batches, total_mse_loss / n_batches
+    return total_drmsd_loss / n_batches, total_ln_drmsd_loss / n_batches, total_mse_loss / n_batches, np.mean(training_losses)
 
 
 def eval_epoch(model, validation_data, device, opt, mode="Val"):
@@ -196,13 +196,14 @@ def train(model, training_data, validation_data, test_data, optimizer, device, o
         print(f'[ Epoch {display_epoch} ]')
 
         start = time.time()
-        train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
+        train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss, train_comb_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
         if opt.eval_train:
             train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model,
                                                                                             training_data, device, opt,
                                                                                             mode="Train")
         else:
-            train_comb_loss, train_rmsd_loss = 111, 111
+            # train_comb_loss, train_rmsd_loss = 111, 111
+            train_rmsd_loss = 111
         train_combined_losses.append(train_comb_loss)
         train_drmsd_losses.append(train_drmsd_loss)
         cur_lr = optimizer.cur_lr if opt.lr_scheduling else 0
