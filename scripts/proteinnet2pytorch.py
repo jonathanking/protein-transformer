@@ -25,7 +25,7 @@ sys.path.append("/home/jok120/protein-transformer/scripts/utils/")
 sys.path.extend("../protein/")
 from structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
     additional_checks, zero_runs, parse_astral_summary_file, \
-get_chain_from_astral_id, get_header_seq_from_astral_id
+    get_chain_from_astral_id, get_header_seq_from_astral_id, GLOBAL_PAD_CHAR
 from proteinnet_parsing import parse_raw_proteinnet
 from structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError, SequenceError, ContigMultipleMatchingError, ShortStructureError
 
@@ -230,7 +230,7 @@ def validate_data(data):
                                              "secondary"]])]), "Test lengths don't match."
 
 
-def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_crd, train_ids, test_ids, all_validation_data):
+def create_data_dict_full(train_seq, test_seq, train_ang, test_ang, train_crd, test_crd, train_ids, test_ids, all_validation_data):
     """
     Given split data along with the query information that generated it, this function saves the
     data as a Python dictionary, which is then saved to disk using torch.save.
@@ -276,6 +276,42 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
         valid_len = len(data["valid"][split]["seq"])
         assert all([l == valid_len for l in map(len, [data["valid"][split][k]
                                                       for k in ["ang", "ids", "mask", "evolutionary","secondary"]])]),\
+            "Valid lengths don't match."
+    validate_data(data)
+    return data
+
+
+def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_crd, train_ids, test_ids, all_validation_data):
+    """
+    Given split data along with the query information that generated it, this function saves the
+    data as a Python dictionary, which is then saved to disk using torch.save.
+    """
+    # Create a dictionary data structure, using the sin/cos transformed angles
+    data = {"train": {"seq": train_seq,
+                      "ang": angle_list_to_sin_cos(train_ang),
+                      "ids": train_ids,
+                      "crd": train_crd},
+            "valid": {split: dict() for split in VALID_SPLITS},
+            "test": {"seq": test_seq,
+                     "ang": angle_list_to_sin_cos(test_ang),
+                     "ids": test_ids,
+                     "crd": test_crd},
+            "settings": {"max_len": max(map(len, train_seq + test_seq)),
+                         "pad_char": GLOBAL_PAD_CHAR},
+            "description": {f"ProteinNet {CASP_VERSION.upper()}"},
+            # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
+            "date": {datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")}}
+    max_val_len = 0
+    for split, (seq_val, ang_val, crd_val, ids_val) in all_validation_data.items():
+        data["valid"][split]["seq"] = seq_val
+        data["valid"][split]["ang"] = angle_list_to_sin_cos(ang_val)
+        data["valid"][split]["crd"] = crd_val
+        data["valid"][split]["ids"] = ids_val
+        max_split_len = max(data["settings"]["max_len"], max(map(len, seq_val)))
+        max_val_len = max_split_len if max_split_len > max_val_len else max_val_len
+        # Assert lengths match for each category of data
+        valid_len = len(data["valid"][split]["seq"])
+        assert all([l == valid_len for l in map(len, [data["valid"][split][k] for k in ["ang", "ids", "crd"]])]),\
             "Valid lengths don't match."
     validate_data(data)
     return data
