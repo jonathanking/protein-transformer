@@ -44,7 +44,7 @@ SHORT_ERRORS = m.list()
 def get_chain_from_trainid(proteinnet_id):
     """
     Given a ProteinNet ID of a training or validation set item, this function returns the associated
-    ProDy-parsed chain object.
+    ProDy-parsed chain object. "1A9U_2_A"
     """
     # Try parsing the ID as a PDB ID. If it fails, assume it's an ASTRAL ID.
     try:
@@ -69,6 +69,7 @@ def get_chain_from_trainid(proteinnet_id):
     try:
         pdb_hv = pr.parsePDB(pdbid, chain=chid).getHierView()
     except (AttributeError, pr.proteins.pdbfile.PDBParseError, OSError) as e:
+        # TODO split up errors to determine each one?
         PARSING_ERRORS.append(1)
         return None
     chain = pdb_hv[chid]
@@ -78,6 +79,7 @@ def get_chain_from_trainid(proteinnet_id):
         if chain.numCoordsets() > 1:
             chain.setACSIndex(int(model_id))
     except IndexError:
+        # TODO is this appropriate to pass?
         pass
 
     return chain
@@ -153,13 +155,14 @@ def work(pdbid_chain):
     GLOBAL_PAD_CHARs where there was missing data.
     """
     true_seq = get_proteinnet_seq_from_id(pdbid_chain)
-    chain = get_chain_from_proteinnetid(pdbid_chain)
+    chain = get_chain_from_proteinnetid(pdbid_chain)  # Returns ProDy chain object
     if chain is None:
         return None
     try:
         dihedrals_coords_sequence = get_seq_and_masked_coords_and_angles(chain, true_seq)
     except NonStandardAminoAcidError:
-        NSAA_ERRORS.append(1)
+        NSAA_ERRORS.append(1)  # TODO Change errors to record chain name instead of '1'
+        # NSAA_ERRORS.append(pdbid_chain)
         return None
     except ContigMultipleMatchingError:
         MULTIPLE_CONTIG_ERRORS.append(1)
@@ -168,6 +171,7 @@ def work(pdbid_chain):
         SHORT_ERRORS.append(1)
         return None
     except SequenceError:
+        # Only fails in complex masking cases.
         # This means there was some mismatch between the "true" sequence and observed sequence.
         # Since the default true seq comes from ProteinNet, this attempts to use the SEQRES records.
         try:
@@ -338,13 +342,14 @@ def main():
 
 def print_failure_summary():
     """ Summarizes failures associated with the processing of ProteinNet ID data. """
-    print(f"{sum(MISSING_ASTRAL_IDS)} ASTRAL IDs were missing from the file.")
-    print(f"{sum(FAILED_ASTRAL_IDS)} ASTRAL IDs failed to download for another reason.")
+    print(f"{len(MISSING_ASTRAL_IDS)} ASTRAL IDs were missing from the file.")
+    print(f"{len(FAILED_ASTRAL_IDS)} ASTRAL IDs failed to download for another reason.")
     print(f"{len(MULTIPLE_CONTIG_ERRORS)} ProteinNet IDs failed because of multiple matching contigs.")
     print(f"{len(SEQUENCE_ERRORS)} ProteinNet IDs failed because of mismatching sequence errors.")
     print(f"{len(NSAA_ERRORS)} ProteinNet IDs failed because of non-std AAs.")
     print(f"{len(SHORT_ERRORS)} ProteinNet IDs failed because their length was <= 2.")
     print(f"{len(PARSING_ERRORS)} ProteinNet IDs failed because of parsing errors.")
+    # TODO inspect actual erroneous IDs
 
 
 if __name__ == "__main__":
