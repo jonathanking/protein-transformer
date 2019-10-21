@@ -103,6 +103,7 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
         if opt.eval_train:
            metrics = eval_epoch(model, training_data, device, opt, metrics, mode="train")
         print_status("train_train", opt, (start, metrics))
+        log_batch(log_writer, metrics, mode="train", end_of_epoch=True)
 
         # Valid epoch
         if not opt.train_only:
@@ -112,7 +113,6 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
             log_batch(log_writer, metrics, mode="valid", end_of_epoch=True)
 
         # Checkpointing
-        log_batch(log_writer, metrics, mode="train", end_of_epoch=True)
         try:
             metrics = update_loss_trackers(opt, epoch_i, metrics)
         except EarlyStoppingCondition:
@@ -264,9 +264,6 @@ def main():
     parser.add_argument('--restart_opt', action='store_true', help="Resumes training but does not load the optimizer"
                                                                    "state. ")
 
-    # Temporary args
-    parser.add_argument('--proteinnet', action='store_true')
-
     args = parser.parse_args()
     args.cuda = not args.no_cuda
     args.d_word_vec = args.d_model
@@ -341,26 +338,15 @@ def prepare_dataloaders(data, opt):
         shuffle=True)
 
     # TODO: load one or multiple validation sets
-    if opt.proteinnet:
-        valid_loader = torch.utils.data.DataLoader(
-            ProteinDataset(
-                seqs=data['valid'][70]['seq'],
-                crds=data['valid'][70]['crd'],
-                angs=data['valid'][70]['ang'],
-                ),
-            num_workers=2,
-            batch_size=opt.batch_size,
-            collate_fn=collate)
-    else:
-        valid_loader = torch.utils.data.DataLoader(
-            ProteinDataset(
-                seqs=data['valid']['seq'],
-                crds=data['valid']['crd'],
-                angs=data['valid']['ang'],
-                ),
-            num_workers=2,
-            batch_size=opt.batch_size,
-            collate_fn=collate)
+    valid_loader = torch.utils.data.DataLoader(
+        ProteinDataset(
+            seqs=data['valid'][70]['seq'],
+            crds=data['valid'][70]['crd'],
+            angs=data['valid'][70]['ang'],
+            ),
+        num_workers=2,
+        batch_size=opt.batch_size,
+        collate_fn=collate)
 
     test_loader = torch.utils.data.DataLoader(
         ProteinDataset(
