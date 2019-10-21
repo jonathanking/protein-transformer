@@ -2,7 +2,7 @@
 import numpy as np
 import time
 
-def print_status(mode, opt, items):
+def print_status(mode, args, items):
     """
     Handles all status printing updates for the model. Allows complex string formatting per method while shrinking
     the number of lines of code per each training subroutine. mode is one of 'train_epoch', 'eval_epoch', 'train_train',
@@ -20,32 +20,32 @@ def print_status(mode, opt, items):
         train_drmsd_loss = metrics["train"]["batch-drmsd"]
         train_mse_loss = metrics["train"]["batch-mse"]
         train_comb_loss = metrics["train"]["batch-combined"]
-        if opt.combined_loss:
+        if args.combined_loss:
             loss = train_comb_loss
         else:
             loss = metrics["train"]["batch-ln-drmsd"]
-        lr_string = f", LR = {cur_lr:.7f}" if opt.lr_scheduling else ""
+        lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling else ""
 
-        if not opt.cluster and len(training_losses) > 32:
+        if not args.cluster and len(training_losses) > 32:
             pbar.set_description('\r  - (Train) drmsd = {0:.6f}, ln-drmsd = {lnd:0.6f}, rmse = {3:.6f}, 32avg = {1:.6f}'
                                  ', comb = {4:.6f}{2}'.format(float(train_drmsd_loss), np.mean(training_losses[-32:]),
                                                               lr_string, np.sqrt(float(train_mse_loss)),
                                                               float(train_comb_loss),
                                                               lnd=metrics["train"]["batch-ln-drmsd"]))
-        elif not opt.cluster:
+        elif not args.cluster:
             pbar.set_description('\r  - (Train) drmsd = {0:.6f}, ln-drmsd = {lnd:0.6f}, rmse = {2:.6f}, comb = '
                                  '{3:.6f}{1}'.format(float(train_drmsd_loss), lr_string, np.sqrt(float(train_mse_loss)),
                                                      float(train_comb_loss), lnd=metrics["train"]["batch-ln-drmsd"]))
-        if opt.cluster and len(training_losses) > 32:
+        if args.cluster and len(training_losses) > 32:
             print('Loss = {0:.6f}, 32avg = {1:.6f}{2}'.format(
                 float(loss), np.mean(training_losses[-32:]), lr_string))
-        elif opt.cluster and len(training_losses) <= 32:
+        elif args.cluster and len(training_losses) <= 32:
             print('Loss = {0:.6f}, 32avg = {1:.6f}{2}'.format(
                 float(loss), np.mean(training_losses), lr_string))
 
     elif mode == "eval_epoch":
         pbar, d_loss, mode, m_loss, c_loss = items
-        if not opt.cluster:
+        if not args.cluster:
             pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
                 float(d_loss), mode, np.sqrt(float(m_loss)), float(c_loss)))
 
@@ -87,29 +87,29 @@ def print_status(mode, opt, items):
                                                  rmsd=test_rmsd_loss))
 
 
-def update_loss_trackers(opt, epoch_i, metrics):
+def update_loss_trackers(args, epoch_i, metrics):
     """ Updates the current loss to compare according to an early stopping policy."""
 
     loss_to_compare, losses_to_compare = None, None
-    if opt.combined_loss and not opt.train_only:
+    if args.combined_loss and not args.train_only:
         loss_to_compare = metrics["valid"]["epoch-combined"]
         losses_to_compare = metrics["valid"]["epoch-history-combined"]
-    elif opt.combined_loss and opt.train_only:
+    elif args.combined_loss and args.train_only:
         loss_to_compare = metrics["train"]["epoch-combined"]
         losses_to_compare = metrics["train"]["epoch-history-combined"]
-    elif not opt.combined_loss and not opt.train_only:
+    elif not args.combined_loss and not args.train_only:
         loss_to_compare = metrics["valid"]["epoch-drmsd"]
         losses_to_compare = metrics["valid"]["epoch-history-drmsd"]
-    elif not opt.combined_loss and opt.train_only:
+    elif not args.combined_loss and args.train_only:
         loss_to_compare = metrics["train"]["epoch-drmsd"]
         losses_to_compare = metrics["train"]["epoch-history-drmsd"]
 
     if loss_to_compare < metrics["best_valid_loss_so_far"]:
         metrics["best_valid_loss_so_far"] = loss_to_compare
         metrics["epoch_last_improved"] = epoch_i
-    elif opt.early_stopping and epoch_i - metrics["epoch_last_improved"] > opt.early_stopping:
+    elif args.early_stopping and epoch_i - metrics["epoch_last_improved"] > args.early_stopping:
         # Model hasn't improved in X epochs
-        print("No improvement for {} epochs. Stopping model training early.".format(opt.early_stopping))
+        print("No improvement for {} epochs. Stopping model training early.".format(args.early_stopping))
         raise EarlyStoppingCondition
 
     metrics["loss_to_compare"] = loss_to_compare
@@ -118,7 +118,7 @@ def update_loss_trackers(opt, epoch_i, metrics):
     return metrics
 
 
-def init_metrics(opt):
+def init_metrics(args):
     """ Returns an empty metric dictionary for recording model performance. """
     # TODO add metrics class for tracking metrics, or use ignite
     metrics = {"train": {"epoch-history-drmsd": [],
@@ -131,7 +131,7 @@ def init_metrics(opt):
                "epoch_last_improved": -1,
                "best_valid_loss_so_far": np.inf
                }
-    if not opt.lr_scheduling:
+    if not args.lr_scheduling:
         metrics["history-lr"] = [0]
     return metrics
 
@@ -185,9 +185,9 @@ def update_metrics_end_of_epoch(metrics, mode, n_batches):
     return metrics
 
 
-def prepare_log_header(opt):
+def prepare_log_header(args):
     """ Returns the column ordering for the logfile. """
-    if opt.combined_loss:
+    if args.combined_loss:
         return 'drmsd,ln_drmsd,rmse,rmsd,combined,lr,mode,granularity,time\n'
     else:
         return 'drmsd,ln_drmsd,rmse,rmsd,lr,mode,granularity,time\n'

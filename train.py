@@ -18,17 +18,17 @@ from train_utils import print_status, EarlyStoppingCondition, update_loss_tracke
     update_metrics_end_of_epoch, update_metrics, reset_metrics_for_epoch, prepare_log_header
 
 
-def train_epoch(model, training_data, optimizer, device, opt, log_writer, metrics):
+def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):
     """ Epoch operation in training phase"""
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
     n_batches = 0.0
-    pbar = tqdm(training_data, mininterval=2, leave=False) if not opt.cluster else training_data
+    pbar = tqdm(training_data, mininterval=2, leave=False) if not args.cluster else training_data
 
     for batch in pbar:
         optimizer.zero_grad()
         src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-        if opt.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
+        if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
             continue
         tgt_ang_no_nan = tgt_ang.clone().detach()
         tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
@@ -39,12 +39,12 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer, metric
         d_loss, d_loss_normalized = d_loss.to('cpu'), d_loss_normalized.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
         c_loss = combine_drmsd_mse(d_loss_normalized, m_loss, w=0.5)
-        loss = c_loss if opt.combined_loss else d_loss_normalized
+        loss = c_loss if args.combined_loss else d_loss_normalized
         loss.backward()
 
         # Clip gradients
-        if opt.clip:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), opt.clip)
+        if args.clip:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
 
         # update parameters
         optimizer.step()
@@ -54,9 +54,9 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer, metric
         metrics = update_metrics(metrics, "train", d_loss, d_loss_normalized, m_loss, c_loss, batch_level=True)
 
         n_batches += 1
-        if opt.lr_scheduling:
+        if args.lr_scheduling:
             metrics["history-lr"].append(optimizer.cur_lr)
-        print_status("train_epoch", opt, (pbar, metrics))
+        print_status("train_epoch", args, (pbar, metrics))
         log_batch(log_writer, metrics, mode="train", end_of_epoch=False)
         if np.isnan(loss.item()):
             print("A nan loss has occurred. Exiting training.")
@@ -67,13 +67,13 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer, metric
     return metrics
 
 
-def eval_epoch(model, validation_data, device, opt, metrics, mode="valid"):
+def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
     """ Epoch operation in evaluation phase. """
 
     model.eval()
     metrics = reset_metrics_for_epoch(metrics, mode)
     n_batches = 0.0
-    pbar = tqdm(validation_data, mininterval=2, leave=False) if not opt.cluster else validation_data
+    pbar = tqdm(validation_data, mininterval=2, leave=False) if not args.cluster else validation_data
 
     with torch.no_grad():
         for batch in pbar:
@@ -85,68 +85,68 @@ def eval_epoch(model, validation_data, device, opt, metrics, mode="valid"):
             metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, r_loss, batch_level=False)
 
             n_batches += 1
-            print_status("eval_epoch", opt, (pbar, d_loss, mode, m_loss, c_loss))
+            print_status("eval_epoch", args, (pbar, d_loss, mode, m_loss, c_loss))
 
     metrics = update_metrics_end_of_epoch(metrics, mode, n_batches)
     return metrics
 
 
-def train(model, metrics, training_data, validation_data, test_data, optimizer, device, opt, log_writer):
+def train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer):
     """ Start training. """
 
-    for epoch_i in range(START_EPOCH, opt.epochs):
+    for epoch_i in range(START_EPOCH, args.epochs):
         print(f'[ Epoch {epoch_i} ]')
 
         # Train epoch
         start = time.time()
-        metrics = train_epoch(model, training_data, optimizer, device, opt, log_writer, metrics)
-        if opt.eval_train:
-           metrics = eval_epoch(model, training_data, device, opt, metrics, mode="train")
-        print_status("train_train", opt, (start, metrics))
+        metrics = train_epoch(model, training_data, optimizer, device, args, log_writer, metrics)
+        if args.eval_train:
+           metrics = eval_epoch(model, training_data, device, args, metrics, mode="train")
+        print_status("train_train", args, (start, metrics))
         log_batch(log_writer, metrics, mode="train", end_of_epoch=True)
 
         # Valid epoch
-        if not opt.train_only:
+        if not args.train_only:
             start = time.time()
-            metrics = eval_epoch(model, validation_data, device, opt, metrics)
-            print_status("train_val", opt, (start, metrics))
+            metrics = eval_epoch(model, validation_data, device, args, metrics)
+            print_status("train_val", args, (start, metrics))
             log_batch(log_writer, metrics, mode="valid", end_of_epoch=True)
 
         # Checkpointing
         try:
-            metrics = update_loss_trackers(opt, epoch_i, metrics)
+            metrics = update_loss_trackers(args, epoch_i, metrics)
         except EarlyStoppingCondition:
             break
-        checkpoint_model(opt, optimizer, model, metrics, epoch_i)
+        checkpoint_model(args, optimizer, model, metrics, epoch_i)
 
     # Test Epoch
-    if not opt.train_only:
-        metrics = eval_epoch(model, test_data, device, opt, metrics, mode="test")
-        print_status("train_test", opt, (time.time(), metrics))
+    if not args.train_only:
+        metrics = eval_epoch(model, test_data, device, args, metrics, mode="test")
+        print_status("train_test", args, (time.time(), metrics))
         log_batch(log_writer, metrics, mode="test", end_of_epoch=True)
 
 
-def checkpoint_model(opt, optimizer, model, metrics, epoch_i):
+def checkpoint_model(args, optimizer, model, metrics, epoch_i):
     """ Records model state according to a checkpointing policy. Defaults to best validation set performance. """
     did_save = False
     cur_loss, loss_history = metrics["loss_to_compare"], metrics["losses_to_compare"]
-    if opt.save_mode == 'all' or len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
+    if args.save_mode == 'all' or len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
         model_state_dict = model.state_dict()
         checkpoint = {
             'model_state_dict': model_state_dict,
-            'settings': opt,
+            'settings': args,
             'epoch': epoch_i,
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': cur_loss,
             'metrics': metrics,
             'elapsed_time':time.time() - START_TIME}
         did_save = True
-    if opt.save_mode == 'all':
-        chkpt_file_name = opt.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, cur_loss)
+    if args.save_mode == 'all':
+        chkpt_file_name = args.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, cur_loss)
         torch.save(checkpoint, chkpt_file_name)
         print('\r    - [Info] The checkpoint file has been updated.')
     elif len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
-        chkpt_file_name = opt.chkpt_path + "_best.chkpt"
+        chkpt_file_name = args.chkpt_path + "_best.chkpt"
         torch.save(checkpoint, chkpt_file_name)
         print('\r    - [Info] The checkpoint file has been updated.')
     return did_save
@@ -321,7 +321,7 @@ def main():
     log_f.close()
 
 
-def prepare_dataloaders(data, opt):
+def prepare_dataloaders(data, args):
     """ data is a dictionary containing all necessary training data."""
 
     collate = paired_collate_fn
@@ -333,7 +333,7 @@ def prepare_dataloaders(data, opt):
             angs=data['train']['ang'],
             ),
         num_workers=2,
-        batch_size=opt.batch_size,
+        batch_size=args.batch_size,
         collate_fn=collate,
         shuffle=True)
 
@@ -345,7 +345,7 @@ def prepare_dataloaders(data, opt):
             angs=data['valid'][70]['ang'],
             ),
         num_workers=2,
-        batch_size=opt.batch_size,
+        batch_size=args.batch_size,
         collate_fn=collate)
 
     test_loader = torch.utils.data.DataLoader(
@@ -355,7 +355,7 @@ def prepare_dataloaders(data, opt):
             angs=data['test']['ang'],
             ),
         num_workers=2,
-        batch_size=opt.batch_size,
+        batch_size=args.batch_size,
         collate_fn=collate)
     return train_loader, valid_loader, test_loader
 
