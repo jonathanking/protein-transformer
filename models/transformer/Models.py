@@ -17,7 +17,6 @@ __author__ = "Yu-Hsiang Huang"
 
 def get_non_pad_mask(seq):
     assert seq.dim() == 3
-    # return seq.ne(Constants.PAD).type(torch.float).unsqueeze(-1)
     return (seq != 0).any(dim=-1).type(torch.float).unsqueeze(-1)
 
 
@@ -44,10 +43,8 @@ def get_sinusoid_encoding_table(n_position, d_hid, padding_idx=None):
 
 def get_attn_key_pad_mask(seq_k, seq_q):
     ''' For masking out the padding part of key sequence. '''
-
     # Expand to fit the shape of key query attention matrix.
     len_q = seq_q.size(1)
-    # TODO add ability to use np.nan within model, i.e. padding_mask = torch.isnan(seq_k).all(dim=-1)
     padding_mask = (seq_k == 0).all(dim=-1)
     padding_mask = padding_mask.unsqueeze(1).expand(-1, len_q, -1)  # b x lq x lk
 
@@ -58,8 +55,7 @@ def get_subsequent_mask(seq):
     ''' For masking out the subsequent info. '''
 
     sz_b, len_s, dim_s = seq.size()
-    subsequent_mask = torch.triu(
-        torch.ones((len_s, len_s), device=seq.device, dtype=torch.uint8), diagonal=1)
+    subsequent_mask = torch.triu(torch.ones((len_s, len_s), device=seq.device, dtype=torch.uint8), diagonal=1)
     subsequent_mask = subsequent_mask.unsqueeze(0).expand(sz_b, -1, -1)  # b x ls x ls
 
     return subsequent_mask
@@ -68,11 +64,7 @@ def get_subsequent_mask(seq):
 class Encoder(nn.Module):
     ''' A encoder model with self attention mechanism. '''
 
-    def __init__(
-            self,
-            len_max_seq, d_word_vec,
-            n_layers, n_head, d_k, d_v,
-            d_model, d_inner, postnorm, dropout=0.1):
+    def __init__(self, len_max_seq, n_layers, n_head, d_k, d_v, d_model, d_inner, postnorm, dropout=0.1):
 
         super().__init__()
 
@@ -91,7 +83,6 @@ class Encoder(nn.Module):
         enc_slf_attn_list = []
 
         # -- Prepare masks
-        # TODO mofidy masks to allow for np.nan
         slf_attn_mask = get_attn_key_pad_mask(seq_k=src_seq, seq_q=src_seq)
         non_pad_mask = get_non_pad_mask(src_seq)
 
@@ -113,11 +104,7 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     ''' A decoder model with self attention mechanism. '''
 
-    def __init__(
-            self,
-            len_max_seq,
-            n_layers, n_head, d_k, d_v,
-            d_model, d_inner, postnorm, dropout=0.1):
+    def __init__( self, len_max_seq, n_layers, n_head, d_k, d_v, d_model, d_inner, postnorm, dropout=0.1):
 
         super().__init__()
         n_position = len_max_seq + 1
@@ -164,7 +151,7 @@ class Decoder(nn.Module):
 class Transformer(nn.Module):
     ''' A sequence to sequence model with attention mechanism. '''
 
-    def __init__(self, args, d_angle=NUM_PREDICTED_ANGLES * 2, d_word_vec=20, d_model=512, d_inner=2048,
+    def __init__(self, args, d_angle=NUM_PREDICTED_ANGLES * 2, input_dim=20, d_model=512, d_inner=2048,
                  n_layers=6, n_head=8, d_k=64, d_v=64, dropout=0.1, complete_tf=1, subseq_tf=1):
 
         super().__init__()
@@ -173,7 +160,6 @@ class Transformer(nn.Module):
         self.fraction_subseq_tf = subseq_tf
         init_w_angle_means, data_path, len_max_seq = not args.without_angle_means, args.data, args.max_token_seq_len
         self.encoder = Encoder(len_max_seq=len_max_seq,
-                               d_word_vec=d_word_vec,
                                d_model=d_model,
                                d_inner=d_inner,
                                n_layers=n_layers,
@@ -193,7 +179,7 @@ class Transformer(nn.Module):
                                postnorm=args.postnorm,
                                dropout=dropout)
 
-        self.input_embedding = nn.Linear(d_word_vec, d_model)  # nn.Embedding(d_word_vec, d_angle)
+        self.input_embedding = nn.Linear(input_dim, d_model)  # nn.Embedding(d_word_vec, d_angle) # TODO change to embedding layer
         self.tgt_angle_prj = nn.Linear(d_model, d_angle)
         self.tgt_embedding = nn.Linear(d_angle, d_model)
         nn.init.xavier_normal_(self.tgt_angle_prj.weight)
