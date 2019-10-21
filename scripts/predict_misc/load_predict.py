@@ -22,7 +22,6 @@ chkpt = torch.load(model_path, map_location=device)
 opt = chkpt['settings']
 model_state = chkpt['model']
 
-import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn
 import protein.Structure as struct
@@ -30,14 +29,14 @@ from train import cal_loss
 from losses import inverse_trig_transform, copy_padding_from_gold
 
 
-the_model = transformer.Models.Transformer(opt.max_token_seq_len,
-                                           d_k=opt.d_k,
-                                           d_v=opt.d_v,
-                                           d_model=opt.d_model,
-                                           d_inner=opt.d_inner_hid,
-                                           n_layers=opt.n_layers,
-                                           n_head=opt.n_head,
-                                           dropout=opt.dropout)
+the_model = models.transformer.Models.Transformer(opt.max_token_seq_len,
+                                                  d_k=opt.d_k,
+                                                  d_v=opt.d_v,
+                                                  d_model=opt.d_model,
+                                                  d_inner=opt.d_inner_hid,
+                                                  n_layers=opt.n_layers,
+                                                  n_head=opt.n_head,
+                                                  dropout=opt.dropout)
 the_model.load_state_dict(model_state)
 
 data = torch.load(opt.data)

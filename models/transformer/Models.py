@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-from transformer.Layers import EncoderLayer, DecoderLayer
+from models.transformer.Layers import EncoderLayer, DecoderLayer
 from protein.Sidechains import NUM_PREDICTED_ANGLES
 SOS_CHAR = -5
 MISSING_CHAR = 5

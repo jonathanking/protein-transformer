@@ -12,8 +12,8 @@ from tqdm import tqdm
 
 from dataset import paired_collate_fn, ProteinDataset
 from losses import drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
-from transformer.Models import Transformer, MISSING_CHAR
-from transformer.Optim import ScheduledOptim
+from models.transformer.Models import Transformer, MISSING_CHAR
+from models.transformer.Optim import ScheduledOptim
 from train_utils import print_status, EarlyStoppingCondition, update_loss_trackers, init_metrics, \
     update_metrics_end_of_epoch, update_metrics, reset_metrics_for_epoch, prepare_log_header
 

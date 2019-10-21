@@ -1,7 +1,7 @@
 import numpy as np
-from prody import calcTransformation, parsePDB, writePDB
+from prody import calcTransformation
 import torch
-from protein.Sidechains import THREE_TO_ONE_LETTER_MAP
+
 
 class PDB_Creator(object):
     """
@@ -158,14 +158,14 @@ def load_model(chkpt_path):
     model_args.postnorm = False
     print(model_args)
 
-    the_model = transformer.Models.Transformer(model_args,
-                                               d_k=model_args.d_k,
-                                               d_v=model_args.d_v,
-                                               d_model=model_args.d_model,
-                                               d_inner=model_args.d_inner_hid,
-                                               n_layers=model_args.n_layers,
-                                               n_head=model_args.n_head,
-                                               dropout=model_args.dropout)
+    the_model = models.transformer.Models.Transformer(model_args,
+                                                      d_k=model_args.d_k,
+                                                      d_v=model_args.d_v,
+                                                      d_model=model_args.d_model,
+                                                      d_inner=model_args.d_inner_hid,
+                                                      n_layers=model_args.n_layers,
+                                                      n_head=model_args.n_head,
+                                                      dropout=model_args.dropout)
     the_model.load_state_dict(model_state)
     # the_model = the_model.to(torch.device('cpu'))
     the_model.use_cuda = True
@@ -276,7 +276,6 @@ if __name__ == "__main__":
     import os
     os.chdir('/home/jok120/protein-transformer/')
     sys.path.append("/home/jok120/protein-transformer/scripts/utils")
-    import transformer.Models
     import torch.utils.data
     from dataset import ProteinDataset, paired_collate_fn
     from protein.Structure import generate_coords

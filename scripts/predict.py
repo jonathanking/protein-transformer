@@ -14,13 +14,12 @@ from prody import *
 import numpy as np
 from os.path import basename, splitext
 
-import transformer.Models
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn, paired_collate_fn_with_len
 from protein.Structure import generate_coords_with_tuples
 from losses import inverse_trig_transform, copy_padding_from_gold, drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from protein.Sidechains import SC_DATA
-from rnn import MyRNN
+from models.rnn import MyRNN
 from proteinnet2pytorch import get_chain_from_proteinnetid
 
 VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
@@ -45,14 +44,14 @@ def load_model(args):
         args.rnn = False
 
     if not args.rnn:
-        the_model = transformer.Models.Transformer(model_args,
-                                                   d_k=model_args.d_k,
-                                                   d_v=model_args.d_v,
-                                                   d_model=model_args.d_model,
-                                                   d_inner=model_args.d_inner_hid,
-                                                   n_layers=model_args.n_layers,
-                                                   n_head=model_args.n_head,
-                                                   dropout=model_args.dropout)
+        the_model = models.transformer.Models.Transformer(model_args,
+                                                          d_k=model_args.d_k,
+                                                          d_v=model_args.d_v,
+                                                          d_model=model_args.d_model,
+                                                          d_inner=model_args.d_inner_hid,
+                                                          n_layers=model_args.n_layers,
+                                                          n_head=model_args.n_head,
+                                                          dropout=model_args.dropout)
     else:
         latent_dim, n_layers, bidi = model_args.d_model, model_args.n_layers, True
         the_model = MyRNN(model_args, latent_dim, num_layers=n_layers, bidirectional=bidi, device=device)
