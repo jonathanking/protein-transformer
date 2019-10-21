@@ -14,7 +14,6 @@ from dataset import paired_collate_fn, paired_collate_fn_with_len, ProteinDatase
 from losses import drmsd_loss_from_angles, drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from transformer.Models import Transformer, MISSING_CHAR
 from transformer.Optim import ScheduledOptim
-from rnn import MyRNN
 
 LOGFILEHEADER = ''
 START_EPOCH = 0
@@ -91,19 +90,14 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
 
     for batch in pbar:
         optimizer.zero_grad()
-        if opt.rnn:
-            lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device),
-                                                                                           batch)
-            pred = model(src_seq, lens)
-        else:
-            src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-            if opt.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
-                continue
-            tgt_ang_no_nan = tgt_ang.clone().detach()
-            tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
-            # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
-            pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:,:-1], tgt_pos_enc[:,:-1],
-                         has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
+        src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+        if opt.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
+            continue
+        tgt_ang_no_nan = tgt_ang.clone().detach()
+        tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
+        # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
+        pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:,:-1], tgt_pos_enc[:,:-1],
+                     has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
         d_loss, d_loss_normalized = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device)
         d_loss, d_loss_normalized = d_loss.to('cpu'), d_loss_normalized.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
@@ -158,14 +152,9 @@ def eval_epoch(model, validation_data, device, opt, mode="Val"):
 
     with torch.no_grad():
         for batch in pbar:
-            if opt.rnn:
-                lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device),
-                                                                                               batch)
-                pred = model(src_seq, lens)
-            else:
-                src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-                # We don't provide the entire output seq to the model because it will be given t-1 and should predict t
-                pred = model.predict(src_seq, src_pos_enc)
+            src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+            # We don't provide the entire output seq to the model because it will be given t-1 and should predict t
+            pred = model.predict(src_seq, src_pos_enc)
             d_loss, d_loss_normalized, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device,
                                                                        return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
@@ -359,7 +348,6 @@ def main():
                              "faster if using teacher forcing.")
 
     # Model parameters
-    parser.add_argument('-rnn', '--rnn', action='store_true')
     parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
     parser.add_argument('-dm', '--d_model', type=int, default=512)
     parser.add_argument('-dih', '--d_inner_hid', type=int, default=2048)
@@ -406,21 +394,18 @@ def main():
     # ========= Preparing Model ========= #
 
     device = torch.device('cuda' if args.cuda else 'cpu')
-    if not args.rnn:
-        model = Transformer(args,
-                            d_k=args.d_k,
-                            d_v=args.d_v,
-                            d_model=args.d_model,
-                            d_inner=args.d_inner_hid,
-                            n_layers=args.n_layers,
-                            n_head=args.n_head,
-                            dropout=args.dropout,
-                            complete_tf=args.fraction_complete_tf,
-                            subseq_tf=args.fraction_subseq_tf).to(device)
-    else:
-        print("[Info] Training a RNN model instead of the Transformer model.")
-        latent_dim, n_layers, bidi = args.d_model, args.n_layers, True
-        model = MyRNN(args, latent_dim, num_layers=n_layers, bidirectional=bidi, device=device).to(device)
+
+    model = Transformer(args,
+                        d_k=args.d_k,
+                        d_v=args.d_v,
+                        d_model=args.d_model,
+                        d_inner=args.d_inner_hid,
+                        n_layers=args.n_layers,
+                        n_head=args.n_head,
+                        dropout=args.dropout,
+                        complete_tf=args.fraction_complete_tf,
+                        subseq_tf=args.fraction_subseq_tf).to(device)
+
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
                                betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
@@ -449,10 +434,9 @@ def main():
 
 def prepare_dataloaders(data, opt):
     """ data is a dictionary containing all necessary training data."""
-    if not opt.rnn:
-        collate = paired_collate_fn
-    else:
-        collate = paired_collate_fn_with_len
+
+    collate = paired_collate_fn
+
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=data['train']['seq'],
