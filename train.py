@@ -69,7 +69,6 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
 
 def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
     """ Epoch operation in evaluation phase. """
-
     model.eval()
     metrics = reset_metrics_for_epoch(metrics, mode)
     n_batches = 0.0
@@ -93,7 +92,6 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
 
 def train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer):
     """ Start training. """
-
     for epoch_i in range(START_EPOCH, args.epochs):
         print(f'[ Epoch {epoch_i} ]')
 
@@ -325,7 +323,6 @@ def prepare_dataloaders(data, args):
     """ data is a dictionary containing all necessary training data."""
 
     collate = paired_collate_fn
-
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=data['train']['seq'],
