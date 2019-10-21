@@ -14,25 +14,16 @@ from dataset import paired_collate_fn, ProteinDataset
 from losses import drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from transformer.Models import Transformer, MISSING_CHAR
 from transformer.Optim import ScheduledOptim
-from train_utils import print_status
-
-LOGFILEHEADER = ''
-START_EPOCH = 0
+from train_utils import print_status, EarlyStoppingCondition, update_loss_trackers, init_metrics, \
+    update_metrics_end_of_epoch, update_metrics, reset_metrics_for_epoch, prepare_log_header
 
 
-def train_epoch(model, training_data, optimizer, device, opt, log_writer):
+def train_epoch(model, training_data, optimizer, device, opt, log_writer, metrics):
     """ Epoch operation in training phase"""
     model.train()
-
-    total_drmsd_loss = 0
-    total_ln_drmsd_loss = 0
-    total_mse_loss = 0
+    metrics = reset_metrics_for_epoch(metrics, "train")
     n_batches = 0.0
-    training_losses = []
-    if not opt.cluster:
-        pbar = tqdm(training_data, mininterval=2, leave=False)
-    else:
-        pbar = training_data
+    pbar = tqdm(training_data, mininterval=2, leave=False) if not opt.cluster else training_data
 
     for batch in pbar:
         optimizer.zero_grad()
@@ -48,13 +39,8 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         d_loss, d_loss_normalized = d_loss.to('cpu'), d_loss_normalized.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
         c_loss = combine_drmsd_mse(d_loss_normalized, m_loss, w=0.5)
-
-        if opt.combined_loss:
-            loss = c_loss
-        else:
-            loss = d_loss_normalized
+        loss = c_loss if opt.combined_loss else d_loss_normalized
         loss.backward()
-        training_losses.append(float(loss))
 
         # Clip gradients
         if opt.clip:
@@ -63,153 +49,103 @@ def train_epoch(model, training_data, optimizer, device, opt, log_writer):
         # update parameters
         optimizer.step()
 
-        # note keeping
-        total_drmsd_loss += d_loss.item()
-        total_ln_drmsd_loss += d_loss_normalized.item()
-        total_mse_loss += m_loss.item()
+        # record performance metrics
+        metrics["train"]["batch-history"].append(float(loss))
+        metrics = update_metrics(metrics, "train", d_loss, d_loss_normalized, m_loss, c_loss, batch_level=True)
+
         n_batches += 1
-        cur_lr = optimizer.cur_lr if opt.lr_scheduling else 0
-        print_status("train_epoch", opt, (pbar, loss, d_loss, d_loss_normalized, training_losses, cur_lr, m_loss,
-                                          c_loss))
-        log_batch(log_writer, d_loss.item(), d_loss_normalized.item(), m_loss.item(), None, c_loss.item(), cur_lr,
-                  is_val=False, end_of_epoch=False, t=time.time())
+        if opt.lr_scheduling:
+            metrics["history-lr"].append(optimizer.cur_lr)
+        print_status("train_epoch", opt, (pbar, metrics))
+        log_batch(log_writer, metrics, mode="train", end_of_epoch=False)
         if np.isnan(loss.item()):
             print("A nan loss has occurred. Exiting training.")
             sys.exit(1)
 
-    return total_drmsd_loss / n_batches, total_ln_drmsd_loss / n_batches, total_mse_loss / n_batches, np.mean(training_losses)
+    metrics = update_metrics_end_of_epoch(metrics, "train", n_batches)
+
+    return metrics
 
 
-def eval_epoch(model, validation_data, device, opt, mode="Val"):
+def eval_epoch(model, validation_data, device, opt, metrics, mode="valid"):
     """ Epoch operation in evaluation phase. """
 
     model.eval()
-
-    total_drmsd_loss = 0
-    total_ln_drmsd_loss = 0
-    total_mse_loss = 0
-    total_rmsd_loss = 0
-    total_combined_loss = 0
+    metrics = reset_metrics_for_epoch(metrics, mode)
     n_batches = 0.0
-    if not opt.cluster:
-        pbar = tqdm(validation_data, mininterval=2, leave=False)
-    else:
-        pbar = validation_data
+    pbar = tqdm(validation_data, mininterval=2, leave=False) if not opt.cluster else validation_data
 
     with torch.no_grad():
         for batch in pbar:
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-            # We don't provide the entire output seq to the model because it will be given t-1 and should predict t
             pred = model.predict(src_seq, src_pos_enc)
-            d_loss, d_loss_normalized, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device,
-                                                                       return_rmsd=True)
+            d_loss, ln_d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
-            c_loss = combine_drmsd_mse(d_loss_normalized, m_loss)
-            total_drmsd_loss += d_loss.item()
-            total_ln_drmsd_loss += d_loss_normalized.item()
-            total_mse_loss += m_loss.item()
-            total_rmsd_loss += r_loss
-            total_combined_loss += c_loss.item()
+            c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
+            metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, r_loss, batch_level=False)
+
             n_batches += 1
             print_status("eval_epoch", opt, (pbar, d_loss, mode, m_loss, c_loss))
 
-    return (x / n_batches for x in [total_drmsd_loss, total_ln_drmsd_loss, total_mse_loss, total_rmsd_loss,
-                                    total_combined_loss])
+    metrics = update_metrics_end_of_epoch(metrics, mode, n_batches)
+    return metrics
 
 
-def train(model, training_data, validation_data, test_data, optimizer, device, opt, log_writer):
+def train(model, metrics, training_data, validation_data, test_data, optimizer, device, opt, log_writer):
     """ Start training. """
 
-    valid_drmsd_losses = []
-    valid_combined_losses = []
-    train_combined_losses = []
-    train_drmsd_losses = []
-    epoch_last_improved = -1
-    best_valid_loss_so_far = np.inf
-    for epoch_i in range(opt.epochs):
-        display_epoch = epoch_i + START_EPOCH
-        print(f'[ Epoch {display_epoch} ]')
+    for epoch_i in range(START_EPOCH, opt.epochs):
+        print(f'[ Epoch {epoch_i} ]')
 
+        # Train epoch
         start = time.time()
-        train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss, train_comb_loss = train_epoch(model, training_data, optimizer, device, opt, log_writer)
+        metrics = train_epoch(model, training_data, optimizer, device, opt, log_writer, metrics)
         if opt.eval_train:
-            train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss = eval_epoch(model,
-                                                                                            training_data, device, opt,
-                                                                                            mode="Train")
-        else:
-            # train_comb_loss, train_rmsd_loss = 111, 111
-            train_rmsd_loss = 111
-        train_combined_losses.append(train_comb_loss)
-        train_drmsd_losses.append(train_drmsd_loss)
-        cur_lr = optimizer.cur_lr if opt.lr_scheduling else 0
-        print_status("train_train", opt, (cur_lr, train_drmsd_loss, train_mse_loss, start, train_rmsd_loss,
-                                          train_comb_loss))
+           metrics = eval_epoch(model, training_data, device, opt, metrics, mode="train")
+        print_status("train_train", opt, (start, metrics))
 
+        # Valid epoch
         if not opt.train_only:
             start = time.time()
-            val_drmsd_loss, val_ln_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss = eval_epoch(model,
-                                                                                                       validation_data,
-                                                                                                       device,
-                                                                                                       opt)
-            print_status("train_val", opt, (val_drmsd_loss,val_mse_loss,start,val_rmsd_loss,val_comb_loss))
-            log_batch(log_writer, val_drmsd_loss, val_ln_drmsd_loss, val_mse_loss, val_rmsd_loss, val_comb_loss, cur_lr,
-                      is_val=True, end_of_epoch=True)
-            valid_drmsd_losses.append(val_drmsd_loss)
-            valid_combined_losses.append(val_comb_loss)
+            metrics = eval_epoch(model, validation_data, device, opt, metrics)
+            print_status("train_val", opt, (start, metrics))
+            log_batch(log_writer, metrics, mode="valid", end_of_epoch=True)
 
-        log_batch(log_writer, train_drmsd_loss, train_ln_drmsd_loss, train_mse_loss, train_rmsd_loss, train_comb_loss,
-                  cur_lr, is_val=False, end_of_epoch=True)
-
-        if opt.combined_loss and not opt.train_only:
-            loss_to_compare = val_comb_loss
-            losses_to_compare = valid_combined_losses
-        elif opt.combined_loss and opt.train_only:
-            loss_to_compare = train_comb_loss
-            losses_to_compare = train_combined_losses
-        elif not opt.combined_loss and not opt.train_only:
-            loss_to_compare = val_drmsd_loss
-            losses_to_compare = valid_drmsd_losses
-        elif not opt.combined_loss and opt.train_only:
-            loss_to_compare = train_drmsd_loss
-            losses_to_compare = train_drmsd_losses
-
-        if loss_to_compare < best_valid_loss_so_far:
-            best_valid_loss_so_far = loss_to_compare
-            epoch_last_improved = epoch_i
-        elif opt.early_stopping and epoch_i - epoch_last_improved > opt.early_stopping:
-            # Model hasn't improved in X epochs
-            print("No improvement for {} epochs. Stopping model training early.".format(opt.early_stopping))
+        # Checkpointing
+        log_batch(log_writer, metrics, mode="train", end_of_epoch=True)
+        try:
+            metrics = update_loss_trackers(opt, epoch_i, metrics)
+        except EarlyStoppingCondition:
             break
-        save_model(opt, optimizer, model, loss_to_compare, losses_to_compare, display_epoch)
+        checkpoint_model(opt, optimizer, model, metrics, epoch_i)
 
+    # Test Epoch
     if not opt.train_only:
-        # Evaluate model on test set
-        t = time.time()
-        test_drmsd_loss, test_ln_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss = eval_epoch(model,
-                                                                                                        test_data,
-                                                                                                        device, opt,
-                                                                                                        mode="Test")
-        print_status("train_test", opt, (test_drmsd_loss, test_mse_loss, t, test_comb_loss, test_rmsd_loss))
-        log_batch(log_writer, test_drmsd_loss, test_ln_drmsd_loss, test_mse_loss, test_rmsd_loss, test_comb_loss,
-                  cur_lr, is_val=True, end_of_epoch=True)
+        metrics = eval_epoch(model, test_data, device, opt, metrics, mode="test")
+        print_status("train_test", opt, (time.time(), metrics))
+        log_batch(log_writer, metrics, mode="test", end_of_epoch=True)
 
 
-def save_model(opt, optimizer, model, valid_loss, valid_losses, epoch_i):
+def checkpoint_model(opt, optimizer, model, metrics, epoch_i):
     """ Records model state according to a checkpointing policy. Defaults to best validation set performance. """
     did_save = False
-    if opt.save_mode == 'all' or len(valid_losses) == 1 or valid_loss < min(valid_losses[:-1]):
+    cur_loss, loss_history = metrics["loss_to_compare"], metrics["losses_to_compare"]
+    if opt.save_mode == 'all' or len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
         model_state_dict = model.state_dict()
         checkpoint = {
             'model_state_dict': model_state_dict,
             'settings': opt,
             'epoch': epoch_i,
             'optimizer_state_dict': optimizer.state_dict(),
-            'loss': valid_loss}
+            'loss': cur_loss,
+            'metrics': metrics,
+            'elapsed_time':time.time() - START_TIME}
         did_save = True
     if opt.save_mode == 'all':
-        chkpt_file_name = opt.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, valid_loss)
+        chkpt_file_name = opt.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, cur_loss)
         torch.save(checkpoint, chkpt_file_name)
-    if len(valid_losses) == 1 or valid_loss < min(valid_losses[:-1]):
+        print('\r    - [Info] The checkpoint file has been updated.')
+    elif len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
         chkpt_file_name = opt.chkpt_path + "_best.chkpt"
         torch.save(checkpoint, chkpt_file_name)
         print('\r    - [Info] The checkpoint file has been updated.')
@@ -221,11 +157,14 @@ def load_model(model, optimizer, args):
         model training if the user has not specified otherwise. Assumes model
         was saved the 'best' mode. """
     global START_EPOCH
+    global START_TIME
     chkpt_file_name = args.chkpt_path + "_best.chkpt"
+
+    # Try to load the model checkpoint, if it exists
     if os.path.exists(chkpt_file_name) and not args.restart:
         print(f"[Info] Attempting to load model from {chkpt_file_name}.")
     else:
-        return model, optimizer, False
+        return model, optimizer, False, init_metrics(args)
     checkpoint = torch.load(chkpt_file_name)
     try:
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -233,31 +172,41 @@ def load_model(model, optimizer, args):
         print("[Info] Error loading model.")
         print(e)
         exit(1)
+
+    # Load the optimizer state by default
     if not args.restart_opt:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
     START_EPOCH = checkpoint['epoch'] + 1
+    START_TIME -= checkpoint['elapsed_time']
     print(f"[Info] Resuming model training from end of Epoch {checkpoint['epoch']}. Previous validation loss"
           f" = {checkpoint['loss']:.4f}.")
-    return model, optimizer, True
+    return model, optimizer, True, checkpoint['metrics']
 
 
-def log_batch(log_writer, drmsd, ln_drmsd, mse, rmsd, combined, cur_lr, is_val=False, end_of_epoch=False,
-              t=time.time()):
+def log_batch(log_writer, metrics, mode="valid", end_of_epoch=False, t=None):
     """ Logs training info to a predetermined log. """
-    log_writer.writerow([drmsd, ln_drmsd, np.sqrt(mse), rmsd, combined, cur_lr, is_val, end_of_epoch, t])
-
-
-def prepare_log_header(opt):
-    """ Returns the column ordering for the logfile. """
-    if opt.combined_loss:
-        return 'drmsd,ln_drmsd,rmse,rmsd,combined,lr,is_val,is_end_of_epoch,time\n'
+    if not t:
+        t = time.time()
+    m = metrics[mode]
+    if end_of_epoch:
+        log_writer.writerow([m["epoch-drmsd"], m["epoch-ln-drmsd"], np.sqrt(m["epoch-mse"]),
+                             m["epoch-rmsd"], m["epoch-combined"], metrics["history-lr"][-1],
+                             mode, "epoch", round(t-START_TIME, 4)])
     else:
-        return 'drmsd,ln_drmsd,rmse,rmsd,lr,is_val,is_end_of_epoch,time\n'
+        log_writer.writerow([m["batch-drmsd"], m["batch-ln-drmsd"], np.sqrt(m["batch-mse"]),
+                             m["batch-rmsd"], m["batch-combined"], metrics["history-lr"][-1],
+                             mode, "batch", round(t-START_TIME, 4)])
 
 
 def main():
     """ Main function """
     global LOGFILEHEADER
+    global START_EPOCH
+    global START_TIME
+    START_EPOCH = 0
+    START_TIME = time.time()
+
     torch.set_printoptions(precision=5, sci_mode=False)
     parser = argparse.ArgumentParser()
 
@@ -338,9 +287,7 @@ def main():
     training_data, validation_data, test_data = prepare_dataloaders(data, args)
 
     # ========= Preparing Model ========= #
-
     device = torch.device('cuda' if args.cuda else 'cpu')
-
     model = Transformer(args,
                         d_k=args.d_k,
                         d_v=args.d_v,
@@ -361,12 +308,11 @@ def main():
         optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
 
     # ========= Preparing Log and Checkpoint Files ========= #
-
     args.chkpt_path = "./data/checkpoints/" + args.name
     os.makedirs("./data/checkpoints", exist_ok=True)
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
-    model, optimizer, resumed = load_model(model, optimizer, args)
+    model, optimizer, resumed, metrics = load_model(model, optimizer, args)
     if resumed:
         log_f = open(args.log_file, 'a', buffering=args.buffering_mode)
     else:
@@ -374,7 +320,7 @@ def main():
         log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
 
-    train(model, training_data, validation_data, test_data, optimizer, device, args, log_writer)
+    train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer)
     log_f.close()
 
 
