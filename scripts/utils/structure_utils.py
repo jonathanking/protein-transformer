@@ -316,7 +316,7 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
     bond angles along the peptide backbone, since they account for significant variation.
     i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, ... chi12], [...] ...]
     """
-    chain = chain.select("protein and not hetero and not hetatm") # TODO should hetatms be included or excluded?
+    chain = chain.select("protein and not hetero")
     if chain is None or chain.nonstdaa:
         raise NonStandardAminoAcidError
     chain = chain.copy()
