@@ -27,7 +27,10 @@ def get_df_from_file(f):
 
 def smooth(ys):
     """ Uses Savgol filter method to produce a smoothed version of ys. """
-    smooth_size = min(len(ys) // 7, 301)
+    size = len(ys) // 7
+    if size % 2 == 0:
+        size += 1
+    smooth_size = min(size, 301)
     smoothed = savgol_filter(ys, smooth_size, 2)
     return smoothed
 
@@ -65,8 +68,8 @@ def plot(dftrain, dfval, metric, title, outpath, smoothing=False, skip=None, inc
 def main():
     # Setup
     df = get_df_from_file(args.train_file)
-    dftrain = df[df["is_val"] != True]
-    dfval = df[df["is_val"] & df["is_end_of_epoch"]]
+    dftrain = df[df["mode"].str.match("valid")]
+    dfval = df[df["mode"].str.match("valid") & df["granularity"].str.match("epoch")]
     model_name = get_model_name(args.train_file)
     today = date.today().strftime("%y%m%d")
     outpath = f"research/analysis/{today}/{model_name}/"
