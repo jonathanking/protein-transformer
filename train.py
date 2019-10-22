@@ -239,6 +239,7 @@ def main():
     parser.add_argument("--skip_missing_res_train", action="store_true",
                         help="When training, skip over batches that have missing residues. This can make training"
                              "faster if using teacher forcing.")
+    parser.add_argument("--repeat_train", type=int, default=1, help="Duplicate the training set X times.")
 
     # Model parameters
     parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
@@ -325,9 +326,9 @@ def prepare_dataloaders(data, args):
     collate = paired_collate_fn
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
-            seqs=data['train']['seq'],
-            crds=data['train']['crd'],
-            angs=data['train']['ang'],
+            seqs=data['train']['seq']*args.repeat_train,
+            crds=data['train']['crd']*args.repeat_train,
+            angs=data['train']['ang']*args.repeat_train,
             ),
         num_workers=2,
         batch_size=args.batch_size,

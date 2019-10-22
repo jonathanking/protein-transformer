@@ -26,8 +26,7 @@ def print_status(mode, args, items):
         else:
             loss = metrics["train"]["batch-ln-drmsd"]
         lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling else ""
-        num_resides = (src_seq != 0).any(dim=-1).sum()
-        speed = round(num_resides.item()/(time.time()-batch_time), 2)
+        speed = metrics["train"]["speed"]
 
         if not args.cluster and len(training_losses) > 32:
             pbar.set_description('\r  - (Train) drmsd = {0:.6f}, ln-drmsd = {lnd:0.6f}, rmse = {3:.6f}, 32avg = {1:.6f}'
