@@ -71,7 +71,7 @@ def print_status(mode, args, items):
                                                                             lr_precision="5.2e"
                                                                             if (cur_lr < .001 and cur_lr != 0) else
                                                                             "5.3f",
-                                                                            speed = np.mean(metrics["train"]["speed-history"])))
+                                                                            speed = round(np.mean(metrics["train"]["speed-history"]), 2)))
     elif mode == "train_val":
         start, metrics = items
         val_drmsd_loss = metrics["valid"]["epoch-drmsd"]

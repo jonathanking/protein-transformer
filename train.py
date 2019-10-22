@@ -325,9 +325,9 @@ def prepare_dataloaders(data, args):
     collate = paired_collate_fn
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
-            seqs=data['train']['seq'][:5],
-            crds=data['train']['crd'][:5],
-            angs=data['train']['ang'][:5],
+            seqs=data['train']['seq'],
+            crds=data['train']['crd'],
+            angs=data['train']['ang'],
             ),
         num_workers=2,
         batch_size=args.batch_size,
