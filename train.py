@@ -50,13 +50,13 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         optimizer.step()
 
         # record performance metrics
-        metrics["train"]["batch-history"].append(float(loss))
-        metrics = update_metrics(metrics, "train", d_loss, d_loss_normalized, m_loss, c_loss, batch_level=True)
+        metrics = update_metrics(metrics, "train", d_loss, d_loss_normalized, m_loss, c_loss, src_seq,
+                                 tracking_loss=loss, batch_level=True)
 
         n_batches += 1
         if args.lr_scheduling:
             metrics["history-lr"].append(optimizer.cur_lr)
-        print_status("train_epoch", args, (pbar, metrics))
+        print_status("train_epoch", args, (pbar, metrics, src_seq))
         log_batch(log_writer, metrics, mode="train", end_of_epoch=False)
         if np.isnan(loss.item()):
             print("A nan loss has occurred. Exiting training.")
@@ -81,7 +81,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
             d_loss, ln_d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
-            metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, r_loss, batch_level=False)
+            metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
 
             n_batches += 1
             print_status("eval_epoch", args, (pbar, d_loss, mode, m_loss, c_loss))
@@ -190,11 +190,11 @@ def log_batch(log_writer, metrics, mode="valid", end_of_epoch=False, t=None):
     if end_of_epoch:
         log_writer.writerow([m["epoch-drmsd"], m["epoch-ln-drmsd"], np.sqrt(m["epoch-mse"]),
                              m["epoch-rmsd"], m["epoch-combined"], metrics["history-lr"][-1],
-                             mode, "epoch", round(t-START_TIME, 4)])
+                             mode, "epoch", round(t-START_TIME, 4), m["speed"]])
     else:
         log_writer.writerow([m["batch-drmsd"], m["batch-ln-drmsd"], np.sqrt(m["batch-mse"]),
                              m["batch-rmsd"], m["batch-combined"], metrics["history-lr"][-1],
-                             mode, "batch", round(t-START_TIME, 4)])
+                             mode, "batch", round(t-START_TIME, 4), m["speed"]])
 
 
 def main():
@@ -325,9 +325,9 @@ def prepare_dataloaders(data, args):
     collate = paired_collate_fn
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
-            seqs=data['train']['seq'],
-            crds=data['train']['crd'],
-            angs=data['train']['ang'],
+            seqs=data['train']['seq'][:5],
+            crds=data['train']['crd'][:5],
+            angs=data['train']['ang'][:5],
             ),
         num_workers=2,
         batch_size=args.batch_size,
