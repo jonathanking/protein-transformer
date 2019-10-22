@@ -14,6 +14,7 @@ from dataset import paired_collate_fn, ProteinDataset
 from losses import drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from models.transformer.Models import Transformer, MISSING_CHAR
 from models.transformer.Optim import ScheduledOptim
+from models.nmt_models import EncoderOnlyTransformer
 from train_utils import print_status, EarlyStoppingCondition, update_loss_trackers, init_metrics, \
     update_metrics_end_of_epoch, update_metrics, reset_metrics_for_epoch, prepare_log_header
 
@@ -33,11 +34,11 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         tgt_ang_no_nan = tgt_ang.clone().detach()
         tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
         # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
-        pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:,:-1], tgt_pos_enc[:,:-1],
-                     has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
-        d_loss, d_loss_normalized = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device)
+        pred = model(src_seq.argmax(dim=-1))
+        d_loss, d_loss_normalized = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
         d_loss, d_loss_normalized = d_loss.to('cpu'), d_loss_normalized.to('cpu')
-        m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
+        # d_loss, d_loss_normalized = torch.tensor(0), torch.tensor(0)
+        m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
         c_loss = combine_drmsd_mse(d_loss_normalized, m_loss, w=0.5)
         loss = c_loss if args.combined_loss else d_loss_normalized
         loss.backward()
@@ -61,7 +62,6 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         if np.isnan(loss.item()):
             print("A nan loss has occurred. Exiting training.")
             sys.exit(1)
-
     metrics = update_metrics_end_of_epoch(metrics, "train", n_batches)
 
     return metrics
@@ -77,9 +77,9 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
     with torch.no_grad():
         for batch in pbar:
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-            pred = model.predict(src_seq, src_pos_enc)
-            d_loss, ln_d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device, return_rmsd=True)
-            m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
+            pred = model.predict(src_seq.argmax(dim=-1))
+            d_loss, ln_d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
+            m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
             metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
 
@@ -284,16 +284,12 @@ def main():
 
     # ========= Preparing Model ========= #
     device = torch.device('cuda' if args.cuda else 'cpu')
-    model = Transformer(args,
-                        d_k=args.d_k,
-                        d_v=args.d_v,
-                        d_model=args.d_model,
-                        d_inner=args.d_inner_hid,
-                        n_layers=args.n_layers,
-                        n_head=args.n_head,
-                        dropout=args.dropout,
-                        complete_tf=args.fraction_complete_tf,
-                        subseq_tf=args.fraction_subseq_tf).to(device)
+    model = EncoderOnlyTransformer(nlayers=args.n_layers,
+                                   nhead=args.n_head,
+                                   dmodel=args.d_model,
+                                   dff=args.d_inner_hid,
+                                   max_seq_len=500,
+                                   dropout=args.dropout).to(device)
 
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
