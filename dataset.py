@@ -65,7 +65,7 @@ def collate_fn(insts, pad_dim, coords=False):
 
 
 class ProteinDataset(torch.utils.data.Dataset):
-    def __init__(self, seqs=None, angs=None, crds=None):
+    def __init__(self, seqs=None, angs=None, crds=None, add_start_character_to_input=False):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
@@ -73,9 +73,14 @@ class ProteinDataset(torch.utils.data.Dataset):
         # We must add "start of sentence" characters to the sequences that are fed to the Transformer.
         # This enables us to input time t and expect the model to predict time t+1.
         # Coordinates do not need this requirement since they are not directly input to the transformer.
-        self._seqs = [add_start_char(s) for s in seqs]
-        self._angs = [add_start_char(a) for a in angs]
-        self._crds = crds
+        if add_start_character_to_input:
+            self._seqs = [add_start_char(s) for s in seqs]
+            self._angs = [add_start_char(a) for a in angs]
+            self._crds = crds
+        else:
+            self._seqs = seqs
+            self._angs = angs
+            self._crds = crds
 
     @property
     def n_insts(self):
