@@ -292,7 +292,10 @@ def main():
     log_writer = csv.writer(log_f)
     wandb.watch(model, "all")
     wandb.config.update(args)
-    wandb.config.update({"data_creation_date": data["date"]})
+    if type(data["date"]) == set:
+        wandb.config.update({"data_creation_date": next(iter(data["date"]))})
+    else:
+        wandb.config.update({"data_creation_date": data["date"]})
     print(args, "\n")
 
     # ========= Train ========= #
