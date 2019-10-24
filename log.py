@@ -128,6 +128,7 @@ def update_loss_trackers(args, epoch_i, metrics):
 
     return metrics
 
+
 def log_batch(log_writer, metrics, start_time,  mode="valid", end_of_epoch=False, t=None):
     """ Logs training info to an already instantiated CSV-writer log. """
     if not t:
@@ -150,7 +151,6 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     """
     metrics = update_metrics(metrics, "train", d_loss, ln_d_loss, m_loss, c_loss, src_seq,
                              tracking_loss=loss, batch_level=True)
-    log_batch(log_writer, metrics, start_time, mode="train", end_of_epoch=False)
     wandb.log({"Train RMSE": np.sqrt(m_loss.item()),
                "Train DRMSD": d_loss,
                "Train ln-DRMSD": ln_d_loss,
@@ -159,12 +159,12 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     if args.lr_scheduling:
         metrics["history-lr"].append(optimizer.cur_lr)
         wandb.log({"Learning Rate": optimizer.cur_lr})
+    log_batch(log_writer, metrics, start_time, mode="train", end_of_epoch=False)
     print_status("train_epoch", args, (pbar, metrics, src_seq))
     # Check for NaNs
     if np.isnan(loss.item()):
         print("A nan loss has occurred. Exiting training.")
         sys.exit(1)
-
 
 
 def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):
@@ -180,7 +180,6 @@ def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
                f"{mode.title()} Combined Loss": c_loss,
                f"{mode.title()} Speed": metrics[mode]["speed"]})
     print_status("eval_epoch", args, (pbar, d_loss, mode, m_loss, c_loss))
-
 
 
 def init_metrics(args):

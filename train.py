@@ -34,11 +34,11 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
         # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
         pred = model(src_seq.argmax(dim=-1))
-        d_loss, d_loss_normalized = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
-        d_loss, d_loss_normalized = d_loss.to('cpu'), d_loss_normalized.to('cpu')
+        d_loss, ln_d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
+        d_loss, ln_d_loss = d_loss.to('cpu'), ln_d_loss.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
-        c_loss = combine_drmsd_mse(d_loss_normalized, m_loss, w=0.5)
-        loss = c_loss if args.combined_loss else d_loss_normalized
+        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=0.5)
+        loss = c_loss if args.combined_loss else ln_d_loss
         loss.backward()
 
         # Clip gradients
