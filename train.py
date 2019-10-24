@@ -9,7 +9,7 @@ import torch.optim as optim
 import torch.utils.data
 from tqdm import tqdm
 
-from dataset import paired_collate_fn, ProteinDataset
+from dataset import prepare_dataloaders
 from losses import drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from models.transformer.Models import Transformer, MISSING_CHAR
 from models.transformer.Optim import ScheduledOptim
@@ -299,47 +299,11 @@ def main():
     log_writer = csv.writer(log_f)
     wandb.watch(model, "all")
     wandb.config.update(args)
-    wandb.config.update({"data_created": next(iter(data["date"]))})
+    wandb.config.update({"data_created": data["date"]})
+
+    # ========= Train ========= #
     train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer)
     log_f.close()
-
-
-def prepare_dataloaders(data, args):
-    """ data is a dictionary containing all necessary training data."""
-
-    collate = paired_collate_fn
-    train_loader = torch.utils.data.DataLoader(
-        ProteinDataset(
-            seqs=data['train']['seq']*args.repeat_train,
-            crds=data['train']['crd']*args.repeat_train,
-            angs=data['train']['ang']*args.repeat_train,
-            ),
-        num_workers=2,
-        batch_size=args.batch_size,
-        collate_fn=collate,
-        shuffle=True)
-
-    # TODO: load one or multiple validation sets
-    valid_loader = torch.utils.data.DataLoader(
-        ProteinDataset(
-            seqs=data['valid'][70]['seq'],
-            crds=data['valid'][70]['crd'],
-            angs=data['valid'][70]['ang'],
-            ),
-        num_workers=2,
-        batch_size=args.batch_size,
-        collate_fn=collate)
-
-    test_loader = torch.utils.data.DataLoader(
-        ProteinDataset(
-            seqs=data['test']['seq'],
-            crds=data['test']['crd'],
-            angs=data['test']['ang'],
-            ),
-        num_workers=2,
-        batch_size=args.batch_size,
-        collate_fn=collate)
-    return train_loader, valid_loader, test_loader
 
 
 if __name__ == '__main__':
