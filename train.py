@@ -16,7 +16,7 @@ from models.transformer.Optim import ScheduledOptim
 from log import *
 from models.nmt_models import EncoderOnlyTransformer
 
-wandb.init(project="protein-transformer")
+wandb.init(project="protein-transformer", entity="koes-group")
 
 def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):
     """ Epoch operation in training phase"""
@@ -25,7 +25,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     n_batches = 0.0
     pbar = tqdm(training_data, mininterval=2, leave=False) if not args.cluster else training_data
 
-    for batch in pbar:
+    for step, batch in enumerate(pbar):
         optimizer.zero_grad()
         src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
         if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
@@ -34,7 +34,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
         # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
         pred = model(src_seq.argmax(dim=-1))
-        d_loss, ln_d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
+        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
         d_loss, ln_d_loss = d_loss.to('cpu'), ln_d_loss.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=0.5)
@@ -50,7 +50,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
 
         # record performance metrics
         do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer,
-                               pbar, START_TIME)
+                               pbar, START_TIME, pred_coords, tgt_crds[-1], step)
         n_batches += 1
 
     metrics = update_metrics_end_of_epoch(metrics, "train", n_batches)
@@ -69,7 +69,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
         for batch in pbar:
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
             pred = model.predict(src_seq.argmax(dim=-1))
-            d_loss, ln_d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
+            pred_coords, d_loss, ln_d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
             do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode)
@@ -236,7 +236,8 @@ def main():
                         "original figure for the Transformer model. May not train as well as pre-layer normalization.")
 
     # Saving args
-    parser.add_argument('--log', default=None, nargs=1)
+    parser.add_argument('--log_structure_step', type=int, default=10)
+    parser.add_argument('--log_wandb_step', type=int, default=1)
     parser.add_argument('--save_mode', type=str, choices=['all', 'best'], default='best')
     parser.add_argument('--no_cuda', action='store_true')
     parser.add_argument('--cluster', action='store_true', help="Set of parameters to facilitate training on a remote" +
@@ -253,11 +254,6 @@ def main():
     if args.save_mode == "all" and not args.restart:
         print("You cannot resume this model because it was saved with mode 'all'.")
         exit(1)
-    if not args.log:
-        args.log_file = "./data/logs/" + args.name + '.train'
-    else:
-        args.log_file = "./data/logs/" + args.log + '.train'
-    print(args, "\n")
 
     # ========= Loading Dataset ========= #
     data = torch.load(args.data)
@@ -284,6 +280,7 @@ def main():
     # ========= Preparing Log and Checkpoint Files ========= #
     args.chkpt_path = "./data/checkpoints/" + args.name
     os.makedirs("./data/checkpoints", exist_ok=True)
+    args.log_file = "./data/logs/" + args.name + '.train'
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
     model, optimizer, resumed, metrics = load_model(model, optimizer, args)
@@ -295,7 +292,8 @@ def main():
     log_writer = csv.writer(log_f)
     wandb.watch(model, "all")
     wandb.config.update(args)
-    wandb.config.update({"data_created": data["date"]})
+    wandb.config.update({"data_creation_date": data["date"]})
+    print(args, "\n")
 
     # ========= Train ========= #
     train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer)

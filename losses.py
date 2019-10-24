@@ -14,7 +14,6 @@ def combine_drmsd_mse(d, mse, w=.5):
     d_norm, m_norm = 0.01, 0.3
     d = w * (d / d_norm)
     mse = (1 - w) * (mse / m_norm)
-    #print(f"mse: {mse:.5f}, d: {d:.5f}")
     return d + mse
 
 
@@ -101,9 +100,9 @@ def drmsd_loss_from_coords(pred_angs, gold_coords, input_seqs, device, return_rm
         if return_rmsd:
             rmsds.append(rmsd(pred_subset.data.numpy(), gold_subset.data.numpy()))
     if return_rmsd:
-        return torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses)), np.mean(rmsds)
+        return pred_coords, torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses)), np.mean(rmsds)
     else:
-        return torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses))
+        return pred_coords, torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses))
 
 
 def mse_over_angles(pred, true):
