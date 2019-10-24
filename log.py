@@ -151,19 +151,20 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     Updates custom metrics dictionary and wandb logs. Prints status of training.
     Also checks for NaN losses.
     """
-    do_log_str = not step or args.log_structure_step % step == 0
+    do_log_str = not step or step % args.log_structure_step == 0
+    do_log_lr  = args.lr_scheduling and (not step or args.log_wandb_step % step == 0)
 
     metrics = update_metrics(metrics, "train", d_loss, ln_d_loss, m_loss, c_loss, src_seq,
                              tracking_loss=loss, batch_level=True)
-    if not step or args.log_wandb_step % step == 0:
+    if not step or step % args.log_wandb_step == 0:
         wandb.log({"Train RMSE": np.sqrt(m_loss.item()),
                    "Train DRMSD": d_loss,
                    "Train ln-DRMSD": ln_d_loss,
                    "Train Combined Loss": c_loss,
-                   "Train Speed": metrics["train"]["speed"]}, commit=(not args.lr_scheduling and not do_log_str))
+                   "Train Speed": metrics["train"]["speed"]}, commit=not do_log_lr and not do_log_str)
     if args.lr_scheduling:
         metrics["history-lr"].append(optimizer.cur_lr)
-        if not step or args.log_wandb_step % step == 0:
+        if not step or step % args.log_wandb_step  == 0:
             wandb.log({"Learning Rate": optimizer.cur_lr}, commit=not do_log_str)
     log_batch(log_writer, metrics, start_time, mode="train", end_of_epoch=False)
     print_status("train_epoch", args, (pbar, metrics, src_seq))
@@ -179,7 +180,7 @@ def log_structure(pred_coords, gold_item):
     gold_item_non_nan = torch.isnan(gold_item).eq(0)
     bb_mask = np.asarray([[1, 1, 1] + [0] * 10] * (pred_coords.shape[0] // 13), dtype=np.bool)
     wandb.log({"backbone_cloud": wandb.Object3D(
-        pred_coords[bb_mask.flatten() & gold_item_non_nan.cpu().detach().numpy().all(axis=1)].detach().numpy())},
+        pred_coords[bb_mask.flatten() & gold_item_non_nan[:bb_mask.shape[0]].cpu().detach().numpy().all(axis=1)].detach().numpy())},
         commit=False)
     wandb.log({"structure_cloud": wandb.Object3D(pred_coords[gold_item_non_nan].reshape(-1,3).detach().numpy())})
 
