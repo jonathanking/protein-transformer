@@ -1,6 +1,7 @@
 data/*.pkl
 data/*.torch
 data/*.pt
+data/proteinnet/*.pt
 checkpoints/*
 logs/*
 data/prev/coords/*
