@@ -19,8 +19,7 @@ from dataset import ProteinDataset, paired_collate_fn, paired_collate_fn_with_le
 from protein.Structure import generate_coords_with_tuples
 from losses import inverse_trig_transform, copy_padding_from_gold, drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from protein.Sidechains import SC_DATA
-from models.rnn import MyRNN
-from proteinnet2pytorch import get_chain_from_proteinnetid
+from scripts.proteinnet2pytorch import get_chain_from_proteinnetid
 
 VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
 
@@ -35,26 +34,15 @@ def load_model(args):
     if args.data is None:
         args.data = model_args.data
 
-    try:
-        if model_args.rnn is None:
-            model_args.rnn = False
-            args.rnn = False
-    except AttributeError:
-        model_args.rnn = False
-        args.rnn = False
+    the_model = models.transformer.Models.Transformer(model_args,
+                                                      d_k=model_args.d_k,
+                                                      d_v=model_args.d_v,
+                                                      d_model=model_args.d_model,
+                                                      d_inner=model_args.d_inner_hid,
+                                                      n_layers=model_args.n_layers,
+                                                      n_head=model_args.n_head,
+                                                      dropout=model_args.dropout)
 
-    if not args.rnn:
-        the_model = models.transformer.Models.Transformer(model_args,
-                                                          d_k=model_args.d_k,
-                                                          d_v=model_args.d_v,
-                                                          d_model=model_args.d_model,
-                                                          d_inner=model_args.d_inner_hid,
-                                                          n_layers=model_args.n_layers,
-                                                          n_head=model_args.n_head,
-                                                          dropout=model_args.dropout)
-    else:
-        latent_dim, n_layers, bidi = model_args.d_model, model_args.n_layers, True
-        the_model = MyRNN(model_args, latent_dim, num_layers=n_layers, bidirectional=bidi, device=device)
     the_model.load_state_dict(model_state)
     return args, the_model
 
@@ -64,10 +52,9 @@ def get_data_loader(args, data_subset, n):
         this function selects n items at random from that dataset to predict. It then returns a DataLoader for those
         items, along with a list of ids.
         """
-    if not args.rnn:
-        collate = paired_collate_fn
-    else:
-        collate = paired_collate_fn_with_len
+
+    collate = paired_collate_fn
+
     if n is 0:
         train_loader = torch.utils.data.DataLoader(
             ProteinDataset(
@@ -123,17 +110,13 @@ def make_predictions(args, the_model, data_loader, pdb_ids, build_true=False):
     with torch.no_grad():
         for pdb_id, batch in zip(pdb_ids, tqdm(data_loader, mininterval=2, desc=' - (Evaluation ', leave=False)):
             # prepare data
-            if args.rnn:
-                lens, src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device),
-                                                                                               batch)
-            else:
-                src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+
+
+            src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
 
             # forward
             if args.reconstruct or build_true:
                 pred = tgt_ang
-            elif args.rnn:
-                pred = the_model(src_seq, lens)
             else:
                 tgt_ang_no_nan = tgt_ang.clone().detach()
                 tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = 0
