@@ -1,12 +1,16 @@
-""" A script to hold some utility functions for model training. """
+""" A script to hold some utility functions for model logging. """
 import numpy as np
 import time
 import wandb
+import sys
+
+
 def print_status(mode, args, items):
     """
     Handles all status printing updates for the model. Allows complex string formatting per method while shrinking
-    the number of lines of code per each training subroutine. mode is one of 'train_epoch', 'eval_epoch', 'train_train',
-    'train_val', or 'train_test'.
+    the number of lines of code per each training subroutine. mode is one of 'train_epoch', 'eval_epoch',
+    'train_train', 'train_val', or 'train_test'.
+
     'train_epoch' refers to print statements within a training epoch,
     'eval_epoch' refers to print statemetns within an evaluation epoch,
     'train_train' refers to the end of a training epoch,
@@ -99,20 +103,17 @@ def print_status(mode, args, items):
 
 def update_loss_trackers(args, epoch_i, metrics):
     """ Updates the current loss to compare according to an early stopping policy."""
+    if args.train_only:
+        mode = "train"
+    else:
+        mode = "valid"
+    if args.combined_loss:
+        loss_str = "combined"
+    else:
+        loss_str = "drmsd"
 
-    loss_to_compare, losses_to_compare = None, None
-    if args.combined_loss and not args.train_only:
-        loss_to_compare = metrics["valid"]["epoch-combined"]
-        losses_to_compare = metrics["valid"]["epoch-history-combined"]
-    elif args.combined_loss and args.train_only:
-        loss_to_compare = metrics["train"]["epoch-combined"]
-        losses_to_compare = metrics["train"]["epoch-history-combined"]
-    elif not args.combined_loss and not args.train_only:
-        loss_to_compare = metrics["valid"]["epoch-drmsd"]
-        losses_to_compare = metrics["valid"]["epoch-history-drmsd"]
-    elif not args.combined_loss and args.train_only:
-        loss_to_compare = metrics["train"]["epoch-drmsd"]
-        losses_to_compare = metrics["train"]["epoch-history-drmsd"]
+    loss_to_compare = metrics[mode][f"epoch-{loss_str}"]
+    losses_to_compare = metrics[mode][f"epoch-history-{loss_str}"]
 
     if loss_to_compare < metrics["best_valid_loss_so_far"]:
         metrics["best_valid_loss_so_far"] = loss_to_compare
@@ -127,10 +128,63 @@ def update_loss_trackers(args, epoch_i, metrics):
 
     return metrics
 
+def log_batch(log_writer, metrics, start_time,  mode="valid", end_of_epoch=False, t=None):
+    """ Logs training info to an already instantiated CSV-writer log. """
+    if not t:
+        t = time.time()
+    m = metrics[mode]
+    if end_of_epoch:
+        be = "epoch"
+    else:
+        be = "batch"
+    log_writer.writerow([m[f"{be}-drmsd"], m[f"{be}-ln-drmsd"], np.sqrt(m[f"{be}-mse"]),
+                         m[f"{be}-rmsd"], m[f"{be}-combined"], metrics["history-lr"][-1],
+                         mode, "epoch", round(t - start_time, 4), m["speed"]])
+
+
+def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer, pbar, start_time):
+    """
+    Performs all necessary logging at the end of a batch in the training epoch.
+    Updates custom metrics dictionary and wandb logs. Prints status of training.
+    Also checks for NaN losses.
+    """
+    metrics = update_metrics(metrics, "train", d_loss, ln_d_loss, m_loss, c_loss, src_seq,
+                             tracking_loss=loss, batch_level=True)
+    log_batch(log_writer, metrics, start_time, mode="train", end_of_epoch=False)
+    wandb.log({"Train RMSE": np.sqrt(m_loss.item()),
+               "Train DRMSD": d_loss,
+               "Train ln-DRMSD": ln_d_loss,
+               "Train Combined Loss": c_loss,
+               "Train Speed": metrics["train"]["speed"]}, commit=not args.lr_scheduling)
+    if args.lr_scheduling:
+        metrics["history-lr"].append(optimizer.cur_lr)
+        wandb.log({"Learning Rate": optimizer.cur_lr})
+    print_status("train_epoch", args, (pbar, metrics, src_seq))
+    # Check for NaNs
+    if np.isnan(loss.item()):
+        print("A nan loss has occurred. Exiting training.")
+        sys.exit(1)
+
+
+
+def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):
+    """
+    Performs all necessary logging at the end of an evaluation epoch.
+    Updates custom metrics dictionary and wandb logs. Prints status of training.
+    """
+    metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
+    wandb.log({f"{mode.title()} RMSE": np.sqrt(m_loss.item()),
+               f"{mode.title()} RMSD": r_loss,
+               f"{mode.title()} DRMSD": d_loss,
+               f"{mode.title()} ln-DRMSD": ln_d_loss,
+               f"{mode.title()} Combined Loss": c_loss,
+               f"{mode.title()} Speed": metrics[mode]["speed"]})
+    print_status("eval_epoch", args, (pbar, d_loss, mode, m_loss, c_loss))
+
+
 
 def init_metrics(args):
     """ Returns an empty metric dictionary for recording model performance. """
-    # TODO add metrics class for tracking metrics, or use ignite
     metrics = {"train": {"epoch-history-drmsd": [],
                          "epoch-history-combined": []},
                "valid": {"epoch-history-drmsd": [],
@@ -147,9 +201,10 @@ def init_metrics(args):
 
 
 def update_metrics(metrics, mode, drmsd, ln_drmsd, mse, combined, src_seq, rmsd=None, tracking_loss=None, batch_level=True):
-    """ Records relevant metrics in the metrics data structure while training.
-        If batch_level is true, this means the loss for the current batch is
-        recorded in addition to the running epoch loss.
+    """
+    Records relevant metrics in the metrics data structure while training.
+    If batch_level is true, this means the loss for the current batch is
+    recorded in addition to the running epoch loss.
     """
     # Update loss values
     if batch_level:

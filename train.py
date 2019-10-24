@@ -4,7 +4,6 @@ import os
 import sys
 import time
 
-import numpy as np
 import torch
 import torch.optim as optim
 import torch.utils.data
@@ -14,10 +13,8 @@ from dataset import paired_collate_fn, ProteinDataset
 from losses import drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
 from models.transformer.Models import Transformer, MISSING_CHAR
 from models.transformer.Optim import ScheduledOptim
-from train_utils import print_status, EarlyStoppingCondition, update_loss_trackers, init_metrics, \
-    update_metrics_end_of_epoch, update_metrics, reset_metrics_for_epoch, prepare_log_header
+from log import *
 
-import wandb
 wandb.init(project="protein-transformer")
 
 def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):
@@ -37,11 +34,11 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
         pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:,:-1], tgt_pos_enc[:,:-1],
                      has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
-        d_loss, d_loss_normalized = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device)
-        d_loss, d_loss_normalized = d_loss.to('cpu'), d_loss_normalized.to('cpu')
+        d_loss, ln_d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device)
+        d_loss, ln_d_loss = d_loss.to('cpu'), ln_d_loss.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
-        c_loss = combine_drmsd_mse(d_loss_normalized, m_loss, w=0.5)
-        loss = c_loss if args.combined_loss else d_loss_normalized
+        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=0.5)
+        loss = c_loss if args.combined_loss else ln_d_loss
         loss.backward()
 
         # Clip gradients
@@ -52,23 +49,8 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         optimizer.step()
 
         # record performance metrics
-        metrics = update_metrics(metrics, "train", d_loss, d_loss_normalized, m_loss, c_loss, src_seq,
-                                 tracking_loss=loss, batch_level=True)
-        log_batch(log_writer, metrics, mode="train", end_of_epoch=False)
-        wandb.log({"Train RMSE": np.sqrt(m_loss.item()),
-                   "Train DRMSD": d_loss,
-                   "Train ln-DRMSD":d_loss_normalized,
-                   "Train Combined Loss": c_loss,
-                   "Train Speed":metrics["train"]["speed"]}, commit=not args.lr_scheduling)
-        if args.lr_scheduling:
-            metrics["history-lr"].append(optimizer.cur_lr)
-            wandb.log({"Learning Rate": optimizer.cur_lr})
-
-        # Clean up
-        print_status("train_epoch", args, (pbar, metrics, src_seq))
-        if np.isnan(loss.item()):
-            print("A nan loss has occurred. Exiting training.")
-            sys.exit(1)
+        do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer,
+                               pbar, START_TIME)
         n_batches += 1
 
     metrics = update_metrics_end_of_epoch(metrics, "train", n_batches)
@@ -90,15 +72,8 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
             d_loss, ln_d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
-            metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
-            wandb.log({f"{mode.title()} RMSE": np.sqrt(m_loss.item()),
-                       f"{mode.title()} RMSD": r_loss,
-                       f"{mode.title()} DRMSD": d_loss,
-                       f"{mode.title()} ln-DRMSD": ln_d_loss,
-                       f"{mode.title()} Combined Loss": c_loss,
-                       f"{mode.title()} Speed": metrics[mode]["speed"]})
+            do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode)
             n_batches += 1
-            print_status("eval_epoch", args, (pbar, d_loss, mode, m_loss, c_loss))
 
     metrics = update_metrics_end_of_epoch(metrics, mode, n_batches)
     return metrics
@@ -115,14 +90,14 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
         if args.eval_train:
            metrics = eval_epoch(model, training_data, device, args, metrics, mode="train")
         print_status("train_train", args, (start, metrics))
-        log_batch(log_writer, metrics, mode="train", end_of_epoch=True)
+        log_batch(log_writer, metrics, START_TIME, mode="train", end_of_epoch=True)
 
         # Valid epoch
         if not args.train_only:
             start = time.time()
             metrics = eval_epoch(model, validation_data, device, args, metrics)
             print_status("train_val", args, (start, metrics))
-            log_batch(log_writer, metrics, mode="valid", end_of_epoch=True)
+            log_batch(log_writer, metrics, START_TIME, mode="valid", end_of_epoch=True)
 
         # Checkpointing
         try:
@@ -135,7 +110,7 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
     if not args.train_only:
         metrics = eval_epoch(model, test_data, device, args, metrics, mode="test")
         print_status("train_test", args, (time.time(), metrics))
-        log_batch(log_writer, metrics, mode="test", end_of_epoch=True)
+        log_batch(log_writer, metrics, START_TIME, mode="test", end_of_epoch=True)
 
 
 def checkpoint_model(args, optimizer, model, metrics, epoch_i):
@@ -156,17 +131,16 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
     if args.save_mode == 'all':
         chkpt_file_name = args.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, cur_loss)
         torch.save(checkpoint, chkpt_file_name)
-        print('\r    - [Info] The checkpoint file has been updated.')
         wandb.save(chkpt_file_name)
+        print('\r    - [Info] The checkpoint file has been updated.')
         wandb.run.summary["best_validation_loss"] = cur_loss
         wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
         wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
     elif len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
         chkpt_file_name = args.chkpt_path + "_best.chkpt"
         torch.save(checkpoint, chkpt_file_name)
-        print('\r    - [Info] The checkpoint file has been updated.')
         wandb.save(chkpt_file_name)
-        wandb.save(os.path.join(wandb.run.dir, args.name + "_best.chkpt"))
+        print('\r    - [Info] The checkpoint file has been updated.')
         wandb.run.summary["best_validation_loss"] = cur_loss
         wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
         wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
@@ -203,21 +177,6 @@ def load_model(model, optimizer, args):
     print(f"[Info] Resuming model training from end of Epoch {checkpoint['epoch']}. Previous validation loss"
           f" = {checkpoint['loss']:.4f}.")
     return model, optimizer, True, checkpoint['metrics']
-
-
-def log_batch(log_writer, metrics, mode="valid", end_of_epoch=False, t=None):
-    """ Logs training info to a predetermined log. """
-    if not t:
-        t = time.time()
-    m = metrics[mode]
-    if end_of_epoch:
-        log_writer.writerow([m["epoch-drmsd"], m["epoch-ln-drmsd"], np.sqrt(m["epoch-mse"]),
-                             m["epoch-rmsd"], m["epoch-combined"], metrics["history-lr"][-1],
-                             mode, "epoch", round(t-START_TIME, 4), m["speed"]])
-    else:
-        log_writer.writerow([m["batch-drmsd"], m["batch-ln-drmsd"], np.sqrt(m["batch-mse"]),
-                             m["batch-rmsd"], m["batch-combined"], metrics["history-lr"][-1],
-                             mode, "batch", round(t-START_TIME, 4), m["speed"]])
 
 
 def main():
