@@ -100,3 +100,41 @@ def add_start_char(two_dim_array, sos_char=SOS_CHAR):
     """ Add a special 'start of sentence' character to each sequence. """
     start = np.asarray([sos_char] * two_dim_array.shape[1]).reshape(1, two_dim_array.shape[1])
     return np.concatenate([start, two_dim_array])
+
+
+def prepare_dataloaders(data, args):
+    """ data is a dictionary containing all necessary training data."""
+
+    collate = paired_collate_fn
+    train_loader = torch.utils.data.DataLoader(
+        ProteinDataset(
+            seqs=data['train']['seq']*args.repeat_train,
+            crds=data['train']['crd']*args.repeat_train,
+            angs=data['train']['ang']*args.repeat_train,
+            ),
+        num_workers=2,
+        batch_size=args.batch_size,
+        collate_fn=collate,
+        shuffle=True)
+
+    # TODO: load one or multiple validation sets
+    valid_loader = torch.utils.data.DataLoader(
+        ProteinDataset(
+            seqs=data['valid'][70]['seq'],
+            crds=data['valid'][70]['crd'],
+            angs=data['valid'][70]['ang'],
+            ),
+        num_workers=2,
+        batch_size=args.batch_size,
+        collate_fn=collate)
+
+    test_loader = torch.utils.data.DataLoader(
+        ProteinDataset(
+            seqs=data['test']['seq'],
+            crds=data['test']['crd'],
+            angs=data['test']['ang'],
+            ),
+        num_workers=2,
+        batch_size=args.batch_size,
+        collate_fn=collate)
+    return train_loader, valid_loader, test_loader

@@ -1,6 +1,7 @@
 import numpy as np
 from prody import calcTransformation
 import torch
+from protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP, THREE_TO_ONE_LETTER_MAP
 
 
 class PDB_Creator(object):
@@ -12,16 +13,25 @@ class PDB_Creator(object):
         The Python format string was taken from http://cupnet.net/pdb-format/.
     """
 
-    def __init__(self, coords, mapping, atoms_per_res=13):
+    def __init__(self, coords, seq=None, mapping=None, atoms_per_res=13):
         """
         Input:
-            coords: L x N x 3 where L is the protein sequence len and N is the number of atoms/residue in the
+            coords: (L x N) x 3 where L is the protein sequence len and N is the number of atoms/residue in the
                     coordinate set (atoms_per_res).
             mapping: length L list of list of atom names per residue, i.e. (RES -> [ATOM_NAMES_FOR_RES])
         """
-        self.coords = coords.detach().numpy()
-        self.mapping = mapping
-        assert type(mapping[0][0]) == str and len(mapping[0][0]) == 3, "3 letter AA codes must be used in the mapping."
+        self.coords = coords
+        if seq and not mapping:
+            assert len(seq) == coords.shape[0] / atoms_per_res, "The sequence length must match the coordinate length and contain 1 " \
+                                                "letter AA codes." + str(coords.shape[0]) + " " + str(len(seq))
+            self.seq = seq
+            self.mapping = self._make_mapping_from_seq()
+        elif not seq and not mapping:
+            raise Exception("Please provide a seq or a mapping.")
+        elif mapping and not seq:
+            self.mapping = mapping
+            self.seq = self._get_seq_from_mapping()
+        assert type(self.mapping[0][0]) == str and len(self.mapping[0][0]) == 1, "1 letter AA codes must be used in the mapping."
         self.atoms_per_res = atoms_per_res
         self.format_str = "{:6s}{:5d} {:^4s}{:1s}{:3s} {:1s}{:4d}{:1s}   {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          " \
                           "{:>2s}{:2s}"
@@ -34,8 +44,8 @@ class PDB_Creator(object):
                          "temp_factor": 0,
                          "element_sym": "",
                          "charge": ""}
-        assert self.coords.shape[
-                   0] % self.atoms_per_res == 0, f"Coords is not divisible by {atoms_per_res}. {self.coords.shape}"
+        assert self.coords.shape[0] % self.atoms_per_res == 0, f"Coords is not divisible by {atoms_per_res}. " \
+                                                               f"{self.coords.shape}"
         self.peptide_bond_full = np.asarray([[0.519, -2.968, 1.340],  # CA
                                              [2.029, -2.951, 1.374],  # C
                                              [2.654, -2.667, 2.392],  # O
@@ -44,7 +54,7 @@ class PDB_Creator(object):
                                                [2.029, -2.951, 1.374],  # C
                                                [2.682, -3.244, 0.300]])  # next-N
 
-    def get_oxy_coords(self, ca, c, n):
+    def _get_oxy_coords(self, ca, c, n):
         """ Given atomic coordinates for an alpha carbon, carbonyl carbon, and the following nitrogen,
             this function aligns a peptide bond to those atoms and returns the coordinates of the
             corresponding oxygen.
@@ -54,7 +64,7 @@ class PDB_Creator(object):
         aligned_peptide_bond = t.apply(self.peptide_bond_full)
         return aligned_peptide_bond[2]
 
-    def coord_generator(self):
+    def _coord_generator(self):
         """ A generator that yields ATOMS_PER_RES atoms at a time from self.coords. """
         coord_idx = 0
         while coord_idx < self.coords.shape[0]:
@@ -66,7 +76,7 @@ class PDB_Creator(object):
             yield self.coords[coord_idx:coord_idx + self.atoms_per_res], next_n
             coord_idx += self.atoms_per_res
 
-    def get_line_for_atom(self, res_name, atom_name, atom_coords, missing=False):
+    def _get_line_for_atom(self, res_name, atom_name, atom_coords, missing=False):
         """ Returns the 'ATOM...' line in PDB format for the specified atom.
             If missing, this function should have special, but not yet determined, behavior. """
         if missing:
@@ -78,7 +88,7 @@ class PDB_Creator(object):
 
                                       atom_name,
                                       self.defaults["alt_loc"],
-                                      res_name,
+                                      ONE_TO_THREE_LETTER_MAP[res_name],
 
                                       self.defaults["chain_id"],
                                       self.res_nbr,
@@ -93,7 +103,7 @@ class PDB_Creator(object):
                                       atom_name[0],
                                       self.defaults["charge"])
 
-    def get_lines_for_residue(self, res_name, atom_names, coords, next_n):
+    def _get_lines_for_residue(self, res_name, atom_names, coords, next_n):
         """ Returns PDB-formated lines for all atoms in this residue. Calls get_line_for_atom. """
         residue_lines = []
         for atom_name, atom_coord in zip(atom_names, coords):
@@ -105,48 +115,56 @@ class PDB_Creator(object):
             #     missing=True))
             #     self.atom_nbr += 1
             #     continue
-            residue_lines.append(self.get_line_for_atom(res_name, atom_name, atom_coord))
+            residue_lines.append(self._get_line_for_atom(res_name, atom_name, atom_coord))
             self.atom_nbr += 1
         try:
-            oxy_coords = self.get_oxy_coords(coords[1], coords[2], next_n)
-            residue_lines.append(self.get_line_for_atom(res_name, "O", oxy_coords))
+            oxy_coords = self._get_oxy_coords(coords[1], coords[2], next_n)
+            residue_lines.append(self._get_line_for_atom(res_name, "O", oxy_coords))
             self.atom_nbr += 1
         except ValueError:
             pass
         return residue_lines
 
-    def get_lines_for_protein(self):
+    def _get_lines_for_protein(self):
         """ Returns PDB-formated lines for all residues in this protein. Calls get_lines_for_residue. """
         self.lines = []
         self.res_nbr = 1
         self.atom_nbr = 1
-        mapping_coords = zip(self.mapping, self.coord_generator())
+        mapping_coords = zip(self.mapping, self._coord_generator())
         prev_n = torch.tensor([0, 0, -1])
         for (res_name, atom_names), (res_coords, next_n) in mapping_coords:
-            self.lines.extend(self.get_lines_for_residue(res_name, atom_names, res_coords, next_n))
+            self.lines.extend(self._get_lines_for_residue(res_name, atom_names, res_coords, next_n))
             prev_n = res_coords[0]
             self.res_nbr += 1
         return self.lines
 
-    def make_header(self, title):
+    @staticmethod
+    def _make_header(title):
         """ Returns the PDB header. """
         return f"REMARK  {title}"
 
-    def make_footer(self):
+    @staticmethod
+    def _make_footer():
         """ Returns the PDB footer. """
         return "TER\nEND          \n"
 
+    def _make_mapping_from_seq(self):
+        mapping = []
+        for residue in self.seq:
+            mapping.append((residue, ATOM_MAP_13[residue]))
+        return mapping
+
     def save_pdb(self, path, title="test"):
         """ Given a file path and title, this function generates the PDB lines, then writes them to a file. """
-        self.get_lines_for_protein()
-        self.lines = [self.make_header(title)] + self.lines + [self.make_footer()]
+        self._get_lines_for_protein()
+        self.lines = [self._make_header(title)] + self.lines + [self._make_footer()]
         with open(path, "w") as outfile:
             outfile.write("\n".join(self.lines))
-        print(f"PDB written to {path}.")
+        print(f"PDB {title} written to {path}.")
 
-    def get_seq(self):
+    def _get_seq_from_mapping(self):
         """ Returns the protein sequence in 1-letter AA codes. """
-        return "".join([THREE_TO_ONE_LETTER_MAP[m[0]] for m in self.mapping])
+        return "".join([m[0] for m in self.mapping])
 
 
 def load_model(chkpt_path):
@@ -220,13 +238,6 @@ def get_data_loader(data_path, n=0, subset="test"):
     return data_loader, ids
 
 
-def get_13atom_mapping(seq):
-    mapping = []
-    for residue in seq:
-        mapping.append((ONE_TO_THREE_LETTER_MAP[residue], atom_map_13[residue]))
-    return mapping
-
-
 def make_prediction(title, data_iter):
     src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = next(data_iter)
     pred = model.predict(src_seq, src_pos_enc)
@@ -266,6 +277,11 @@ def make_prediction(title, data_iter):
     print(f"Constructed PDB files for {title}.")
 
 
+ATOM_MAP_13 = {}
+for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
+    ATOM_MAP_13[one_letter] = ["N", "CA", "C"] + list(SC_DATA[ONE_TO_THREE_LETTER_MAP[one_letter]]["predicted"])
+    ATOM_MAP_13[one_letter].extend(["PAD"] * (13 - len(ATOM_MAP_13[one_letter])))
+
 if __name__ == "__main__":
     # TODO Clean imports
     # TODO don't reimplement dataloader?
@@ -280,13 +296,9 @@ if __name__ == "__main__":
     from dataset import ProteinDataset, paired_collate_fn
     from protein.Structure import generate_coords
     from losses import inverse_trig_transform, drmsd_loss_from_coords, mse_over_angles
-    from protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP, THREE_TO_ONE_LETTER_MAP
     from scripts.utils.structure_utils import onehot_to_seq
 
-    atom_map_13 = {}
-    for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
-        atom_map_13[one_letter] = ["N", "CA", "C"] + list(SC_DATA[ONE_TO_THREE_LETTER_MAP[one_letter]]["predicted"])
-        atom_map_13[one_letter].extend(["PAD"] * (13 - len(atom_map_13[one_letter])))
+
 
     device = torch.device('cuda')
 
