@@ -1,5 +1,6 @@
 data/*.pkl
 data/*.torch
+data/*.pt
 checkpoints/*
 logs/*
 data/prev/coords/*

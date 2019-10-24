@@ -201,7 +201,7 @@ class Transformer(nn.Module):
         data, ext = path.splitext(data_path)
         angle_mean_path = data + "_mean.npy"
         if not path.exists(angle_mean_path):
-            angle_mean_path_new = "data/proteinnet/casp12_190927_100_mean.npy"
+            angle_mean_path_new = "protein/casp12_190927_100_angle_means.npy"
             print(f"[Info] Unable to find {angle_mean_path}. Loading angle means from {angle_mean_path_new} instead.")
             angle_mean_path = angle_mean_path_new
         angle_means = np.load(angle_mean_path)
