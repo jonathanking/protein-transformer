@@ -1,7 +1,7 @@
 """ A script to hold some utility functions for model training. """
 import numpy as np
 import time
-
+import wandb
 def print_status(mode, args, items):
     """
     Handles all status printing updates for the model. Allows complex string formatting per method while shrinking
@@ -91,6 +91,10 @@ def print_status(mode, args, items):
               'elapse: {elapse:3.3f} min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
                                                  elapse=(time.time() - start) / 60, comb=test_comb_loss,
                                                  rmsd=test_rmsd_loss))
+        wandb.run.summary["test_drmsd_loss"] = metrics["test"]["epoch-drmsd"]
+        wandb.run.summary["test_mse_loss"] = metrics["test"]["epoch-mse"]
+        wandb.run.summary["test_rmsd_loss"] = metrics["test"]["epoch-rmsd"]
+        wandb.run.summary["test_comb_loss"] = metrics["test"]["epoch-combined"]
 
 
 def update_loss_trackers(args, epoch_i, metrics):

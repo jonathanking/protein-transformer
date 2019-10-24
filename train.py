@@ -17,6 +17,8 @@ from models.transformer.Optim import ScheduledOptim
 from train_utils import print_status, EarlyStoppingCondition, update_loss_trackers, init_metrics, \
     update_metrics_end_of_epoch, update_metrics, reset_metrics_for_epoch, prepare_log_header
 
+import wandb
+wandb.init(project="protein-transformer")
 
 def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):
     """ Epoch operation in training phase"""
@@ -52,15 +54,22 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         # record performance metrics
         metrics = update_metrics(metrics, "train", d_loss, d_loss_normalized, m_loss, c_loss, src_seq,
                                  tracking_loss=loss, batch_level=True)
-
-        n_batches += 1
+        log_batch(log_writer, metrics, mode="train", end_of_epoch=False)
+        wandb.log({"Train RMSE": np.sqrt(m_loss.item()),
+                   "Train DRMSD": d_loss,
+                   "Train ln-DRMSD":d_loss_normalized,
+                   "Train Combined Loss": c_loss,
+                   "Train Speed":metrics["train"]["speed"]}, commit=not args.lr_scheduling)
         if args.lr_scheduling:
             metrics["history-lr"].append(optimizer.cur_lr)
+            wandb.log({"Learning Rate": optimizer.cur_lr})
+
+        # Clean up
         print_status("train_epoch", args, (pbar, metrics, src_seq))
-        log_batch(log_writer, metrics, mode="train", end_of_epoch=False)
         if np.isnan(loss.item()):
             print("A nan loss has occurred. Exiting training.")
             sys.exit(1)
+        n_batches += 1
 
     metrics = update_metrics_end_of_epoch(metrics, "train", n_batches)
 
@@ -82,7 +91,12 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
             m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
             metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
-
+            wandb.log({f"{mode.title()} RMSE": np.sqrt(m_loss.item()),
+                       f"{mode.title()} RMSD": r_loss,
+                       f"{mode.title()} DRMSD": d_loss,
+                       f"{mode.title()} ln-DRMSD": ln_d_loss,
+                       f"{mode.title()} Combined Loss": c_loss,
+                       f"{mode.title()} Speed": metrics[mode]["speed"]})
             n_batches += 1
             print_status("eval_epoch", args, (pbar, d_loss, mode, m_loss, c_loss))
 
@@ -143,10 +157,19 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
         chkpt_file_name = args.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, cur_loss)
         torch.save(checkpoint, chkpt_file_name)
         print('\r    - [Info] The checkpoint file has been updated.')
+        wandb.save(chkpt_file_name)
+        wandb.run.summary["best_validation_loss"] = cur_loss
+        wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
+        wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
     elif len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
         chkpt_file_name = args.chkpt_path + "_best.chkpt"
         torch.save(checkpoint, chkpt_file_name)
         print('\r    - [Info] The checkpoint file has been updated.')
+        wandb.save(chkpt_file_name)
+        wandb.save(os.path.join(wandb.run.dir, args.name + "_best.chkpt"))
+        wandb.run.summary["best_validation_loss"] = cur_loss
+        wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
+        wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
     return did_save
 
 
@@ -315,7 +338,9 @@ def main():
         log_f = open(args.log_file, 'w', buffering=args.buffering_mode)
         log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
-
+    wandb.watch(model, "all")
+    wandb.config.update(args)
+    wandb.config.update({"data_created": next(iter(data["date"]))})
     train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer)
     log_f.close()
 
