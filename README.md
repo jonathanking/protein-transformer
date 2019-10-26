@@ -1,14 +1,15 @@
 # Attention is all you need (to Predict Protein Structure)
 
-This repository is a fork from [https://github.com/jadore801120/attention-is-all-you-need-pytorch](https://github.com/jadore801120/attention-is-all-you-need-pytorch), but modifies the network to predict protein structure from protein sequences. Many thanks for [jadore801120](https://github.com/jadore801120/) for the framework.
+This project explores sequence modeling techniques to predict complete (all-atom) protein structure. The work was inspired by language modeling methodologies, and as such incorporates Transformer and attention based models. Importantly, this is also a work in progress and an active research project. I welcome any thoughts or interest! 
+
+## How to run
 
 The code takes as arguments a plethora of different architecture and training settings. Two positional arguments are required, the training data location and the model name.
 
-The training data is based on Mohammed AlQuraishi's [ProteinNet](https://github.com/aqlaboratory/proteinnet). Preprocessed data can be downloaded [here](https://pitt.box.com/s/1jc66xcs4ddfi9o2ik8ozozcswen43fh). See below for more information. 
 
 Example:
 ```
-python train.py data/proteinnet/casp12.pt model01 -lr -0.01 -e 30 -b 12 -cl -cg 1 -dm 50 --proteinnet 
+python train.py data/proteinnet/casp12.pt model01 -lr -0.01 -e 30 -b 12 -cl -cg 1 -dm 50 
 ```
 
 Complete info:
@@ -16,11 +17,14 @@ Complete info:
 usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
                 [-es EARLY_STOPPING] [-nws N_WARMUP_STEPS] [-cg CLIP] [-cl]
                 [--train_only] [--lr_scheduling] [--without_angle_means]
-                [--eval_train] [-opt {adam,sgd}] [-rnn] [-dwv D_WORD_VEC]
-                [-dm D_MODEL] [-dih D_INNER_HID] [-dk D_K] [-dv D_V]
-                [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT] [--postnorm]
-                [--log LOG] [--save_mode {all,best}] [--no_cuda] [--cluster]
-                [--restart] [--restart_opt] [--proteinnet]
+                [--eval_train] [-opt {adam,sgd}] [-fctf FRACTION_COMPLETE_TF]
+                [-fsstf FRACTION_SUBSEQ_TF] [--skip_missing_res_train]
+                [--repeat_train REPEAT_TRAIN] [-dwv D_WORD_VEC] [-dm D_MODEL]
+                [-dih D_INNER_HID] [-dk D_K] [-dv D_V] [-nh N_HEAD]
+                [-nl N_LAYERS] [-do DROPOUT] [--postnorm]
+                [--log_structure_step LOG_STRUCTURE_STEP]
+                [--log_wandb_step LOG_WANDB_STEP] [--save_mode {all,best}]
+                [--no_cuda] [--cluster] [--restart] [--restart_opt]
                 data name
 
 positional arguments:
@@ -48,7 +52,19 @@ optional arguments:
   --eval_train          Perform an evaluation of the entire training set after
                         a training epoch.
   -opt {adam,sgd}, --optimizer {adam,sgd}
-  -rnn, --rnn
+  -fctf FRACTION_COMPLETE_TF, --fraction_complete_tf FRACTION_COMPLETE_TF
+                        Fraction of the time to use teacher forcing for every
+                        timestep of the batch. Model trainsfastest when this
+                        is 1.
+  -fsstf FRACTION_SUBSEQ_TF, --fraction_subseq_tf FRACTION_SUBSEQ_TF
+                        Fraction of the time to use teacher forcing on a per-
+                        timestep basis.
+  --skip_missing_res_train
+                        When training, skip over batches that have missing
+                        residues. This can make trainingfaster if using
+                        teacher forcing.
+  --repeat_train REPEAT_TRAIN
+                        Duplicate the training set X times.
   -dwv D_WORD_VEC, --d_word_vec D_WORD_VEC
   -dm D_MODEL, --d_model D_MODEL
   -dih D_INNER_HID, --d_inner_hid D_INNER_HID
@@ -60,19 +76,23 @@ optional arguments:
   --postnorm            Use post-layer normalization, as depicted in the
                         original figure for the Transformer model. May not
                         train as well as pre-layer normalization.
-  --log LOG
+  --log_structure_step LOG_STRUCTURE_STEP
+  --log_wandb_step LOG_WANDB_STEP
   --save_mode {all,best}
   --no_cuda
   --cluster             Set of parameters to facilitate training on a remote
                         cluster. Limited I/O, etc.
   --restart             Does not resume training.
   --restart_opt         Resumes training but does not load the optimizerstate.
-  --proteinnet
+
 
 
 ```
 
 ## Notes on Training Data
+
+The training data is based on Mohammed AlQuraishi's [ProteinNet](https://github.com/aqlaboratory/proteinnet). Preprocessed data can be downloaded [here](https://pitt.box.com/s/1jc66xcs4ddfi9o2ik8ozozcswen43fh). 
+
 My data uses the same train/test/validation sets as ProteinNet. While, like ProteinNet, it includes protein sequences and coordinates, I have modified it to include information about the entire protein structure (both backbone and sidechain atoms). Thus, each protein in the dataset includes information for sequence, interior torsional/bond angles, and coordinates. It does not include multiple sequence alignments or secondary structure annotation.
 
 The data is saved with PyTorch and stored in a Python dictionary like so:
@@ -88,3 +108,6 @@ data = {"train": {"seq": [seq1, seq2, ...],
         "test": {...}
         }
 ```
+
+## Attribution
+This repository was originally a fork from [https://github.com/jadore801120/attention-is-all-you-need-pytorch](https://github.com/jadore801120/attention-is-all-you-need-pytorch), but since then has been extensively rewritten to match the needs of this specific project as I have become more comfortable with Pytorch, Transformers, and the like. Many thanks for [jadore801120](https://github.com/jadore801120/) for the framework.

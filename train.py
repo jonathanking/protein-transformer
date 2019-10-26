@@ -200,7 +200,7 @@ def main():
     parser.add_argument("-b", '--batch_size', type=int, default=8)
     parser.add_argument('-es', '--early_stopping', type=int, default=None,
                         help="Stops if training hasn't improved in X epochs")
-    parser.add_argument('-nws', '--n_warmup_steps', type=int, default=1000)
+    parser.add_argument('-nws', '--n_warmup_steps', type=int, default=10000)
     parser.add_argument('-cg', '--clip', type=float, default=None)
     parser.add_argument('-cl', '--combined_loss', action='store_true',
                         help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
@@ -224,7 +224,6 @@ def main():
     parser.add_argument("--repeat_train", type=int, default=1, help="Duplicate the training set X times.")
 
     # Model parameters
-    parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
     parser.add_argument('-dm', '--d_model', type=int, default=512)
     parser.add_argument('-dih', '--d_inner_hid', type=int, default=2048)
     parser.add_argument('-dk', '--d_k', type=int, default=64)
@@ -247,7 +246,6 @@ def main():
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda
-    args.d_word_vec = args.d_model
     args.buffering_mode = 1
     LOGFILEHEADER = prepare_log_header(args)
     if args.save_mode == "all" and not args.restart:
