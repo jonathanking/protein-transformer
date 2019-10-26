@@ -2,8 +2,10 @@ import torch
 import numpy as np
 
 class ScaledDotProductAttention(torch.nn.Module):
-    """ Scaled, softmax attention module for Transformer as defined by Attention(Q, K, V) on pg 4.
-        Returns the final attention vectors as well as the attention matrices (pairwise scores). """
+    """
+    Scaled, softmax attention module for Transformer as defined by
+    Attention(Q, K, V) on pg 4. Returns the final attention vectors as well as
+    the attention matrices (pairwise scores). """
     def __init__(self):
         super(ScaledDotProductAttention, self).__init__()
         self.softmax = torch.nn.Softmax(dim=-1)
@@ -19,9 +21,12 @@ class ScaledDotProductAttention(torch.nn.Module):
         return torch.matmul(scores, V), scores
 
 class MultiHeadedAttention(torch.nn.Module):
-    """ Multi-headed attention layer for the Transformer model. Wraps ScaledDotProductAttention.
-        Assumes n_heads are applied by splitting up model in to n_heads, each of size dm / n_heads.
-        Guided by http://nlp.seas.harvard.edu/2018/04/03/attention.html"""
+    """
+    Multi-headed attention layer for the Transformer model. Wraps
+    ScaledDotProductAttention. Assumes n_heads are applied by splitting up
+    model in to n_heads, each of size dm / n_heads. Guided by
+    http://nlp.seas.harvard.edu/2018/04/03/attention.html
+    """
     def __init__(self, dm, n_heads, dropout=0.1):
         super(MultiHeadedAttention, self).__init__()
         assert dm % n_heads == 0, "The dimension of the model must be evenly divisible by the number of attn heads."

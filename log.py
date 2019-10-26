@@ -63,7 +63,6 @@ def print_train_batch_status(args, items):
             speed=speed))
 
 
-
 def print_eval_batch_status(args, items):
     """
     Print the status line during evaluation after a single batch update.
@@ -137,6 +136,7 @@ def update_loss_trackers(args, epoch_i, metrics):
 
     return metrics
 
+
 def log_batch(log_writer, metrics, start_time,  mode="valid", end_of_epoch=False, t=None):
     """
     Logs training info to an already instantiated CSV-writer log.
@@ -175,7 +175,6 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     if np.isnan(loss.item()):
         print("A nan loss has occurred. Exiting training.")
         sys.exit(1)
-
 
 
 def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):

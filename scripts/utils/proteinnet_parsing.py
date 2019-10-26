@@ -1,3 +1,6 @@
+""" This script allows the raw ProteinNet files from
+https://github.com/aqlaboratory/proteinnet. """
+
 import os
 from glob import glob
 import multiprocessing
@@ -7,9 +10,9 @@ import torch
 
 def load_ids_from_text_files(directory, train_file):
     """
-    Given a directory where raw ProteinNet records are stored along with .ids files, reads and returns the
-    contents of those files. Effectively returns a list of IDs associated with the training, validation,
-    and test sets.
+    Given a directory where raw ProteinNet records are stored along with .ids
+    files, reads and returns the contents of those files. Effectively returns
+    a list of IDs associated with the training, validation, and test sets.
     """
     with open(os.path.join(directory, train_file.replace(".pt", ".ids")), "r") as trainf, \
             open(os.path.join(directory, "validation.ids"), "r") as validf, \
@@ -22,8 +25,9 @@ def load_ids_from_text_files(directory, train_file):
 
 def read_protein_from_file(file_pointer, include_tertiary):
     """
-    Modified from github.com/OpenProtein/openprotein:preprocessing.py on June 20, 2019.
-    Original carries an MIT license. Copyright (c) 2018 Jeppe Hallgren.
+    Modified from github.com/OpenProtein/openprotein:preprocessing.py on June
+    20, 2019. Original carries an MIT license. Copyright (c) 2018 Jeppe
+    Hallgren.
     """
     dict_ = {}
     _dssp_dict = {'L': 0, 'H': 1, 'B': 2, 'E': 3, 'G': 4, 'I': 5, 'T': 6, 'S': 7}
@@ -61,8 +65,10 @@ def read_protein_from_file(file_pointer, include_tertiary):
 
 
 def process_file(input_filename):
-    """ A parallelizable method for processing one raw ProteinNet file and creating
-        a Pytorch-saved python dictionary of the data. """
+    """
+    A parallelizable method for processing one raw ProteinNet file and
+    creating a Pytorch-saved python dictionary of the data.
+    """
     global torch_dict_dir
     print("    " + input_filename)
     text_file = open(input_filename + '.ids', "w")
@@ -87,7 +93,6 @@ def parse_raw_proteinnet(input_dir, train_file):
     Preprocesses raw ProteinNet records by reading them and transforming them
     into a Pytorch-saved dictionary. It excludes the tertiary information as
     this will acquired from the PDB.
-    :param input_dir:
     """
     global torch_dict_dir
     # Test for .pt files existance, return ids and exit if already complete

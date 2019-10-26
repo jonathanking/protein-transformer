@@ -1,3 +1,11 @@
+"""
+Primary script for training models to predict protein structure from amino
+acid sequence.
+
+    Author: Jonathan King
+    Date: 10/25/2019
+"""
+
 import argparse
 import csv
 import os
@@ -10,7 +18,7 @@ import torch.utils.data
 from tqdm import tqdm
 
 from dataset import prepare_dataloaders
-from losses import drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
+from losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
 from models.transformer.Models import Transformer, MISSING_CHAR
 from models.transformer.Optim import ScheduledOptim
 from log import *
@@ -18,7 +26,9 @@ from log import *
 wandb.init(project="protein-transformer")
 
 def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):
-    """ Epoch operation in training phase"""
+    """
+    One complete training epoch.
+    """
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
     n_batches = 0.0
@@ -34,7 +44,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
         pred = model(src_seq, src_pos_enc, tgt_ang_no_nan[:,:-1], tgt_pos_enc[:,:-1],
                      has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
-        d_loss, ln_d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device)
+        d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq[:, 1:], device)
         d_loss, ln_d_loss = d_loss.to('cpu'), ln_d_loss.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=0.5)
@@ -59,7 +69,9 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
 
 
 def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
-    """ Epoch operation in evaluation phase. """
+    """
+    One compete evaluation epoch.
+    """
     model.eval()
     metrics = reset_metrics_for_epoch(metrics, mode)
     n_batches = 0.0
@@ -69,7 +81,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
         for batch in pbar:
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
             pred = model.predict(src_seq, src_pos_enc)
-            d_loss, ln_d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq[:,1:], device, return_rmsd=True)
+            d_loss, ln_d_loss, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq[:, 1:], device, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang[:,1:]).to('cpu')
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
             do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode)
@@ -80,7 +92,9 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
 
 
 def train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer):
-    """ Start training. """
+    """
+    Model training control loop.
+    """
     for epoch_i in range(START_EPOCH, args.epochs):
         print(f'[ Epoch {epoch_i} ]')
 
@@ -114,7 +128,10 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
 
 
 def checkpoint_model(args, optimizer, model, metrics, epoch_i):
-    """ Records model state according to a checkpointing policy. Defaults to best validation set performance. """
+    """
+    Records model state according to a checkpointing policy. Defaults to best
+    validation set performance.
+    """
     did_save = False
     cur_loss, loss_history = metrics["loss_to_compare"], metrics["losses_to_compare"]
     if args.save_mode == 'all' or len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
@@ -148,9 +165,11 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
 
 
 def load_model(model, optimizer, args):
-    """ Given a model, its optimizer, and the program's arguments, resumes
-        model training if the user has not specified otherwise. Assumes model
-        was saved the 'best' mode. """
+    """
+    Given a model, its optimizer, and the program's arguments, resumes model
+    training if the user has not specified otherwise. Assumes model was saved
+    the 'best' mode.
+    """
     global START_EPOCH
     global START_TIME
     chkpt_file_name = args.chkpt_path + "_best.chkpt"
@@ -180,7 +199,9 @@ def load_model(model, optimizer, args):
 
 
 def main():
-    """ Main function """
+    """
+    Argument parsing, model loading, and model training.
+    """
     global LOGFILEHEADER
     global START_EPOCH
     global START_TIME

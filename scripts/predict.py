@@ -1,5 +1,7 @@
-"""" This script will take a trained model and a target dataset to predict on and make predictions that can be
-     viewed as PDB files. """
+"""" This script will take a trained model and a target dataset to predict on
+and make predictions that can be viewed as PDB files. It's current mode of
+action is to download the corresponding PDB file for a protein and replace
+its coordinates with the matching ones from the model. """
 
 import argparse
 import os
@@ -17,7 +19,7 @@ from os.path import basename, splitext
 import torch.utils.data
 from dataset import ProteinDataset, paired_collate_fn, paired_collate_fn_with_len
 from protein.Structure import generate_coords_with_tuples
-from losses import inverse_trig_transform, copy_padding_from_gold, drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
+from losses import inverse_trig_transform, copy_padding_from_gold, drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
 from protein.Sidechains import SC_DATA
 from models.rnn import MyRNN
 from proteinnet2pytorch import get_chain_from_proteinnetid
@@ -26,8 +28,11 @@ VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
 
 
 def load_model(args):
-    """ Given user-supplied arguments such as a model checkpoint, loads and returns the specified transformer model.
-        If the data to predict is not specified, the original file used during training will be re-used. """
+    """
+    Given user-supplied arguments such as a model checkpoint, loads and
+    returns the specified transformer model. If the data to predict is not
+    specified, the original file used during training will be re-used.
+    """
     # TODO remove try/except clause for loading model
     chkpt = torch.load(args.model_chkpt, map_location=device)
     model_args = chkpt['settings']
@@ -60,10 +65,12 @@ def load_model(args):
 
 
 def get_data_loader(args, data_subset, n):
-    """ Given a subset of a dataset as a python dictionary file to make predictions from,
-        this function selects n items at random from that dataset to predict. It then returns a DataLoader for those
-        items, along with a list of ids.
-        """
+    """
+    Given a subset of a dataset as a python dictionary file to make
+    predictions from, this function selects n items at random from that
+    dataset to predict. It then returns a DataLoader for those items,
+    along with a list of ids.
+    """
     if not args.rnn:
         collate = paired_collate_fn
     else:
@@ -110,8 +117,11 @@ def get_data_loader(args, data_subset, n):
 
 
 def make_predictions(args, the_model, data_loader, pdb_ids, build_true=False):
-    """ Given a loaded transformer model, and a dataloader of items to predict, this model returns a list of tuples.
-        Each tuple is contains (backbone coord. matrix, sidechain coord. matrix, loss, nloss) for a single item."""
+    """
+    Given a loaded transformer model, and a dataloader of items to predict,
+    this model returns a list of tuples. Each tuple is contains (backbone
+    coord. matrix, sidechain coord. matrix, loss, nloss) for a single item.
+    """
     coords_list = []
     losses = {"drmsd": [],
               "mse": [],
@@ -141,7 +151,7 @@ def make_predictions(args, the_model, data_loader, pdb_ids, build_true=False):
 
             # TODO return backbone vs sidechain losses
             try:
-                d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
+                d_loss, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, device, return_rmsd=True)
                 m_loss = mse_over_angles(pred, tgt_ang)
             except (AssertionError, ValueError):
                 continue
@@ -164,8 +174,11 @@ def make_predictions(args, the_model, data_loader, pdb_ids, build_true=False):
 
 
 def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidechains, angles):
-    """ Given an amino acid RESNAME that is partially predicted (only the atoms in PRED_NAMES are predicted),
-        this function returns a list of coords that represents the complete amino acid structure."""
+    """
+    Given an amino acid RESNAME that is partially predicted (only the atoms
+    in PRED_NAMES are predicted), this function returns a list of coords that
+    represents the complete amino acid structure.
+    """
     missing = SC_DATA[resname]["missing"]
     align_target = SC_DATA[resname]["align_target"]
     align_mobile = SC_DATA[resname]["align_mobile"]
@@ -217,7 +230,9 @@ def fill_in_residue(resname, pred_coords, pred_names, bb_cords, reference_sidech
 
 
 def clean_multiple_coordsets(protein):
-    """ Deletes all but the first coordinate set of a protein. """
+    """
+    Deletes all but the first coordinate set of a protein.
+    """
     if len(protein.getCoordsets()) > 1:
         for i in range(len(protein.getCoordsets())):
             if i == 0:
@@ -259,7 +274,6 @@ def set_backbone_coords(prot, chain_id, bb_coords, pdb_chain, peptide_bond):
 
 
 def set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id, ref_sidechains, angles):
-    """ Given a protein PDB selection object and amino acid"""
     # Set sidechain atoms
     assert len(aa_codes) == len(sc_tups) and len(sc_tups) == len(atom_names), "Shape mismatch for coord tuples."
     for sc_atomcoords, ans in zip(sc_tups, atom_names):
@@ -290,8 +304,11 @@ def set_sidechain_coords(prot, aa_codes, bb_tups, sc_tups, atom_names, chain_id,
 
 
 def make_pdbs(id_coords_dict, outdir):
-    """ Given a dictionary that maps PDB_ID -> pred_coordinate_tuple, this function parses the true PDB file and
-        assigns coordinates to its atoms so that a PDB file can be generated."""
+    """
+    Given a dictionary that maps PDB_ID -> pred_coordinate_tuple,
+    this function parses the true PDB file and assigns coordinates to its
+    atoms so that a PDB file can be generated.
+    """
     
     # Load reference sidechain structures
     ref_sidechains = {}

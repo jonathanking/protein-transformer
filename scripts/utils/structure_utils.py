@@ -1,3 +1,5 @@
+""" Utility functions when generating protein structure. """
+
 import numpy as np
 import prody as pr
 import re
@@ -11,8 +13,10 @@ NUM_PREDICTED_COORDS = 13
 
 
 def parse_astral_summary_file(path):
-    """ Given a path to the ASTRAL database summary file, this function parses
-        that file and returns a dictionary that maps ASTRAL IDs to (pdbid, chain). """
+    """
+    Given a path to the ASTRAL database summary file, this function parses
+    that file and returns a dictionary that maps ASTRAL IDs to (pdbid, chain).
+    """
     d = {}
     for line in open(path, "r").readlines():
         if line.startswith("#"):
@@ -25,8 +29,10 @@ def parse_astral_summary_file(path):
 
 
 def get_chain_from_astral_id(astral_id, d):
-    """ Given an ASTRAL ID and the ASTRAL->PDB/chain mapping dictionary, this
-        function attempts to return the relevant, parsed ProDy object. """
+    """
+    Given an ASTRAL ID and the ASTRAL->PDB/chain mapping dictionary,
+    this function attempts to return the relevant, parsed ProDy object.
+    """
     pdbid, chain = d[astral_id]
     assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
     chain, resnums = chain.split(":")
@@ -41,8 +47,10 @@ def get_chain_from_astral_id(astral_id, d):
 
 
 def get_header_seq_from_astral_id(astral_id, d):
-    """ Attempts to return the sequence associated with a given ASTRAL ID.
-        Requires the ASTRAL->PDB/chain mapping dictionary. """
+    """
+    Attempts to return the sequence associated with a given ASTRAL ID.
+    Requires the ASTRAL->PDB/chain mapping dictionary.
+    """
     pdbid, chain = d[astral_id]
     assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
     chain, resnums = chain.split(":")
@@ -56,10 +64,13 @@ def get_header_seq_from_astral_id(astral_id, d):
 
 
 def angle_list_to_sin_cos(angs, reshape=True):
-    """ Given a list of angles, returns a new list where those angles have been turned into
-    their sines and cosines. If reshape is False, a new dim. is added that can hold the sine and
-    cosine of each angle, i.e. (len x #angs) -> ( len x #angs x 2). If reshape is true,
-    this last dim. is squashed so that the list of angles becomes [cos sin cos sin ...]. """
+    """
+    Given a list of angles, returns a new list where those angles have been
+    turned into their sines and cosines. If reshape is False, a new dim. is
+    added that can hold the sine and cosine of each angle, i.e. (len x #angs)
+    -> ( len x #angs x 2). If reshape is true, this last dim. is squashed so
+    that the list of angles becomes [cos sin cos sin ...].
+    """
     new_list = []
     for a in angs:
         new_mat = np.zeros((a.shape[0], a.shape[1], 2))
@@ -73,7 +84,9 @@ def angle_list_to_sin_cos(angs, reshape=True):
 
 
 def seq_to_onehot(seq):
-    """ Given an AA sequence, returns a vector of one-hot vectors."""
+    """
+    Given an AA sequence, returns a vector of one-hot vectors.
+    """
     vector_array = []
     for aa in seq:
         one_hot = np.zeros(len(AA_MAP), dtype=bool)
@@ -86,7 +99,9 @@ def seq_to_onehot(seq):
 
 
 def onehot_to_seq(oh):
-    """ Given a vector of one-hot vectors, returns its corresponding AA sequence."""
+    """
+    Given a vector of one-hot vectors, returns its corresponding AA sequence.
+    """
     seq = ""
     for aa in oh:
         idx = aa.argmax()
@@ -95,7 +110,9 @@ def onehot_to_seq(oh):
 
 
 def check_standard_continuous(residue, prev_res_num):
-    """ Asserts that the residue is standard and that the chain is continuous. """
+    """
+    Asserts that the residue is standard and that the chain is continuous.
+    """
     if not residue.isstdaa:
         raise NonStandardAminoAcidError("Found a non-std AA.")
     if residue.getResnum() != prev_res_num:
@@ -104,8 +121,10 @@ def check_standard_continuous(residue, prev_res_num):
 
 
 def determine_sidechain_atomnames(_res):
-    """ Given a residue from ProDy, returns a list of sidechain atom names
-        that must be recorded."""
+    """
+    Given a residue from ProDy, returns a list of sidechain atom names that
+    must be recorded.
+    """
     if _res.getResname() is "GLY":
         atom_names = []
     elif _res.getResname() in SC_DATA.keys():
@@ -117,11 +136,12 @@ def determine_sidechain_atomnames(_res):
 
 def compute_sidechain_dihedrals(residue, prev_residue, next_res):
     """
-    Computes all angles to predict for a given residue. If the residue is the first in the
-    protein chain, a fictitious C atom is placed before the first N. This is used to compute a [
-    C-1, N, CA, CB] dihedral angle. If it is not the first residue in the chain, the previous
-    residue's C is used instead. Then, each group of 4 atoms in atom_names is used to generate a
-    list of dihedral angles for this residue.
+    Computes all angles to predict for a given residue. If the residue is the
+    first in the protein chain, a fictitious C atom is placed before the
+    first N. This is used to compute a [ C-1, N, CA, CB] dihedral angle. If
+    it is not the first residue in the chain, the previous residue's C is
+    used instead. Then, each group of 4 atoms in atom_names is used to
+    generate a list of dihedral angles for this residue.
     """
     atom_names = determine_sidechain_atomnames(residue)
 
@@ -174,8 +194,9 @@ def compute_sidechain_dihedrals(residue, prev_residue, next_res):
 
 def get_atom_coords_by_names(residue, atom_names):
     """
-    Given a ProDy Residue and a list of atom names, this attempts to select and return all the atoms. If atoms are
-    not present, it substitutes the pad character in lieu of their coordinates.
+    Given a ProDy Residue and a list of atom names, this attempts to select
+    and return all the atoms. If atoms are not present, it substitutes the
+    pad character in lieu of their coordinates.
     """
     coords = []
     pad_coord = np.asarray([GLOBAL_PAD_CHAR]*3)
@@ -189,7 +210,9 @@ def get_atom_coords_by_names(residue, atom_names):
 
 
 def measure_res_coordinates(_res):
-    """ Given a ProDy residue, measure all relevant coordinates. """
+    """
+    Given a ProDy residue, measure all relevant coordinates.
+    """
     _atom_names = determine_sidechain_atomnames(_res)
     bbcoords = get_atom_coords_by_names(_res, ["N", "CA", "C"])
     sccoords = get_atom_coords_by_names(_res, set(_atom_names) - {"N", "CA", "C", "H"})
@@ -199,22 +222,31 @@ def measure_res_coordinates(_res):
 
 
 def empty_coord():
-    """ Return an empty coordinate tensor, representing 1 padding character at the residue level."""
+    """
+    Return an empty coordinate tensor, representing 1 padding character at
+    the residue level.
+    """
     coord_padding = np.zeros((NUM_PREDICTED_COORDS, 3))
     coord_padding[:] = GLOBAL_PAD_CHAR
     return coord_padding
 
 
 def empty_ang():
-    """ Return an empty angle tensor, representing 1 padding character at the residue level."""
+    """
+    Return an empty angle tensor, representing 1 padding character at the
+    residue level.
+    """
     dihe_padding = np.zeros(NUM_PREDICTED_ANGLES)
     dihe_padding[:] = GLOBAL_PAD_CHAR
     return dihe_padding
 
 
 def find_contig_locations(contigs, true_seq):
-    """ Given a list of contigs, returns their positions within true_seq. Raises errors if the matching is ambiguous
-        or if the observed sequence contains residues not found in the true seq. """
+    """
+    Given a list of contigs, returns their positions within true_seq. Raises
+    errors if the matching is ambiguous or if the observed sequence contains
+    residues not found in the true seq.
+    """
     contig_locs = []
     search_seq = str(true_seq)
     for i in range(len(contigs)):
@@ -234,8 +266,10 @@ def find_contig_locations(contigs, true_seq):
 
 
 def trim_mask_and_true_seqs(mask_seq, true_seq):
-    """ Given a mask and true sequence of the same length, this removes gaps
-        from the ends of both. """
+    """
+    Given a mask and true sequence of the same length, this removes gaps from
+    the ends of both.
+    """
     mask_seq_no_left = mask_seq.lstrip('-')
     mask_seq_no_right = mask_seq.rstrip('-')
     n_removed_left = len(mask_seq) - len(mask_seq_no_left)
@@ -247,10 +281,12 @@ def trim_mask_and_true_seqs(mask_seq, true_seq):
 
 
 def use_mask_to_pad_coords_dihedrals(mask_seq, coords, dihedrals):
-    """ Given a mask sequence ('-' for gap, '+' for present), and python lists
-        of coordinates and dihedrals, this function places gaps in the relevant
-        locations for each before returning. At the end, both should have the
-        same length as the mask_seq. """
+    """
+    Given a mask sequence ('-' for gap, '+' for present), and python lists of
+    coordinates and dihedrals, this function places gaps in the relevant
+    locations for each before returning. At the end, both should have the
+    same length as the mask_seq.
+    """
     new_coords = []
     new_angs = []
     coords = iter(coords)
@@ -266,11 +302,12 @@ def use_mask_to_pad_coords_dihedrals(mask_seq, coords, dihedrals):
 
 
 def use_contigs_to_compute_mask(contigs, true_seq, observed_sequence):
-    """ Given a list of contigs, aka contiguous sequence portions from a protein
-        structure, along with the true sequence and an obs. sequence that may
-        contain gaps, this function returns the mask and true sequence.
-        The mask has '-' for gaps and '+' for present items w.r.t. the true
-        sequence. """
+    """
+    Given a list of contigs, aka contiguous sequence portions from a protein
+    structure, along with the true sequence and an obs. sequence that may
+    contain gaps, this function returns the mask and true sequence. The mask
+    has '-' for gaps and '+' for present items w.r.t. the true sequence.
+    """
     mask_seq = "-" * len(true_seq)
     # If there are no gaps in the structure, then keep the observed sequence
     if len(contigs) == 1:
@@ -290,12 +327,13 @@ def use_contigs_to_compute_mask(contigs, true_seq, observed_sequence):
 
 
 def update_contigs(contigs, current_contig, all_residues, res_id):
-    """ This function updates the state variables `contigs` and `cur_contigs`
-        while get_seq_and_masked_coords_and_angles processes the protein.
-        These variables are later used to compute the missing residue masks for
-        protein. This works by recording all of the continuous regions of the
-        protein, and then attempting to identify what residues were missing
-        inbetween those contiguous regions.
+    """
+    This function updates the state variables `contigs` and `cur_contigs`
+    while get_seq_and_masked_coords_and_angles processes the protein. These
+    variables are later used to compute the missing residue masks for
+    protein. This works by recording all of the continuous regions of the
+    protein, and then attempting to identify what residues were missing
+    inbetween those contiguous regions.
     """
     res = all_residues[res_id]
     if current_contig == "":
@@ -311,10 +349,11 @@ def update_contigs(contigs, current_contig, all_residues, res_id):
 
 def get_seq_and_masked_coords_and_angles(chain, true_seq):
     """
-    Given a ProDy Chain object (from a Hierarchical View), return a tuple (angles, coords, sequence).
-    Returns None if the PDB should be ignored due to weird artifacts. Also measures the
-    bond angles along the peptide backbone, since they account for significant variation.
-    i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2, ... chi12], [...] ...]
+    Given a ProDy Chain object (from a Hierarchical View), return a tuple
+    (angles, coords, sequence). Returns None if the PDB should be ignored due
+    to weird artifacts. Also measures the bond angles along the peptide
+    backbone, since they account for significant variation.
+    i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2,...chi12],[...] ...]
     """
     chain = chain.select("protein and not hetero")
     if chain is None or chain.nonstdaa:
@@ -360,8 +399,10 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
 
     mask_seq, true_seq = use_contigs_to_compute_mask(contigs, true_seq, observed_sequence)
 
-    assert mask_seq.count("+") == len(coords), f"The number of coords ({len(coords)}) must match the number of '+'s in mask_seq {mask_seq.count('+')}, {mask_seq}.\n{observed_sequence}\n{true_seq}"
-    assert mask_seq.count("+") == len(dihedrals), f"The number of dihedrals ({len(dihedrals)}) must match the number of '+'s in mask_seq {mask_seq.count('+')}, {mask_seq}."
+    assert mask_seq.count("+") == len(coords), f"The number of coords ({len(coords)}) must match the " \
+        f"number of '+'s in mask_seq {mask_seq.count('+')}, {mask_seq}.\n{observed_sequence}\n{true_seq}"
+    assert mask_seq.count("+") == len(dihedrals), f"The number of dihedrals ({len(dihedrals)}) must match the" \
+        f" number of '+'s in mask_seq {mask_seq.count('+')}, {mask_seq}."
 
     # Use the mask to fill in missing residues
     coords, dihedrals = use_mask_to_pad_coords_dihedrals(mask_seq, coords, dihedrals)
@@ -371,14 +412,16 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
     coords_np = np.concatenate(coords)
 
     if coords_np.shape[0] != len(true_seq) * NUM_PREDICTED_COORDS:
-        print(f"Coords shape {coords_np.shape} does not match len(seq)*13 = {len(true_seq) * NUM_PREDICTED_COORDS},\n"
-              "OBS: {observed_sequence}\nTRU: {true_seq}\n{chain}")
+        print(f"Coords shape {coords_np.shape} does not match len(seq)*13 = "
+              f"{len(true_seq) * NUM_PREDICTED_COORDS},\nOBS: {observed_sequence}\nTRU: {true_seq}\n{chain}")
         raise SequenceError
     return dihedrals_np, coords_np, true_seq
 
 
 def residues_are_contiguous(resA, resB):
-    """ Returns True if resA is connected to resB. """
+    """
+     Returns True if resA is connected to resB.
+     """
     contiguous_threshold = 2  # The maximum allowed distance for a peptide bond
     try:
         cur_coords = resA.select("name C").getCoords()
@@ -390,31 +433,17 @@ def residues_are_contiguous(resA, resB):
 
 
 def no_nans_infs_allzeros(matrix):
-    """ Returns true if a matrix does not contain NaNs, infs, or all 0s."""
+    """
+    Returns true if a matrix does not contain NaNs, infs, or all 0s.
+    """
     return not np.any(np.isinf(matrix)) and np.any(matrix)
-
-
-def zero_runs(arr):
-    """
-    Returns indices of zero-runs.
-    Taken from https://stackoverflow.com/questions/24885092/finding-the-consecutive-zeros-in-a-numpy-array.
-    >>> import numpy as np
-    >>> zero_runs(np.array([0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0]))
-    array([[0, 4],
-          [11, 13]])
-    """
-    # Create an array that is 1 where a is 0, and pad each end with an extra 0.
-    iszero = np.concatenate(([0], np.equal(arr, 0).view(np.int8), [0]))
-    absdiff = np.abs(np.diff(iszero))
-    # Runs start and end where absdiff is 1.
-    ranges = np.where(absdiff == 1)[0].reshape(-1, 2)
-    return ranges
 
 
 def get_bond_angles(res, next_res):
     """
-    Given 2 residues, returns the ncac, cacn, and cnca bond angles between them. If any atoms are not present,
-    the corresponding angles are set to the GLOBAL_PAD_CHAR. If next_res is None, then only NCAC is measured.
+    Given 2 residues, returns the ncac, cacn, and cnca bond angles between
+    them. If any atoms are not present, the corresponding angles are set to
+    the GLOBAL_PAD_CHAR. If next_res is None, then only NCAC is measured.
     """
     # First residue angles
     n1, ca1, c1 = tuple(res.select(f"name {a}") for a in ["N", "CA", "C"])
@@ -439,7 +468,9 @@ def get_bond_angles(res, next_res):
 
 
 def measure_bond_angles(residue, res_idx, all_res):
-    """ Given a residue, measure the ncac, cacn, and cnca bond angles. """
+    """
+    Given a residue, measure the ncac, cacn, and cnca bond angles.
+    """
     if res_idx == len(all_res) - 1:
         next_res = None
     else:
@@ -449,8 +480,8 @@ def measure_bond_angles(residue, res_idx, all_res):
 
 def measure_phi_psi_omega(residue):
     """
-    Returns phi, psi, omega for a residue, replacing out-of-bounds angles with
-    GLOBAL_PAD_CHAR.
+    Returns phi, psi, omega for a residue, replacing out-of-bounds angles
+    with GLOBAL_PAD_CHAR.
     """
     try:
         phi = pr.calcPhi(residue, radian=True, dist=None)
@@ -469,7 +500,8 @@ def measure_phi_psi_omega(residue):
 
 def compute_single_dihedral(atoms):
     """
-    Given an iterable of 4 Atoms, calculate the dihedral angle between them in radians.
+    Given an iterable of 4 Atoms, calculate the dihedral angle between them
+    in radians.
     """
     if None in atoms:
         return GLOBAL_PAD_CHAR
@@ -480,8 +512,8 @@ def compute_single_dihedral(atoms):
 
 def get_dihedral(coords1, coords2, coords3, coords4, radian=False):
     """
-    Returns the dihedral angle in degrees. Modified from prody.measure.measure to use a
-    numerically safe normalization method.
+    Returns the dihedral angle in degrees. Modified from
+    prody.measure.measure to use a numerically safe normalization method.
     """
     rad2deg = 180 / np.pi
     eps = 1e-6

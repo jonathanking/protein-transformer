@@ -10,8 +10,11 @@ BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379,
 
 
 def generate_coords(angles, pad_loc, input_seq, device):
-    """ Given a tensor of angles (L x NUM_PREDICTED_ANGLES), produces the entire set of cartesian coordinates using the NeRF method,
-        (L x A` x 3), where A` is the number of atoms generated (depends on amino acid sequence)."""
+    """
+    Given a tensor of angles (L x NUM_PREDICTED_ANGLES), produces the entire
+    set of cartesian coordinates using the NeRF method, (L x A` x 3),
+    where A` is the number of atoms generated (depends on amino acid sequence).
+    """
     # TODO: Make the process of grabbing the next residue's nitrogen more clear
     bb_arr = init_backbone(angles, device)
     next_bb_pts = extend_backbone(1, angles, bb_arr, device)
@@ -31,10 +34,14 @@ def generate_coords(angles, pad_loc, input_seq, device):
 
 
 def generate_coords_with_tuples(angles, pad_loc, input_seq, device):
-    """ Identical to generate_cooords, except this function also returns organized tuples of backbone and sidechain
-        coordinates to aid in reconstruction.
-        Given a tensor of angles (L x NUM_PREDICTED_ANGLES), produces the entire set of cartesian coordinates using the NeRF method,
-        (L x A` x 3), where A` is the number of atoms generated (depends on amino acid sequence)."""
+    """
+    Identical to generate_cooords, except this function also returns
+    organized tuples of backbone and sidechain coordinates to aid in
+    reconstruction. Given a tensor of angles (L x NUM_PREDICTED_ANGLES),
+    produces the entire set of cartesian coordinates using the NeRF method,
+    (L x A` x 3), where A` is the number of atoms generated (depends on amino
+    acid sequence).
+    """
     bb_arr = init_backbone(angles, device)
     next_bb_pts = extend_backbone(1, angles, bb_arr, device)
     sc_arr, aa_code, atom_names = init_sidechain(angles, [next_bb_pts[0], bb_arr[2], bb_arr[1], bb_arr[0]], input_seq,
@@ -62,8 +69,11 @@ def generate_coords_with_tuples(angles, pad_loc, input_seq, device):
 
 
 def init_sidechain(angles, bb_arr, input_seq, return_tuples=False):
-    """ Builds the first sidechain based off of the first backbone atoms and a fictitious previous atom.
-        This allows us to reuse the extend_sidechain method. Assumes the first atom of the backbone is at (0,0,0). """
+    """
+    Builds the first sidechain based off of the first backbone atoms and a
+    fictitious previous atom. This allows us to reuse the extend_sidechain
+    method. Assumes the first atom of the backbone is at (0,0,0).
+    """
     if return_tuples:
         sc, aa_code, atom_names = Sidechains.extend_sidechain(0, angles, bb_arr, input_seq, return_tuples,
                                                               first_sc=True)
@@ -74,8 +84,11 @@ def init_sidechain(angles, bb_arr, input_seq, return_tuples=False):
 
 
 def init_backbone(angles, device):
-    """ Given an angle matrix (RES x ANG), this initializes the first 3 backbone points (which are arbitrary) and
-        returns a TensorArray of the size required to hold all the coordinates. """
+    """
+    Given an angle matrix (RES x ANG), this initializes the first 3 backbone
+    points (which are arbitrary) and returns a TensorArray of the size
+    required to hold all the coordinates.
+    """
     a1 = torch.FloatTensor([0.00001, 0, 0])
 
     if device.type == "cuda":
@@ -95,7 +108,9 @@ def init_backbone(angles, device):
 
 
 def extend_backbone(i, angles, coords, device):
-    """ Returns backbone coordinates for the residue angles[pos]."""
+    """
+    Returns backbone coordinates for the residue angles[pos].
+    """
     bb_pts = list(coords)
     for j in range(3):
         if j == 0:
@@ -123,15 +138,23 @@ def extend_backbone(i, angles, coords, device):
 
 
 def nerf(a, b, c, l, theta, chi, device):
-    """ Nerf method of finding 4th coord (d)
-        in cartesian space
+    """
+    Natural extension reference frame method for placing the 4th atom given
+    atoms 1-3 and the relevant angle inforamation. This code was originally
+    written by Rohit Bhattacharya (rohit.bhattachar@gmail.com,
+    https://github.com/rbhatta8/protein-design/blob/master/nerf.py) and I
+    have extended it to work with PyTorch. His original documentation is
+    below:
+
+    Nerf method of finding 4th coord (d) in cartesian space
         Params:
-        a, b, c : coords of 3 points
-        l : bond length between c and d
-        theta : bond angle between b, c, d (in degrees)
-        chi : dihedral using a, b, c, d (in degrees)
+            a, b, c : coords of 3 points
+            l : bond length between c and d
+            theta : bond angle between b, c, d (in degrees)
+            chi : dihedral using a, b, c, d (in degrees)
         Returns:
-        d : tuple of (x, y, z) in cartesian space """
+            d: tuple of (x, y, z) in cartesian space
+    """
     # calculate unit vectors AB and BC
     assert -np.pi <= theta <= np.pi, "theta must be in radians and in [-pi, pi]. theta = " + str(theta)
 

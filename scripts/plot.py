@@ -1,6 +1,5 @@
-"""
-Plots a model's .train file.
-"""
+"""Plots a model's .train file. """
+
 import argparse
 from datetime import date
 import os
@@ -19,20 +18,27 @@ def get_model_name(filename):
 
 
 def get_df_from_file(f):
-    """ Loads a CSV formatted file as a pandas dataframe."""
+    """
+    Loads a CSV formatted file as a pandas dataframe.
+    """
     df = pd.read_csv(f)
     df = df.reset_index()
     return df
 
 
 def smooth(ys):
-    """ Uses Savgol filter method to produce a smoothed version of ys. """
+    """
+    Uses Savgol filter method to produce a smoothed version of ys.
+    """
     smooth_size = min(len(ys) // 7, 301)
     smoothed = savgol_filter(ys, smooth_size, 2)
     return smoothed
 
 def title_to_fn(title):
-    """ Given a plot title, returns the same title, suitable as a filename. Removes punctuation, etc."""
+    """
+    Given a plot title, returns the same title, suitable as a filename.
+    Removes punctuation, etc.
+    """
     title = title.replace(" = [", "_").replace(", )", "_").replace(", ", "_")  # Remove time notation
     title = title[title.find('\n')+1:]
     replace_chars = " ,=[]().$"
@@ -43,7 +49,10 @@ def title_to_fn(title):
 
 
 def plot(dftrain, dfval, metric, title, outpath, smoothing=False, skip=None, include_val=False, ylim=(None, None)):
-    """ Simple plotting function. Given train/val data and options, saves fig outpath. """
+    """
+    Simple plotting function. Given train/val data and options, saves fig
+    outpath.
+    """
     # TODO Increase figure size
     dftrain_new = dftrain.iloc[skip:]
     dfval = dfval.loc[skip:]
