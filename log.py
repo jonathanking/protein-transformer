@@ -5,23 +5,6 @@ import wandb
 import sys
 
 
-def print_status(mode, args, items):
-    """
-    Handles all status printing updates for the model. Allows complex string formatting per method while shrinking
-    the number of lines of code per each training subroutine.
-    """
-    if mode == "train_epoch":
-        print_train_batch_status(args, items)
-    elif mode == "eval_epoch":
-        print_eval_batch_status(args, items)
-    elif mode == "train_train":
-        print_end_of_epoch_status("train", items)
-    elif mode == "train_val":
-        print_end_of_epoch_status("valid", items)
-    elif mode == "train_test":
-        print_end_of_epoch_status("test", items)
-
-
 def print_train_batch_status(args, items):
     """
     Print the status line during training after a single batch update. Uses tqdm progress bar
@@ -170,7 +153,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     if args.lr_scheduling:
         metrics["history-lr"].append(optimizer.cur_lr)
         wandb.log({"Learning Rate": optimizer.cur_lr})
-    print_status("train_epoch", args, (pbar, metrics, src_seq))
+    print_train_batch_status(args, (pbar, metrics, src_seq))
     # Check for NaNs
     if np.isnan(loss.item()):
         print("A nan loss has occurred. Exiting training.")
@@ -179,7 +162,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
 
 def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):
     """
-    Performs all necessary logging at the end of an evaluation epoch.
+    Performs all necessary logging at the end of an evaluation batch.
     Updates custom metrics dictionary and wandb logs. Prints status of training.
     """
     metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
@@ -189,8 +172,7 @@ def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
                f"{mode.title()} ln-DRMSD": ln_d_loss,
                f"{mode.title()} Combined Loss": c_loss,
                f"{mode.title()} Speed": metrics[mode]["speed"]})
-    print_status("eval_epoch", args, (pbar, d_loss, mode, m_loss, c_loss))
-
+    print_eval_batch_status(args, (pbar, d_loss, mode, m_loss, c_loss))
 
 
 def init_metrics(args):

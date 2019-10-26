@@ -103,14 +103,14 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
         metrics = train_epoch(model, training_data, optimizer, device, args, log_writer, metrics)
         if args.eval_train:
            metrics = eval_epoch(model, training_data, device, args, metrics, mode="train")
-        print_status("train_train", args, (start, metrics))
+        print_end_of_epoch_status("train", (start, metrics))
         log_batch(log_writer, metrics, START_TIME, mode="train", end_of_epoch=True)
 
         # Valid epoch
         if not args.train_only:
             start = time.time()
             metrics = eval_epoch(model, validation_data, device, args, metrics)
-            print_status("train_val", args, (start, metrics))
+            print_end_of_epoch_status("valid", (start, metrics))
             log_batch(log_writer, metrics, START_TIME, mode="valid", end_of_epoch=True)
 
         # Checkpointing
@@ -122,17 +122,17 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
 
     # Test Epoch
     if not args.train_only:
+        start = time.time()
         metrics = eval_epoch(model, test_data, device, args, metrics, mode="test")
-        print_status("train_test", args, (time.time(), metrics))
+        print_end_of_epoch_status("test", (start, metrics))
         log_batch(log_writer, metrics, START_TIME, mode="test", end_of_epoch=True)
 
 
 def checkpoint_model(args, optimizer, model, metrics, epoch_i):
     """
     Records model state according to a checkpointing policy. Defaults to best
-    validation set performance.
+    validation set performance. Returns True iff model was saved.
     """
-    did_save = False
     cur_loss, loss_history = metrics["loss_to_compare"], metrics["losses_to_compare"]
     if args.save_mode == 'all' or len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
         model_state_dict = model.state_dict()
@@ -144,24 +144,25 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
             'loss': cur_loss,
             'metrics': metrics,
             'elapsed_time':time.time() - START_TIME}
-        did_save = True
+    else:
+        return False
+
     if args.save_mode == 'all':
-        chkpt_file_name = args.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, cur_loss)
-        torch.save(checkpoint, chkpt_file_name)
-        wandb.save(chkpt_file_name)
-        print('\r    - [Info] The checkpoint file has been updated.')
-        wandb.run.summary["best_validation_loss"] = cur_loss
-        wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
-        wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
-    elif len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
+        chkpt_file_name = args.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(
+            epoch_i, cur_loss)
+    else:
         chkpt_file_name = args.chkpt_path + "_best.chkpt"
-        torch.save(checkpoint, chkpt_file_name)
-        wandb.save(chkpt_file_name)
-        print('\r    - [Info] The checkpoint file has been updated.')
-        wandb.run.summary["best_validation_loss"] = cur_loss
-        wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
-        wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
-    return did_save
+
+    torch.save(checkpoint, chkpt_file_name)
+    wandb.save(chkpt_file_name)
+    print('\r    - [Info] The checkpoint file has been updated.')
+    wandb.run.summary["best_validation_loss"] = cur_loss
+    wandb.run.summary["avg_evaluation_speed"] = np.mean(
+        metrics["valid"]["speed-history"])
+    wandb.run.summary["avg_training_speed"] = np.mean(
+        metrics["train"]["speed-history"])
+
+    return True
 
 
 def load_model(model, optimizer, args):
