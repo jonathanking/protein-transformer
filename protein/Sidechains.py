@@ -231,12 +231,17 @@ for res in SC_DATA.keys():
 
 
 def deg2rad(angle):
-    """ Converts an angle in degrees to radians."""
+    """
+    Converts an angle in degrees to radians.
+    """
     return angle * np.pi / 180.
 
 
 def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False, first_sc=False):
-    """ Given an index (i) into an angle tensor (d), builds the requested sidechain and returns it as a list."""
+    """
+    Given an index (i) into an angle tensor (d), builds the requested
+    sidechain and returns it as a list.
+    """
     residue_code = torch.argmax(input_seq[i])
     info = (i, d, bb_arr)
     codes = ["CYS","ASP","SER","GLN","LYS","ILE","PRO","THR","PHE","ASN","GLY","HIS","LEU","ARG","TRP",
@@ -245,7 +250,10 @@ def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False, first_sc=Fals
 
 
 def generate_sidechain_dihedrals(angles, i):
-    """ Returns a generator that iteratively produces the sidechain dihedral angles for residue (i) in (angles). """
+    """
+    Returns a generator that iteratively produces the sidechain dihedral
+    angles for residue (i) in (angles).
+    """
     assert len(angles.shape) == 2 and angles.shape[1] == NUM_PREDICTED_ANGLES, print("Improper shape for angles:", angles.shape)
     angle_idx = 6
     while angle_idx < angles.shape[-1]:
@@ -254,8 +262,10 @@ def generate_sidechain_dihedrals(angles, i):
 
 
 def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
-    """ Given a bunch of info (angle tensors, relevant bb and sc coords) and an amino acid code, generates the coords
-        for that specific AA. Returns a pointer to the """
+    """
+    Given a bunch of info (angle tensors, relevant bb and sc coords) and an
+    amino acid code, generates the coords for that specific AA.
+    """
     # TODO: clarify behavior with first sidechain. Here, it must reorganize its input to carefully place the first CB
     import protein.Structure as Structure
     lens = map(lambda bondname: BONDLENS[bondname], SC_DATA[aa_code]["bonds"])

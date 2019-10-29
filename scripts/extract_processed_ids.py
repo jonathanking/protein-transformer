@@ -1,4 +1,5 @@
-""" This script will extract matching PDB ids from an already processed data dictionary."""
+"""This script will produced a down-sampled dataset containing only the
+specified PDB ids from an already processed data dictionary. """
 
 import numpy as np
 import torch
@@ -8,10 +9,11 @@ VALID_SPLITS = [70]
 
 
 def extract_ids(d, ids_subset):
-    """ Given a Python dictionary containing a ProteinNet dataset and a list of tuples
-        specifying (PDB_ID, {train/test/val}), this function selects the matching
-        items from the total dataset. This downsizing can be used to make smaller
-        datasets for debugging and evaluation.
+    """
+    Given a Python dictionary containing a ProteinNet dataset and a list of
+    tuples specifying (PDB_ID, {train/test/val}), this function selects the
+    matching items from the total dataset. This downsizing can be used to
+    make smaller datasets for debugging and evaluation.
     """
     new_d = {"train": {"ang": [], "ids": [], "crd": [], "seq": []},
              "valid": {x: {"ang": [], "ids": [], "crd": [], "seq": []} for x in VALID_SPLITS},
@@ -36,6 +38,9 @@ def extract_ids(d, ids_subset):
     return new_d
 
 def get_proteinnet_data(d, id):
+    """
+    Search for and return the data for the protein with ID in dataset d.
+    """
     for subset_name, subset in zip(["train", "valid", "test"], (d["train"], d["valid"][70], d["test"])):
         for idx, pn_id in enumerate(subset["ids"]):
             if id.upper() in pn_id:

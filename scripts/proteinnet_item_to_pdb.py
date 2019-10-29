@@ -1,4 +1,5 @@
-""" This script will extract matching PDB ids from an already processed data dictionary and generate its PDB file."""
+""" This script will extract matching PDB ids from an already processed data
+dictionary and generate its PDB file. """
 
 import numpy as np
 import torch

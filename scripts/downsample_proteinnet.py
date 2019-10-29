@@ -1,3 +1,5 @@
+""" This script allows for arbitrarily down-sampling of the training data. """
+
 import numpy as np
 import torch
 import sys
@@ -5,9 +7,11 @@ import sys
 VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
 
 def down_sample_data(d, n=96):
-    """ Given a Python dictionary containing a ProteinNet dataset and a target size, n,
-        this function selects n items from the total dataset at random. This downsizing
-        can be used to make smaller datasets for debuggin. """
+    """
+    Given a Python dictionary containing a ProteinNet dataset and a target
+    size, n, this function selects n items from the total dataset at random.
+    This downsizing can be used to make smaller datasets for debugging.
+    """
     new_subsets = []
     for subset in [d["train"], d["test"]] + [d["valid"][split] for split in VALID_SPLITS]:
         num_items = len(subset["seq"])

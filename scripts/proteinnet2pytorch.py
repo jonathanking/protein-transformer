@@ -1,7 +1,8 @@
 """
-    Using ProteinNet as a guide, this script creates a new dataset that adds sidechain atom information.
-    It retains data splits, sequences, and masks but recomputes each structure's coordinates so that
-    sidechain atoms may be recorded. It also saves the entirety of the data as a single Python dictionary.
+Using ProteinNet as a guide, this script creates a new dataset that adds
+sidechain atom information. It retains data splits, sequences, and masks but
+recomputes each structure's coordinates so that sidechain atoms may be
+recorded. It also saves the entirety of the data as a single Python dictionary.
 
     Author: Jonathan King
     Date:   July 21, 2019
@@ -24,7 +25,7 @@ sys.path.append("/home/jok120/protein-transformer/scripts/utils/")
 sys.path.append("../scripts/utils")
 sys.path.extend("../protein/")
 from structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
-    no_nans_infs_allzeros, zero_runs, parse_astral_summary_file, \
+    no_nans_infs_allzeros, parse_astral_summary_file, \
     get_chain_from_astral_id, get_header_seq_from_astral_id, GLOBAL_PAD_CHAR
 from proteinnet_parsing import parse_raw_proteinnet
 from structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError, SequenceError, ContigMultipleMatchingError, ShortStructureError

@@ -3,7 +3,9 @@ from .Sublayers import PositionwiseFeedForward, PositionalEncoding, SublayerConn
 from .Attention import MultiHeadedAttention
 
 class Encoder(torch.nn.Module):
-    """ Transformer encoder model. """
+    """
+    Transformer encoder model.
+    """
 
     def __init__(self, din, dm, dff, n_heads, n_enc_layers, max_seq_len, dropout):
         super(Encoder, self).__init__()
@@ -29,7 +31,9 @@ class Encoder(torch.nn.Module):
 
 
 class EncoderLayer(torch.nn.Module):
-    """ Transformer encoder layer. """
+    """
+    Transformer encoder layer.
+    """
 
     def __init__(self, dm, dff, n_heads, dropout):
         super(EncoderLayer, self).__init__()

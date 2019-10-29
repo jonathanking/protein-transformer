@@ -1,3 +1,11 @@
+"""
+Primary script for training models to predict protein structure from amino
+acid sequence.
+
+    Author: Jonathan King
+    Date: 10/25/2019
+"""
+
 import argparse
 import csv
 import os
@@ -19,7 +27,9 @@ from models.nmt_models import EncoderOnlyTransformer
 wandb.init(project="protein-transformer", entity="koes-group")
 
 def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):
-    """ Epoch operation in training phase"""
+    """
+    One complete training epoch.
+    """
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
     n_batches = 0.0
@@ -59,7 +69,9 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
 
 
 def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
-    """ Epoch operation in evaluation phase. """
+    """
+    One compete evaluation epoch.
+    """
     model.eval()
     metrics = reset_metrics_for_epoch(metrics, mode)
     n_batches = 0.0
@@ -80,7 +92,9 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
 
 
 def train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer):
-    """ Start training. """
+    """
+    Model training control loop.
+    """
     for epoch_i in range(START_EPOCH, args.epochs):
         print(f'[ Epoch {epoch_i} ]')
 
@@ -89,14 +103,14 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
         metrics = train_epoch(model, training_data, optimizer, device, args, log_writer, metrics)
         if args.eval_train:
            metrics = eval_epoch(model, training_data, device, args, metrics, mode="train")
-        print_status("train_train", args, (start, metrics))
+        print_end_of_epoch_status("train", (start, metrics))
         log_batch(log_writer, metrics, START_TIME, mode="train", end_of_epoch=True)
 
         # Valid epoch
         if not args.train_only:
             start = time.time()
             metrics = eval_epoch(model, validation_data, device, args, metrics)
-            print_status("train_val", args, (start, metrics))
+            print_end_of_epoch_status("valid", (start, metrics))
             log_batch(log_writer, metrics, START_TIME, mode="valid", end_of_epoch=True)
 
         # Checkpointing
@@ -108,14 +122,17 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
 
     # Test Epoch
     if not args.train_only:
+        start = time.time()
         metrics = eval_epoch(model, test_data, device, args, metrics, mode="test")
-        print_status("train_test", args, (time.time(), metrics))
+        print_end_of_epoch_status("test", (start, metrics))
         log_batch(log_writer, metrics, START_TIME, mode="test", end_of_epoch=True)
 
 
 def checkpoint_model(args, optimizer, model, metrics, epoch_i):
-    """ Records model state according to a checkpointing policy. Defaults to best validation set performance. """
-    did_save = False
+    """
+    Records model state according to a checkpointing policy. Defaults to best
+    validation set performance. Returns True iff model was saved.
+    """
     cur_loss, loss_history = metrics["loss_to_compare"], metrics["losses_to_compare"]
     if args.save_mode == 'all' or len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
         model_state_dict = model.state_dict()
@@ -127,30 +144,33 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
             'loss': cur_loss,
             'metrics': metrics,
             'elapsed_time':time.time() - START_TIME}
-        did_save = True
+    else:
+        return False
+
     if args.save_mode == 'all':
-        chkpt_file_name = args.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(epoch_i, cur_loss)
-        torch.save(checkpoint, chkpt_file_name)
-        wandb.save(chkpt_file_name)
-        print('\r    - [Info] The checkpoint file has been updated.')
-        wandb.run.summary["best_validation_loss"] = cur_loss
-        wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
-        wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
-    elif len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
+        chkpt_file_name = args.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(
+            epoch_i, cur_loss)
+    else:
         chkpt_file_name = args.chkpt_path + "_best.chkpt"
-        torch.save(checkpoint, chkpt_file_name)
-        wandb.save(chkpt_file_name)
-        print('\r    - [Info] The checkpoint file has been updated.')
-        wandb.run.summary["best_validation_loss"] = cur_loss
-        wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
-        wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
-    return did_save
+
+    torch.save(checkpoint, chkpt_file_name)
+    wandb.save(chkpt_file_name)
+    print('\r    - [Info] The checkpoint file has been updated.')
+    wandb.run.summary["best_validation_loss"] = cur_loss
+    wandb.run.summary["avg_evaluation_speed"] = np.mean(
+        metrics["valid"]["speed-history"])
+    wandb.run.summary["avg_training_speed"] = np.mean(
+        metrics["train"]["speed-history"])
+
+    return True
 
 
 def load_model(model, optimizer, args):
-    """ Given a model, its optimizer, and the program's arguments, resumes
-        model training if the user has not specified otherwise. Assumes model
-        was saved the 'best' mode. """
+    """
+    Given a model, its optimizer, and the program's arguments, resumes model
+    training if the user has not specified otherwise. Assumes model was saved
+    the 'best' mode.
+    """
     global START_EPOCH
     global START_TIME
     chkpt_file_name = args.chkpt_path + "_best.chkpt"
@@ -180,7 +200,9 @@ def load_model(model, optimizer, args):
 
 
 def main():
-    """ Main function """
+    """
+    Argument parsing, model loading, and model training.
+    """
     global LOGFILEHEADER
     global START_EPOCH
     global START_TIME
@@ -200,7 +222,7 @@ def main():
     parser.add_argument("-b", '--batch_size', type=int, default=8)
     parser.add_argument('-es', '--early_stopping', type=int, default=None,
                         help="Stops if training hasn't improved in X epochs")
-    parser.add_argument('-nws', '--n_warmup_steps', type=int, default=1000)
+    parser.add_argument('-nws', '--n_warmup_steps', type=int, default=10000)
     parser.add_argument('-cg', '--clip', type=float, default=None)
     parser.add_argument('-cl', '--combined_loss', action='store_true',
                         help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
@@ -224,7 +246,6 @@ def main():
     parser.add_argument("--repeat_train", type=int, default=1, help="Duplicate the training set X times.")
 
     # Model parameters
-    parser.add_argument('-dwv', '--d_word_vec', type=int, default=20)
     parser.add_argument('-dm', '--d_model', type=int, default=512)
     parser.add_argument('-dih', '--d_inner_hid', type=int, default=2048)
     parser.add_argument('-dk', '--d_k', type=int, default=64)
@@ -248,7 +269,6 @@ def main():
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda
-    args.d_word_vec = args.d_model
     args.buffering_mode = 1
     LOGFILEHEADER = prepare_log_header(args)
     if args.save_mode == "all" and not args.restart:

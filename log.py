@@ -8,102 +8,93 @@ import torch
 
 def print_status(mode, args, items):
     """
-    Handles all status printing updates for the model. Allows complex string formatting per method while shrinking
-    the number of lines of code per each training subroutine. mode is one of 'train_epoch', 'eval_epoch',
-    'train_train', 'train_val', or 'train_test'.
-
-    'train_epoch' refers to print statements within a training epoch,
-    'eval_epoch' refers to print statemetns within an evaluation epoch,
-    'train_train' refers to the end of a training epoch,
-    'train_val' refers to the end of a validation epoch, and
-    'train_test' refers to the end of a test epoch.
+    Print the status line during training after a single batch update. Uses tqdm progress bar
+    by default, unless the script is run in a high performance computing (cluster) env.
     """
-    if mode == "train_epoch":
-        pbar, metrics, src_seq = items
-        cur_lr = metrics["history-lr"][-1]
-        training_losses = metrics["train"]["batch-history"]
-        train_drmsd_loss = metrics["train"]["batch-drmsd"]
-        train_mse_loss = metrics["train"]["batch-mse"]
-        train_comb_loss = metrics["train"]["batch-combined"]
-        batch_time = metrics["train"]["batch-time"]
-        if args.combined_loss:
-            loss = train_comb_loss
-        else:
-            loss = metrics["train"]["batch-ln-drmsd"]
-        lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling else ""
-        speed = metrics["train"]["speed"]
+    # Extract relevant metrics
+    pbar, metrics, src_seq = items
+    cur_lr = metrics["history-lr"][-1]
+    training_losses = metrics["train"]["batch-history"]
+    train_drmsd_loss = metrics["train"]["batch-drmsd"]
+    train_mse_loss = metrics["train"]["batch-mse"]
+    train_comb_loss = metrics["train"]["batch-combined"]
+    if args.combined_loss:
+        loss = train_comb_loss
+    else:
+        loss = metrics["train"]["batch-ln-drmsd"]
+    lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling else ""
+    speed = metrics["train"]["speed"]
+    if len(training_losses) <= 32:
+        rolling_avg = np.mean(training_losses)
+    else:
+        rolling_avg = np.mean(training_losses[-32:])
 
-        if not args.cluster and len(training_losses) > 32:
-            pbar.set_description('\r  - (Train) drmsd = {0:.6f}, ln-drmsd = {lnd:0.6f}, rmse = {3:.6f}, 32avg = {1:.6f}'
-                                 ', comb = {4:.6f}{2}, res/sec = {speed}'.format(float(train_drmsd_loss),
-                                                              np.mean(training_losses[-32:]),
-                                                              lr_string, np.sqrt(float(train_mse_loss)),
-                                                              float(train_comb_loss),
-                                                              lnd=metrics["train"]["batch-ln-drmsd"],
-                                                              speed=speed))
-        elif not args.cluster:
-            pbar.set_description('\r  - (Train) drmsd = {0:.6f}, ln-drmsd = {lnd:0.6f}, rmse = {2:.6f}, comb = '
-                                 '{3:.6f}{1}, res/sec = {speed}'.format(
-                float(train_drmsd_loss), lr_string, np.sqrt(float(train_mse_loss)), float(train_comb_loss),
-                lnd=metrics["train"]["batch-ln-drmsd"], speed=speed))
-        if args.cluster and len(training_losses) > 32:
-            print('Loss = {0:.6f}, 32avg = {1:.6f}{2}, speed = {speed}'.format(
-                float(loss), np.mean(training_losses[-32:]), lr_string, speed=speed))
-        elif args.cluster and len(training_losses) <= 32:
-            print('Loss = {0:.6f}, 32avg = {1:.6f}{2}, speed = {speed}'.format(
-                float(loss), np.mean(training_losses), lr_string, speed=speed))
+    if args.cluster:
+        print('Loss = {0:.6f}, 32avg = {1:.6f}{2}, speed = {speed}'.format(
+            float(loss),
+            rolling_avg,
+            lr_string,
+            speed=speed))
+    else:
+        pbar.set_description('\r  - (Train) drmsd = {0:.6f}, ln-drmsd = {lnd:0.6f}, rmse = {3:.6f},'
+                             ' 32avg = {1:.6f}, comb = {4:.6f}{2}, res/sec = {speed}'.format(
+            float(train_drmsd_loss),
+            rolling_avg,
+            lr_string,
+            np.sqrt(float(train_mse_loss)),
+            float(train_comb_loss),
+            lnd=metrics["train"]["batch-ln-drmsd"],
+            speed=speed))
 
-    elif mode == "eval_epoch":
-        pbar, d_loss, mode, m_loss, c_loss = items
-        if not args.cluster:
-            pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
-                float(d_loss), mode, np.sqrt(float(m_loss)), float(c_loss)))
 
-    elif mode == "train_train":
-        start, metrics = items
-        cur_lr = metrics["history-lr"][-1]
-        train_drmsd_loss = metrics["train"]["batch-drmsd"]
-        train_mse_loss = metrics["train"]["batch-mse"]
-        train_rmsd_loss_str = "{:6.3f}".format(metrics["train"]["batch-rmsd"]) if metrics["train"]["batch-rmsd"] else "nan"
-        train_comb_loss = metrics["train"]["batch-combined"]
-        print('\r  - (Train)   drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd}, comb: {comb: 6.3f}, '
-              'elapse: {elapse:3.3f} min, lr: {lr: {lr_precision}}, res/sec = {speed}'.format(d=train_drmsd_loss,
-                                                                            m=np.sqrt(train_mse_loss),
-                                                                            elapse=(time.time() - start) / 60,
-                                                                            lr=cur_lr, rmsd=train_rmsd_loss_str,
-                                                                            comb=train_comb_loss,
-                                                                            lr_precision="5.2e"
-                                                                            if (cur_lr < .001 and cur_lr != 0) else
-                                                                            "5.3f",
-                                                                            speed = round(np.mean(metrics["train"]["speed-history"]), 2)))
-    elif mode == "train_val":
-        start, metrics = items
-        val_drmsd_loss = metrics["valid"]["epoch-drmsd"]
-        val_mse_loss = metrics["valid"]["epoch-mse"]
-        val_rmsd_loss = metrics["valid"]["epoch-rmsd"]
-        val_comb_loss = metrics["valid"]["epoch-combined"]
-        print('\r  - (Validation) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
-              'elapse: {elapse:3.3f} min'.format(d=val_drmsd_loss, m=np.sqrt(val_mse_loss),
-                                                 elapse=(time.time() - start) / 60, rmsd=val_rmsd_loss,
-                                                 comb=val_comb_loss))
-    elif mode == "train_test":
-        start, metrics = items
-        test_drmsd_loss = metrics["test"]["epoch-drmsd"]
-        test_mse_loss = metrics["test"]["epoch-mse"]
-        test_rmsd_loss = metrics["test"]["epoch-rmsd"]
-        test_comb_loss = metrics["test"]["epoch-combined"]
-        print('\r  - (Test) drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd: 6.3f}, comb: {comb: 6.3f}, '
-              'elapse: {elapse:3.3f} min'.format(d=test_drmsd_loss, m=np.sqrt(test_mse_loss),
-                                                 elapse=(time.time() - start) / 60, comb=test_comb_loss,
-                                                 rmsd=test_rmsd_loss))
-        wandb.run.summary["test_drmsd_loss"] = metrics["test"]["epoch-drmsd"]
-        wandb.run.summary["test_mse_loss"] = metrics["test"]["epoch-mse"]
-        wandb.run.summary["test_rmsd_loss"] = metrics["test"]["epoch-rmsd"]
-        wandb.run.summary["test_comb_loss"] = metrics["test"]["epoch-combined"]
+def print_eval_batch_status(args, items):
+    """
+    Print the status line during evaluation after a single batch update.
+    Will only be seen if using a progress bar. Otherwise, there is no information logged.
+    """
+    pbar, d_loss, mode, m_loss, c_loss = items
+    if not args.cluster:
+        pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
+            float(d_loss),
+            mode,
+            np.sqrt(float(m_loss)),
+            float(c_loss)))
+
+
+def print_end_of_epoch_status(mode, items):
+    """
+    Prints the training status at the end of an epoch and updates wandb summary stats.
+    """
+    start, metrics = items
+    cur_lr = metrics["history-lr"][-1]
+    drmsd_loss = metrics[mode]["epoch-drmsd"]
+    mse_loss = metrics[mode]["epoch-mse"]
+    rmsd_loss_str = "{:6.3f}".format(metrics[mode]["epoch-rmsd"]) if metrics[mode]["epoch-rmsd"] else "nan"
+    comb_loss = metrics[mode]["epoch-combined"]
+    avg_speed = np.mean(metrics[mode]["speed-history"])
+    print('\r  - ({mode})   drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd}, comb: {comb: 6.3f}, '
+          'elapse: {elapse:3.3f} min, lr: {lr: {lr_precision}}, res/sec = {speed:.2f}'.format(
+        mode=mode.capitalize(),
+        d=drmsd_loss,
+        m=np.sqrt(mse_loss),
+        elapse=(time.time() - start) / 60,
+        lr=cur_lr,
+        rmsd=rmsd_loss_str,
+        comb=comb_loss,
+        lr_precision="5.2e" if (cur_lr < .001 and cur_lr != 0) else "5.3f",
+        speed=avg_speed))
+    # Log end of epoch stats with wandb
+    wandb.run.summary[f"final_epoch_{mode}_drmsd"] = metrics[mode]["epoch-drmsd"]
+    wandb.run.summary[f"final_epoch_{mode}_mse"] = metrics[mode]["epoch-mse"]
+    wandb.run.summary[f"final_epoch_{mode}_rmsd"] = metrics[mode]["epoch-rmsd"]
+    wandb.run.summary[f"final_epoch_{mode}_comb"] = metrics[mode]["epoch-combined"]
+    wandb.run.summary[f"final_epoch_{mode}_speed"] = avg_speed
 
 
 def update_loss_trackers(args, epoch_i, metrics):
-    """ Updates the current loss to compare according to an early stopping policy."""
+    """
+    Updates the current loss to compare according to an early stopping policy.
+    """
     if args.train_only:
         mode = "train"
     else:
@@ -131,7 +122,9 @@ def update_loss_trackers(args, epoch_i, metrics):
 
 
 def log_batch(log_writer, metrics, start_time,  mode="valid", end_of_epoch=False, t=None):
-    """ Logs training info to an already instantiated CSV-writer log. """
+    """
+    Logs training info to an already instantiated CSV-writer log.
+    """
     if not t:
         t = time.time()
     m = metrics[mode]
@@ -168,6 +161,8 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
             wandb.log({"Learning Rate": optimizer.cur_lr}, commit=not do_log_str)
     log_batch(log_writer, metrics, start_time, mode="train", end_of_epoch=False)
     print_status("train_epoch", args, (pbar, metrics, src_seq))
+        wandb.log({"Learning Rate": optimizer.cur_lr})
+    print_train_batch_status(args, (pbar, metrics, src_seq))
     # Check for NaNs
     if np.isnan(loss.item()):
         print("A nan loss has occurred. Exiting training.")
@@ -185,10 +180,9 @@ def log_structure(pred_coords, gold_item):
     wandb.log({"structure_cloud": wandb.Object3D(pred_coords[gold_item_non_nan].reshape(-1,3).detach().numpy())})
 
 
-
 def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):
     """
-    Performs all necessary logging at the end of an evaluation epoch.
+    Performs all necessary logging at the end of an evaluation batch.
     Updates custom metrics dictionary and wandb logs. Prints status of training.
     """
     metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
@@ -198,11 +192,13 @@ def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
                f"{mode.title()} ln-DRMSD": ln_d_loss,
                f"{mode.title()} Combined Loss": c_loss,
                f"{mode.title()} Speed": metrics[mode]["speed"]})
-    print_status("eval_epoch", args, (pbar, d_loss, mode, m_loss, c_loss))
+    print_eval_batch_status(args, (pbar, d_loss, mode, m_loss, c_loss))
 
 
 def init_metrics(args):
-    """ Returns an empty metric dictionary for recording model performance. """
+    """
+    Returns an empty metric dictionary for recording model performance.
+    """
     metrics = {"train": {"epoch-history-drmsd": [],
                          "epoch-history-combined": []},
                "valid": {"epoch-history-drmsd": [],
@@ -249,7 +245,9 @@ def update_metrics(metrics, mode, drmsd, ln_drmsd, mse, combined, src_seq, rmsd=
 
 
 def reset_metrics_for_epoch(metrics, mode):
-    """ Resets the running and batch-specific metrics for a new epoch. """
+    """
+    Resets the running and batch-specific metrics for a new epoch.
+    """
     metrics[mode]["epoch-drmsd"] = metrics[mode]["batch-drmsd"] = 0
     metrics[mode]["epoch-ln-drmsd"] = metrics[mode]["batch-ln-drmsd"] = 0
     metrics[mode]["epoch-mse"] = metrics[mode]["batch-mse"] = 0
@@ -265,7 +263,9 @@ def reset_metrics_for_epoch(metrics, mode):
 
 
 def update_metrics_end_of_epoch(metrics, mode, n_batches):
-    """ Averages the running metrics over an epoch """
+    """
+    Averages the running metrics over an epoch
+    """
     metrics[mode]["epoch-drmsd"] /= n_batches
     metrics[mode]["epoch-ln-drmsd"] /= n_batches
     metrics[mode]["epoch-mse"] /= n_batches
@@ -281,7 +281,9 @@ def update_metrics_end_of_epoch(metrics, mode, n_batches):
 
 
 def prepare_log_header(args):
-    """ Returns the column ordering for the logfile. """
+    """
+    Returns the column ordering for the logfile.
+    """
     if args.combined_loss:
         return 'drmsd,ln_drmsd,rmse,rmsd,combined,lr,mode,granularity,time,speed\n'
     else:
@@ -289,6 +291,8 @@ def prepare_log_header(args):
 
 
 class EarlyStoppingCondition(Exception):
-    """An exception to raise when Early Stopping conditions are met."""
+    """
+    An exception to raise when Early Stopping conditions are met.
+    """
     def __init__(self, *args):
         super().__init__(*args)

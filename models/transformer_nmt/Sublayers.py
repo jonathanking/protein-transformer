@@ -3,8 +3,10 @@ import numpy as np
 
 
 class SublayerConnection(torch.nn.Module):
-    """ Does residual + layer norm of input. Modular design inspired from Harvard NLP.
-        http://nlp.seas.harvard.edu/2018/04/03/attention.html#encoder-and-decoder-stacks
+    """
+    Does residual + layer norm of input. Modular design inspired from Harvard
+    NLP.
+    http://nlp.seas.harvard.edu/2018/04/03/attention.html#encoder-and-decoder-stacks
     """
     def __init__(self, size, dropout=0.1):
         super(SublayerConnection, self).__init__()
@@ -16,7 +18,9 @@ class SublayerConnection(torch.nn.Module):
 
 
 class PositionwiseFeedForward(torch.nn.Module):
-    """ Position-wise Feed Forward network sublayer for the Transformer model. """
+    """
+    Position-wise Feed Forward network sublayer for the Transformer model.
+    """
     def __init__(self, dm, dh, dropout=0.1):
         super(PositionwiseFeedForward, self).__init__()
         self.dm = dm
@@ -33,7 +37,8 @@ class PositionwiseFeedForward(torch.nn.Module):
 
 
 class PositionalEncoding(torch.nn.Module):
-    """ Positional encoding layer for the Transformer model.
+    """
+    Positional encoding layer for the Transformer model.
     """
     def __init__(self, dm, max_seq_len):
         super(PositionalEncoding, self).__init__()

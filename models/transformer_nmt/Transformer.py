@@ -5,7 +5,9 @@ from .Decoder import Decoder
 import numpy as np
 
 class Transformer(torch.nn.Module):
-    """ Transformer based model. """
+    """
+    Transformer based model.
+    """
     def __init__(self, dm, dff, din, dout, n_heads, n_enc_layers, n_dec_layers, max_seq_len, pad_char, device, dropout=0.1):
         super(Transformer, self).__init__()
         self.din = din
@@ -39,7 +41,9 @@ class Transformer(torch.nn.Module):
                 torch.nn.init.xavier_uniform_(p)
 
     def subsequent_mask(self, length):
-        """ Returns a mask such that for position i, all positions i+1 ... dim are masked. """
+        """
+        Returns a mask such that for position i, all positions i+1 ... dim are masked.
+        """
         shape = (1, length, length)
         mask = 1 - np.triu(np.ones(shape), k=1)
         return torch.from_numpy(mask).bool().to(self.device)
