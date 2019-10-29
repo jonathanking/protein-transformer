@@ -110,7 +110,7 @@ def add_start_char(two_dim_array, sos_char=SOS_CHAR):
     return np.concatenate([start, two_dim_array])
 
 
-def prepare_dataloaders(data, args):
+def prepare_dataloaders(data, args, use_start_char=False):
     """
     Using the pre-processed data, stored in a nested Python dictionary, this
     function returns train, validation, and test set dataloaders with 2 workers
@@ -123,7 +123,7 @@ def prepare_dataloaders(data, args):
             seqs=data['train']['seq']*args.repeat_train,
             crds=data['train']['crd']*args.repeat_train,
             angs=data['train']['ang']*args.repeat_train,
-            ),
+            add_start_character_to_input=use_start_char),
         num_workers=2,
         batch_size=args.batch_size,
         collate_fn=collate,
@@ -135,7 +135,7 @@ def prepare_dataloaders(data, args):
             seqs=data['valid'][70]['seq'],
             crds=data['valid'][70]['crd'],
             angs=data['valid'][70]['ang'],
-            ),
+            add_start_character_to_input=use_start_char),
         num_workers=2,
         batch_size=args.batch_size,
         collate_fn=collate)
@@ -145,7 +145,7 @@ def prepare_dataloaders(data, args):
             seqs=data['test']['seq'],
             crds=data['test']['crd'],
             angs=data['test']['ang'],
-            ),
+            add_start_character_to_input=use_start_char),
         num_workers=2,
         batch_size=args.batch_size,
         collate_fn=collate)

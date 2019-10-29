@@ -179,7 +179,7 @@ class Transformer(nn.Module):
                                postnorm=args.postnorm,
                                dropout=dropout)
 
-        self.input_embedding = nn.Linear(input_dim, d_model)  # nn.Embedding(d_word_vec, d_angle) # TODO change to embedding layer
+        self.input_embedding = nn.Embedding(input_dim, d_model)
         self.tgt_angle_prj = nn.Linear(d_model, d_angle)
         self.tgt_embedding = nn.Linear(d_angle, d_model)
         nn.init.xavier_normal_(self.tgt_angle_prj.weight)

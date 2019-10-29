@@ -40,10 +40,18 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
         if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
             continue
-        tgt_ang_no_nan = tgt_ang.clone().detach()
-        tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
-        # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
-        pred = model(src_seq.argmax(dim=-1))
+        if args.model == "enc-dec":
+            # We don't provide the entire output sequence to the model because it will be given t-1 and should
+            # predict t
+            tgt_ang_no_nan = tgt_ang.clone().detach()
+            tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
+            pred = model(src_seq.argmax(dim=-1), src_pos_enc, tgt_ang_no_nan[:, :-1], tgt_pos_enc[:, :-1],
+                         has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
+            # Remove SOS character for downstream functions
+            tgt_ang = tgt_ang[:,1:]
+            src_seq = src_seq[:,1:]
+        else:
+            pred = model(src_seq.argmax(dim=-1))
         pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, device)
         d_loss, ln_d_loss = d_loss.to('cpu'), ln_d_loss.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
@@ -80,7 +88,13 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
     with torch.no_grad():
         for batch in pbar:
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-            pred = model.predict(src_seq.argmax(dim=-1))
+            if args.model == "enc-dec":
+                pred = model.predict(src_seq.argmax(dim=-1), src_pos_enc)
+                # Remove SOS character for downstream functions
+                tgt_ang = tgt_ang[:, 1:]
+                src_seq = src_seq[:, 1:]
+            else:
+                pred = model(src_seq.argmax(dim=-1))
             pred_coords, d_loss, ln_d_loss, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, device, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
@@ -246,6 +260,7 @@ def main():
     parser.add_argument("--repeat_train", type=int, default=1, help="Duplicate the training set X times.")
 
     # Model parameters
+    parser.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only"], default="enc-only")
     parser.add_argument('-dm', '--d_model', type=int, default=512)
     parser.add_argument('-dih', '--d_inner_hid', type=int, default=2048)
     parser.add_argument('-dk', '--d_k', type=int, default=64)
@@ -278,16 +293,28 @@ def main():
     # Load dataset
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
-    training_data, validation_data, test_data = prepare_dataloaders(data, args)
+    training_data, validation_data, test_data = prepare_dataloaders(data, args, use_start_char=args.model == "enc-dec")
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
-    model = EncoderOnlyTransformer(nlayers=args.n_layers,
-                                   nhead=args.n_head,
-                                   dmodel=args.d_model,
-                                   dff=args.d_inner_hid,
-                                   max_seq_len=500,
-                                   dropout=args.dropout).to(device)
+    if args.model == "enc-only":
+        model = EncoderOnlyTransformer(nlayers=args.n_layers,
+                                       nhead=args.n_head,
+                                       dmodel=args.d_model,
+                                       dff=args.d_inner_hid,
+                                       max_seq_len=500,
+                                       dropout=args.dropout).to(device)
+    else:
+        model = Transformer(args,
+                        d_k=args.d_k,
+                        d_v=args.d_v,
+                        d_model=args.d_model,
+                        d_inner=args.d_inner_hid,
+                        n_layers=args.n_layers,
+                        n_head=args.n_head,
+                        dropout=args.dropout,
+                        complete_tf=args.fraction_complete_tf,
+                        subseq_tf=args.fraction_subseq_tf).to(device)
 
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
