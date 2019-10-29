@@ -245,7 +245,6 @@ def main():
     """
     Argument parsing, model loading, and model training.
     """
-    #TODO remove dk from args
     global LOGFILEHEADER
     global START_EPOCH
     global START_TIME
