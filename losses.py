@@ -92,9 +92,9 @@ def drmsd_loss_from_angles(pred_angs, true_crds, input_seqs, device, return_rmsd
             rmsds.append(rmsd(pred_crds_masked.data.numpy(), true_crds_masked.data.numpy()))
 
     if return_rmsd:
-        return pred_coords, torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses)), np.mean(rmsds)
+        return pred_crd, torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses)), np.mean(rmsds)
     else:
-        return pred_coords, torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses))
+        return pred_crd, torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses))
 
 
 def mse_over_angles(pred, true):

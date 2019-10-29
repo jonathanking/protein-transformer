@@ -18,7 +18,7 @@ import torch.utils.data
 from tqdm import tqdm
 
 from dataset import prepare_dataloaders
-from losses import drmsd_loss_from_coords, mse_over_angles, combine_drmsd_mse
+from losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
 from models.transformer.Models import Transformer, MISSING_CHAR
 from models.transformer.Optim import ScheduledOptim
 from log import *
@@ -44,7 +44,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
         # We don't provide the entire output sequence to the model because it will be given t-1 and should predict t
         pred = model(src_seq.argmax(dim=-1))
-        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device)
+        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, device)
         d_loss, ln_d_loss = d_loss.to('cpu'), ln_d_loss.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=0.5)
@@ -81,7 +81,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
         for batch in pbar:
             src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
             pred = model.predict(src_seq.argmax(dim=-1))
-            pred_coords, d_loss, ln_d_loss, r_loss = drmsd_loss_from_coords(pred, tgt_crds, src_seq, device, return_rmsd=True)
+            pred_coords, d_loss, ln_d_loss, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, device, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
             do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode)
@@ -275,12 +275,12 @@ def main():
         print("You cannot resume this model because it was saved with mode 'all'.")
         exit(1)
 
-    # ========= Loading Dataset ========= #
+    # Load dataset
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
     training_data, validation_data, test_data = prepare_dataloaders(data, args)
 
-    # ========= Preparing Model ========= #
+    # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
     model = EncoderOnlyTransformer(nlayers=args.n_layers,
                                    nhead=args.n_head,
@@ -297,7 +297,7 @@ def main():
     if args.lr_scheduling:
         optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
 
-    # ========= Preparing Log and Checkpoint Files ========= #
+    # Prepare log and checkpoint files
     args.chkpt_path = "./data/checkpoints/" + args.name
     os.makedirs("./data/checkpoints", exist_ok=True)
     args.log_file = "./data/logs/" + args.name + '.train'
@@ -318,7 +318,7 @@ def main():
         wandb.config.update({"data_creation_date": data["date"]})
     print(args, "\n")
 
-    # ========= Train ========= #
+    # Begin training
     train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer)
     log_f.close()
 

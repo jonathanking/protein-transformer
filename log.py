@@ -6,7 +6,7 @@ import sys
 import torch
 
 
-def print_status(mode, args, items):
+def print_train_batch_status(args, items):
     """
     Print the status line during training after a single batch update. Uses tqdm progress bar
     by default, unless the script is run in a high performance computing (cluster) env.
@@ -160,8 +160,6 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
         if not step or step % args.log_wandb_step  == 0:
             wandb.log({"Learning Rate": optimizer.cur_lr}, commit=not do_log_str)
     log_batch(log_writer, metrics, start_time, mode="train", end_of_epoch=False)
-    print_status("train_epoch", args, (pbar, metrics, src_seq))
-        wandb.log({"Learning Rate": optimizer.cur_lr})
     print_train_batch_status(args, (pbar, metrics, src_seq))
     # Check for NaNs
     if np.isnan(loss.item()):
@@ -172,10 +170,13 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
 
 
 def log_structure(pred_coords, gold_item):
+    """
+    Logs a 3D structure prediction to wandb.
+    """
     gold_item_non_nan = torch.isnan(gold_item).eq(0)
     bb_mask = np.asarray([[1, 1, 1] + [0] * 10] * (pred_coords.shape[0] // 13), dtype=np.bool)
     wandb.log({"backbone_cloud": wandb.Object3D(
-        pred_coords[bb_mask.flatten() & gold_item_non_nan[:bb_mask.shape[0]].cpu().detach().numpy().all(axis=1)].detach().numpy())},
+        pred_coords[bb_mask.flatten() & gold_item_non_nan[:bb_mask.shape[0]*13].cpu().detach().numpy().all(axis=1)].detach().numpy())},
         commit=False)
     wandb.log({"structure_cloud": wandb.Object3D(pred_coords[gold_item_non_nan].reshape(-1,3).detach().numpy())})
 
