@@ -16,15 +16,17 @@ python train.py data/proteinnet/casp12.pt model01 -lr -0.01 -e 30 -b 12 -cl -cg 
 
 #### Usage:
 ```
- usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
+usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
                 [-es EARLY_STOPPING] [-nws N_WARMUP_STEPS] [-cg CLIP] [-cl]
                 [--train_only] [--lr_scheduling] [--without_angle_means]
                 [--eval_train] [-opt {adam,sgd}] [-fctf FRACTION_COMPLETE_TF]
                 [-fsstf FRACTION_SUBSEQ_TF] [--skip_missing_res_train]
-                [--repeat_train REPEAT_TRAIN] [-dm D_MODEL] [-dih D_INNER_HID]
-                [-dk D_K] [-dv D_V] [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT]
-                [--postnorm] [--log LOG] [--save_mode {all,best}] [--no_cuda]
-                [--cluster] [--restart] [--restart_opt]
+                [--repeat_train REPEAT_TRAIN] [-m {enc-dec,enc-only}]
+                [-dm D_MODEL] [-dih D_INNER_HID] [-dk DK] [-dv DV]
+                [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT] [--postnorm]
+                [--log_structure_step LOG_STRUCTURE_STEP]
+                [--log_wandb_step LOG_WANDB_STEP] [--save_mode {all,best}]
+                [--no_cuda] [--cluster] [--restart] [--restart_opt]
                 data name
 
 positional arguments:
@@ -39,19 +41,24 @@ optional arguments:
   -es EARLY_STOPPING, --early_stopping EARLY_STOPPING
                         Stops if training hasn't improved in X epochs
   -nws N_WARMUP_STEPS, --n_warmup_steps N_WARMUP_STEPS
+                        Number of warmup training steps when using lr-
+                        scheduling as proposed in the originalTransformer
+                        paper.
   -cg CLIP, --clip CLIP
+                        Gradient clipping value.
   -cl, --combined_loss  Use a loss that combines (quasi-equally) DRMSD and
                         MSE.
   --train_only          Train, validation, and testing sets are the same. Only
                         report train accuracy.
-  --lr_scheduling       Use learning rate scheduling as described in" +
-                        "original paper.
+  --lr_scheduling       Use learning rate scheduling as described in original
+                        paper.
   --without_angle_means
                         Do not initialize the model with pre-computed angle
                         means.
   --eval_train          Perform an evaluation of the entire training set after
                         a training epoch.
   -opt {adam,sgd}, --optimizer {adam,sgd}
+                        Training optimizer.
   -fctf FRACTION_COMPLETE_TF, --fraction_complete_tf FRACTION_COMPLETE_TF
                         Fraction of the time to use teacher forcing for every
                         timestep of the batch. Model trainsfastest when this
@@ -64,24 +71,40 @@ optional arguments:
                         residues. This can make trainingfaster if using
                         teacher forcing.
   --repeat_train REPEAT_TRAIN
-                        Duplicate the training set X times.
+                        Duplicate the training set X times. Useful for
+                        training on small datasets.
+  -m {enc-dec,enc-only}, --model {enc-dec,enc-only}
+                        Model architecture type. Encoder only or
+                        encoder/decoder model.
   -dm D_MODEL, --d_model D_MODEL
+                        Dimension of each sequence item in the model. Each
+                        layer uses the same dimension for simplicity.
   -dih D_INNER_HID, --d_inner_hid D_INNER_HID
-  -dk D_K, --d_k D_K
-  -dv D_V, --d_v D_V
+                        Dimmension of the inner layer of the feed-forward
+                        layer at the end of every Transformer block.
+  -dk DK                Dimension of attention keys.
+  -dv DV                Dimension of attention values.
   -nh N_HEAD, --n_head N_HEAD
+                        Number of attention heads.
   -nl N_LAYERS, --n_layers N_LAYERS
+                        Number of layers in the model. If using
+                        encoder/decoder model, the encoder and decoder both
+                        have this number of layers.
   -do DROPOUT, --dropout DROPOUT
+                        Dropout applied between layers.
   --postnorm            Use post-layer normalization, as depicted in the
                         original figure for the Transformer model. May not
                         train as well as pre-layer normalization.
-  --log LOG
+  --log_structure_step LOG_STRUCTURE_STEP
+  --log_wandb_step LOG_WANDB_STEP
   --save_mode {all,best}
   --no_cuda
   --cluster             Set of parameters to facilitate training on a remote
                         cluster. Limited I/O, etc.
   --restart             Does not resume training.
   --restart_opt         Resumes training but does not load the optimizerstate.
+
+
 
 
 

@@ -236,19 +236,22 @@ def main():
     parser.add_argument("-b", '--batch_size', type=int, default=8)
     parser.add_argument('-es', '--early_stopping', type=int, default=None,
                         help="Stops if training hasn't improved in X epochs")
-    parser.add_argument('-nws', '--n_warmup_steps', type=int, default=10000)
-    parser.add_argument('-cg', '--clip', type=float, default=None)
+    parser.add_argument('-nws', '--n_warmup_steps', type=int, default=10_000,
+                        help="Number of warmup training steps when using lr-scheduling as proposed in the original"
+                             "Transformer paper.")
+    parser.add_argument('-cg', '--clip', type=float, default=None, help="Gradient clipping value.")
     parser.add_argument('-cl', '--combined_loss', action='store_true',
                         help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
     parser.add_argument('--train_only', action='store_true',
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
-    parser.add_argument('--lr_scheduling', action='store_true', help='Use learning rate scheduling as described in" + '
-                                                                     '"original paper.')
+    parser.add_argument('--lr_scheduling', action='store_true',
+                        help='Use learning rate scheduling as described in original paper.')
     parser.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
     parser.add_argument('--eval_train', action='store_true',
                         help="Perform an evaluation of the entire training set after a training epoch.")
-    parser.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='adam')
+    parser.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
+                        help="Training optimizer.")
     parser.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
                         help="Fraction of the time to use teacher forcing for every timestep of the batch. Model trains"
                              "fastest when this is 1.")
@@ -257,19 +260,28 @@ def main():
     parser.add_argument("--skip_missing_res_train", action="store_true",
                         help="When training, skip over batches that have missing residues. This can make training"
                              "faster if using teacher forcing.")
-    parser.add_argument("--repeat_train", type=int, default=1, help="Duplicate the training set X times.")
+    parser.add_argument("--repeat_train", type=int, default=1,
+                        help="Duplicate the training set X times. Useful for training on small datasets.")
 
     # Model parameters
-    parser.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only"], default="enc-only")
-    parser.add_argument('-dm', '--d_model', type=int, default=512)
-    parser.add_argument('-dih', '--d_inner_hid', type=int, default=2048)
-    parser.add_argument('-dk', '--d_k', type=int, default=64)
-    parser.add_argument('-dv', '--d_v', type=int, default=64)
-    parser.add_argument('-nh', '--n_head', type=int, default=8)
-    parser.add_argument('-nl', '--n_layers', type=int, default=6)
-    parser.add_argument('-do', '--dropout', type=float, default=0)
-    parser.add_argument('--postnorm', action='store_true', help="Use post-layer normalization, as depicted in the "
-                        "original figure for the Transformer model. May not train as well as pre-layer normalization.")
+    parser.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only"], default="enc-only",
+                        help="Model architecture type. Encoder only or encoder/decoder model.")
+    parser.add_argument('-dm', '--d_model', type=int, default=512,
+                        help="Dimension of each sequence item in the model. Each layer uses the same dimension for "
+                             "simplicity.")
+    parser.add_argument('-dih', '--d_inner_hid', type=int, default=2048,
+                        help="Dimmension of the inner layer of the feed-forward layer at the end of every Transformer"
+                             " block.")
+    parser.add_argument('-dk', type=int, default=64, help="Dimension of attention keys.")
+    parser.add_argument('-dv', type=int, default=64, help="Dimension of attention values.")
+    parser.add_argument('-nh', '--n_head', type=int, default=8, help="Number of attention heads.")
+    parser.add_argument('-nl', '--n_layers', type=int, default=6,
+                        help="Number of layers in the model. If using encoder/decoder model, the encoder and decoder"
+                             " both have this number of layers.")
+    parser.add_argument('-do', '--dropout', type=float, default=0.1, help="Dropout applied between layers.")
+    parser.add_argument('--postnorm', action='store_true',
+                        help="Use post-layer normalization, as depicted in the original figure for the Transformer "
+                             "model. May not train as well as pre-layer normalization.")
 
     # Saving args
     parser.add_argument('--log_structure_step', type=int, default=10)
