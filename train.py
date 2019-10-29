@@ -44,7 +44,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
             # Replace nans with missing character
             tgt_ang_no_nan = tgt_ang.clone().detach()
             tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
-            # prove encoder with time steps SOS..t and decoder with time steps 1..t-1
+            # Provide encoder with time steps SOS..t and decoder with SOS..t-1
             pred = model(src_seq.argmax(dim=-1), src_pos_enc, tgt_ang_no_nan[:, :-1], tgt_pos_enc[:, :-1],
                          has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
             # Remove SOS character for downstream functions
@@ -63,10 +63,10 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         if args.clip:
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
 
-        # update parameters
+        # Update parameters
         optimizer.step()
 
-        # record performance metrics
+        # Record performance metrics
         do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer,
                                pbar, START_TIME, pred_coords, tgt_crds[-1], step)
         n_batches += 1
