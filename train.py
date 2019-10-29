@@ -212,6 +212,7 @@ def load_model(model, optimizer, args):
           f" = {checkpoint['loss']:.4f}.")
     return model, optimizer, True, checkpoint['metrics']
 
+
 def make_model(args):
     """
     Returns requested model architecture. Currently only enc-only and enc-dec
