@@ -25,7 +25,6 @@ class EncoderOnlyTransformer(nn.Module):
                 nn.init.xavier_uniform_(p)
         self.output_projection.bias = nn.Parameter(torch.FloatTensor(np.arctanh(self.load_angle_means(\
             "data/proteinnet/casp12_190927_100_mean.npy"))))
-        # nn.init.xavier_normal_(self.output_projection.weight, gain=0.00001)
         nn.init.zeros_(self.output_projection.weight)
 
     @staticmethod

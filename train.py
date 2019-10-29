@@ -212,6 +212,33 @@ def load_model(model, optimizer, args):
           f" = {checkpoint['loss']:.4f}.")
     return model, optimizer, True, checkpoint['metrics']
 
+def make_model(args):
+    """
+    Returns requested model architecture. Currently only enc-only and enc-dec
+    are supported.
+    """
+    if args.model == "enc-only":
+        model = EncoderOnlyTransformer(nlayers=args.n_layers,
+                                       nhead=args.n_head,
+                                       dmodel=args.d_model,
+                                       dff=args.d_inner_hid,
+                                       max_seq_len=500,
+                                       dropout=args.dropout)
+    elif args.model == "enc-dec":
+        model = Transformer(args,
+                            d_k=args.d_k,
+                            d_v=args.d_v,
+                            d_model=args.d_model,
+                            d_inner=args.d_inner_hid,
+                            n_layers=args.n_layers,
+                            n_head=args.n_head,
+                            dropout=args.dropout,
+                            complete_tf=args.fraction_complete_tf,
+                            subseq_tf=args.fraction_subseq_tf)
+    else:
+        raise argparse.ArgumentError("Model architecture not implemented.")
+    return model
+
 
 def main():
     """
@@ -310,24 +337,7 @@ def main():
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
-    if args.model == "enc-only":
-        model = EncoderOnlyTransformer(nlayers=args.n_layers,
-                                       nhead=args.n_head,
-                                       dmodel=args.d_model,
-                                       dff=args.d_inner_hid,
-                                       max_seq_len=500,
-                                       dropout=args.dropout).to(device)
-    else:
-        model = Transformer(args,
-                        d_k=args.d_k,
-                        d_v=args.d_v,
-                        d_model=args.d_model,
-                        d_inner=args.d_inner_hid,
-                        n_layers=args.n_layers,
-                        n_head=args.n_head,
-                        dropout=args.dropout,
-                        complete_tf=args.fraction_complete_tf,
-                        subseq_tf=args.fraction_subseq_tf).to(device)
+    model = make_model(args).to(device)
 
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
