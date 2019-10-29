@@ -32,7 +32,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     """
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
-    n_batches = 0.0
+    n_batches = 0
     pbar = tqdm(training_data, mininterval=2, leave=False) if not args.cluster else training_data
 
     for step, batch in enumerate(pbar):
@@ -41,10 +41,10 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
             continue
         if args.model == "enc-dec":
-            # We don't provide the entire output sequence to the model because it will be given t-1 and should
-            # predict t
+            # Replace nans with missing character
             tgt_ang_no_nan = tgt_ang.clone().detach()
             tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
+            # prove encoder with time steps SOS..t and decoder with time steps 1..t-1
             pred = model(src_seq.argmax(dim=-1), src_pos_enc, tgt_ang_no_nan[:, :-1], tgt_pos_enc[:, :-1],
                          has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
             # Remove SOS character for downstream functions
@@ -333,7 +333,8 @@ def main():
     # Load dataset
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
-    training_data, validation_data, test_data = prepare_dataloaders(data, args, use_start_char=args.model == "enc-dec")
+    training_data, validation_data, test_data = prepare_dataloaders(data, args,
+                                                                    use_start_char=args.model == "enc-dec")
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
@@ -343,9 +344,11 @@ def main():
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
                                betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
     elif args.optimizer == "sgd":
-        optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=args.learning_rate)
+        optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()),
+                              lr=args.learning_rate)
     if args.lr_scheduling:
-        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps, simple=False)
+        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps,
+                                   simple=False)
 
     # Prepare log and checkpoint files
     args.chkpt_path = "./data/checkpoints/" + args.name
@@ -366,10 +369,15 @@ def main():
         wandb.config.update({"data_creation_date": next(iter(data["date"]))})
     else:
         wandb.config.update({"data_creation_date": data["date"]})
+    n_params = sum(p.numel() for p in model.parameters())
+    n_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    wandb.config.update({"n_params": n_params, "n_trainable_params": n_trainable_params})
+
     print(args, "\n")
 
     # Begin training
-    train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer)
+    train(model, metrics, training_data, validation_data, test_data, optimizer,
+          device, args, log_writer)
     log_f.close()
 
 

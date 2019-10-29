@@ -34,24 +34,6 @@ def inverse_trig_transform(t):
     return t
 
 
-def copy_padding_from_gold(pred, gold, device):
-    """
-    Given two angle tensors, one of which is the true angles (gold) and
-    is properly padded, copy the padding from that tensor and apple it to the
-    predicted tensor. The predicted tensor does not understand padding
-    sufficiently.
-    """
-    # TODO: Assumes any zero is a pad
-    not_padded_mask = (gold != 0)
-    if device.type == "cuda":
-        pred_unpadded = pred.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
-        gold_unpadded = gold.cuda() * not_padded_mask.type(torch.cuda.FloatTensor)
-    else:
-        pred_unpadded = pred * not_padded_mask.type(torch.FloatTensor)
-        gold_unpadded = gold * not_padded_mask.type(torch.FloatTensor)
-    return pred_unpadded, gold_unpadded
-
-
 def drmsd_loss_from_angles(pred_angs, true_crds, input_seqs, device, return_rmsd=False):
     """
     Calculate DRMSD loss by first generating predicted coordinates from
