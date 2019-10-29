@@ -96,14 +96,15 @@ optional arguments:
                         original figure for the Transformer model. May not
                         train as well as pre-layer normalization.
   --log_structure_step LOG_STRUCTURE_STEP
+                        Frequency of logging structure data during training.
   --log_wandb_step LOG_WANDB_STEP
+                        Frequency of logging to wandb during training.
   --save_mode {all,best}
   --no_cuda
   --cluster             Set of parameters to facilitate training on a remote
                         cluster. Limited I/O, etc.
   --restart             Does not resume training.
   --restart_opt         Resumes training but does not load the optimizerstate.
-
 
 
 

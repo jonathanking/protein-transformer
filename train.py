@@ -231,7 +231,7 @@ def main():
     parser.add_argument("name", type=str, help="The model name.")
 
     # Training parameters
-    parser.add_argument("-lr", "--learning_rate", type=float, default=1 * (10 ** -3))
+    parser.add_argument("-lr", "--learning_rate", type=float, default=1e-2)
     parser.add_argument('-e', '--epochs', type=int, default=10)
     parser.add_argument("-b", '--batch_size', type=int, default=8)
     parser.add_argument('-es', '--early_stopping', type=int, default=None,
@@ -284,8 +284,10 @@ def main():
                              "model. May not train as well as pre-layer normalization.")
 
     # Saving args
-    parser.add_argument('--log_structure_step', type=int, default=10)
-    parser.add_argument('--log_wandb_step', type=int, default=1)
+    parser.add_argument('--log_structure_step', type=int, default=10,
+                        help="Frequency of logging structure data during training.")
+    parser.add_argument('--log_wandb_step', type=int, default=1,
+                        help="Frequency of logging to wandb during training.")
     parser.add_argument('--save_mode', type=str, choices=['all', 'best'], default='best')
     parser.add_argument('--no_cuda', action='store_true')
     parser.add_argument('--cluster', action='store_true', help="Set of parameters to facilitate training on a remote" +
