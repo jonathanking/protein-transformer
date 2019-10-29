@@ -217,6 +217,7 @@ def main():
     """
     Argument parsing, model loading, and model training.
     """
+    #TODO remove dk from args
     global LOGFILEHEADER
     global START_EPOCH
     global START_TIME
@@ -272,8 +273,6 @@ def main():
     parser.add_argument('-dih', '--d_inner_hid', type=int, default=2048,
                         help="Dimmension of the inner layer of the feed-forward layer at the end of every Transformer"
                              " block.")
-    parser.add_argument('-dk', type=int, default=64, help="Dimension of attention keys.")
-    parser.add_argument('-dv', type=int, default=64, help="Dimension of attention values.")
     parser.add_argument('-nh', '--n_head', type=int, default=8, help="Number of attention heads.")
     parser.add_argument('-nl', '--n_layers', type=int, default=6,
                         help="Number of layers in the model. If using encoder/decoder model, the encoder and decoder"

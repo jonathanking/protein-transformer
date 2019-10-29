@@ -2,7 +2,7 @@
 
 This project explores sequence modeling techniques to predict complete (all-atom) protein structure. The work was inspired by language modeling methodologies, and as such incorporates Transformer and attention based models. Importantly, this is also a work in progress and an active research project. I welcome any thoughts or interest! 
 
-If you'd like to look around, `train.py` loads and trains models, models are defined in `models/`, and code in `protein/` and `scripts/structure_utils` is responsible for manipulating and generating protein structure and sequence data. Many other research documents are currently included, but are not needed to run the script. 
+If you'd like to look around, `train.py` loads and trains models, models are defined in `models/`, and code in `protein/` is responsible for manipulating and generating protein structure and sequence data. Many other research documents are currently included in `research/`, but are not needed to run the script. 
 
 ## How to run
 
@@ -22,8 +22,8 @@ usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
                 [--eval_train] [-opt {adam,sgd}] [-fctf FRACTION_COMPLETE_TF]
                 [-fsstf FRACTION_SUBSEQ_TF] [--skip_missing_res_train]
                 [--repeat_train REPEAT_TRAIN] [-m {enc-dec,enc-only}]
-                [-dm D_MODEL] [-dih D_INNER_HID] [-dk DK] [-dv DV]
-                [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT] [--postnorm]
+                [-dm D_MODEL] [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS]
+                [-do DROPOUT] [--postnorm]
                 [--log_structure_step LOG_STRUCTURE_STEP]
                 [--log_wandb_step LOG_WANDB_STEP] [--save_mode {all,best}]
                 [--no_cuda] [--cluster] [--restart] [--restart_opt]
@@ -82,8 +82,6 @@ optional arguments:
   -dih D_INNER_HID, --d_inner_hid D_INNER_HID
                         Dimmension of the inner layer of the feed-forward
                         layer at the end of every Transformer block.
-  -dk DK                Dimension of attention keys.
-  -dv DV                Dimension of attention values.
   -nh N_HEAD, --n_head N_HEAD
                         Number of attention heads.
   -nl N_LAYERS, --n_layers N_LAYERS

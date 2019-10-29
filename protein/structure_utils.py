@@ -5,7 +5,7 @@ import prody as pr
 import re
 
 from protein.Sidechains import NUM_PREDICTED_ANGLES, SC_DATA
-from .structure_exceptions import NonStandardAminoAcidError, IncompleteStructureError, MissingBackboneAtomsError, \
+from scripts.utils.structure_exceptions import NonStandardAminoAcidError, IncompleteStructureError, MissingBackboneAtomsError, \
     SequenceError, ContigMultipleMatchingError, ShortStructureError
 
 GLOBAL_PAD_CHAR = np.nan

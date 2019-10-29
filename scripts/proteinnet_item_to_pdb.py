@@ -1,13 +1,11 @@
 """ This script will extract matching PDB ids from an already processed data
 dictionary and generate its PDB file. """
 
-import numpy as np
-import torch
 import sys
 import os
 sys.path.append(os.path.realpath('.'))
 from protein.PDB_Creator import *
-from scripts.utils.structure_utils import onehot_to_seq
+from protein.structure_utils import onehot_to_seq
 
 VALID_SPLITS = [70]
 

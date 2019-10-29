@@ -1,7 +1,7 @@
 import numpy as np
 from prody import calcTransformation
 import torch
-from protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP, THREE_TO_ONE_LETTER_MAP
+from protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
 
 
 class PDB_Creator(object):
@@ -329,7 +329,7 @@ if __name__ == "__main__":
     from dataset import ProteinDataset, paired_collate_fn
     from protein.Structure import generate_coords
     from losses import inverse_trig_transform, drmsd_loss_from_angles, mse_over_angles
-    from scripts.utils.structure_utils import onehot_to_seq
+    from protein.structure_utils import onehot_to_seq
 
     device = torch.device('cuda')
 
