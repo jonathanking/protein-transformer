@@ -17,7 +17,7 @@ class Decoder(torch.nn.Module):
 
         self.emb_dropout = torch.nn.Dropout(dropout)
         self.positional_enc = PositionalEncoding(dm, max_seq_len)
-        self.input_embedding = torch.nn.Embedding(self.dout, self.dm)
+        self.input_embedding = torch.nn.Linear(self.dout, self.dm)
         self.dec_layers = torch.nn.ModuleList([DecoderLayer(dm, dff, n_heads, dropout) for _ in range(self.n_dec_layers)])
 
     def forward(self, dec_input, enc_output, tgt_mask, src_mask):
