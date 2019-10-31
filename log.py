@@ -6,6 +6,7 @@ import sys
 import torch
 
 from dataset import VOCAB
+from protein.Sidechains import NUM_PREDICTED_COORDS
 
 def print_train_batch_status(args, items):
     """
@@ -172,9 +173,11 @@ def log_structure(pred_coords, gold_item):
     gold_item = gold_item[gold_item_non_batch_pad]
     gold_item_non_nan = torch.isnan(gold_item).eq(0)
 
-    bb_mask = np.asarray([[1, 1, 1] + [0] * 10] * (pred_coords.shape[0] // 13), dtype=np.bool)
+    bb_mask = np.asarray([[1, 1, 1] + [0] * (NUM_PREDICTED_COORDS - 3)] *
+                         (pred_coords.shape[0] // NUM_PREDICTED_COORDS), dtype=np.bool)
     wandb.log({"backbone_cloud": wandb.Object3D(
-        pred_coords[bb_mask.flatten() & gold_item_non_nan[:bb_mask.shape[0]*13].cpu().detach().numpy().all(axis=1)].detach().numpy())},
+        pred_coords[bb_mask.flatten() & gold_item_non_nan[:bb_mask.shape[0] * NUM_PREDICTED_COORDS]
+                        .cpu().detach().numpy().all(axis=1)].detach().numpy())},
         commit=False)
     wandb.log({"structure_cloud": wandb.Object3D(pred_coords[gold_item_non_nan].reshape(-1,3).detach().numpy())})
 

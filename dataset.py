@@ -3,24 +3,25 @@ import torch
 import torch.utils.data
 
 from protein.Sidechains import NUM_PREDICTED_COORDS
-# TODO combine multiple instances of global vars
-MAXDATALEN = 500
+
+def make_paired_collate_fn_with_max_len(max_seq_len):
+
+    def paired_collate_fn(insts):
+        """
+        This function creates mini-batches (3-tuples) of sequence, angle and
+        coordinate Tensors. insts is a list of tuples, each containing one src
+        seq, and target angles and coordindates.
+        """
+        sequences, angles, coords = list(zip(*insts))
+        sequences = collate_fn(sequences, sequences=True, max_seq_len=max_seq_len)
+        angles = collate_fn(angles, max_seq_len=max_seq_len)
+        coords = collate_fn(coords, coords=True, max_seq_len=max_seq_len)
+        return sequences, angles, coords
+
+    return paired_collate_fn
 
 
-def paired_collate_fn(insts):
-    """
-    This function creates mini-batches (3-tuples) of sequence, angle and
-    coordinate Tensors. insts is a list of tuples, each containing one src
-    seq, and target angles and coordindates.
-    """
-    sequences, angles, coords = list(zip(*insts))
-    sequences = collate_fn(sequences, sequences=True)
-    angles = collate_fn(angles)
-    coords = collate_fn(coords, coords=True)
-    return sequences, angles, coords
-
-
-def collate_fn(insts, coords=False, sequences=False):
+def collate_fn(insts, coords=False, sequences=False, max_seq_len=None):
     """
     Given a list of tuples to be stitched together into a batch, this function
     pads each instance to the max seq length in batch and returns a batch
@@ -39,9 +40,9 @@ def collate_fn(insts, coords=False, sequences=False):
 
     # Trim batch to be less than maximum length
     if coords:
-        batch = batch[:,:MAXDATALEN*NUM_PREDICTED_COORDS]
+        batch = batch[:,:max_seq_len*NUM_PREDICTED_COORDS]
     else:
-        batch = batch[:,:MAXDATALEN]
+        batch = batch[:,:max_seq_len]
 
     if sequences:
         batch = torch.LongTensor(batch)
@@ -49,6 +50,7 @@ def collate_fn(insts, coords=False, sequences=False):
         batch = torch.FloatTensor(batch)
 
     return batch
+
 
 
 class ProteinVocabulary(object):
@@ -135,13 +137,14 @@ class ProteinDataset(torch.utils.data.Dataset):
         return self._seqs[idx]
 
 
-def prepare_dataloaders(data, args):
+def prepare_dataloaders(data, args, max_seq_len):
     """
     Using the pre-processed data, stored in a nested Python dictionary, this
     function returns train, validation, and test set dataloaders with 2 workers
     each. There are multiple validation sets in ProteinNet. Currently, this
     method only returns set '70'.
     """
+    collate = make_paired_collate_fn_with_max_len(max_seq_len)
     # TODO: load and evaluate multiple validation sets
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
@@ -150,7 +153,7 @@ def prepare_dataloaders(data, args):
             angs=data['train']['ang']*args.repeat_train),
         num_workers=2,
         batch_size=args.batch_size,
-        collate_fn=paired_collate_fn,
+        collate_fn=collate,
         shuffle=True)
 
     valid_loader = torch.utils.data.DataLoader(
@@ -160,7 +163,7 @@ def prepare_dataloaders(data, args):
             angs=data['valid'][70]['ang']),
         num_workers=2,
         batch_size=args.batch_size,
-        collate_fn=paired_collate_fn)
+        collate_fn=collate)
 
     test_loader = torch.utils.data.DataLoader(
         ProteinDataset(
@@ -169,7 +172,7 @@ def prepare_dataloaders(data, args):
             angs=data['test']['ang']),
         num_workers=2,
         batch_size=args.batch_size,
-        collate_fn=paired_collate_fn)
+        collate_fn=collate)
 
     return train_loader, valid_loader, test_loader
 

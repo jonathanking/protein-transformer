@@ -325,7 +325,7 @@ def main():
     # Load dataset
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
-    training_data, validation_data, test_data = prepare_dataloaders(data, args)
+    training_data, validation_data, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
