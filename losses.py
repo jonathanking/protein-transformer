@@ -6,8 +6,7 @@ import torch
 
 from protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 from protein.Structure import generate_coords
-
-BATCH_PAD_CHAR = 0
+from dataset import VOCAB
 
 
 def combine_drmsd_mse(d, mse, w=.5):
@@ -34,12 +33,23 @@ def inverse_trig_transform(t):
     return t
 
 
+def remove_sos_eos_from_input(input_seq):
+    """
+    Given a sequence of integers that may be surrounded with EOS/SOS characters,
+    returns the sequence without those characters.
+    """
+    start_idx = 1 if input_seq[0] == VOCAB.sos_id else 0
+    end_idx = -1 if input_seq[-1] == VOCAB.eos_id else None
+    return input_seq[start_idx : end_idx]
+
+
 def drmsd_loss_from_angles(pred_angs, true_crds, input_seqs, device, return_rmsd=False):
     """
     Calculate DRMSD loss by first generating predicted coordinates from
     angles. Then, predicted coordinates are compared with the true coordinate
     tensor provided to the function.
     """
+
     device = torch.device("cpu")
     pred_angs, true_crds, input_seqs = pred_angs.to(device), true_crds.to(device), input_seqs.to(device)
 
@@ -51,10 +61,12 @@ def drmsd_loss_from_angles(pred_angs, true_crds, input_seqs, device, return_rmsd
 
     for pred_ang, true_crd, input_seq in zip(pred_angs, true_crds, input_seqs):
         # Remove batch-level masking
-        batch_mask = input_seq.ne(0).any(dim=1)
-        pred_ang = pred_ang[batch_mask]
-        true_crd = true_crd[:pred_ang.shape[0] * NUM_PREDICTED_COORDS]
+        batch_mask = input_seq.ne(VOCAB.pad_id)
         input_seq = input_seq[batch_mask]
+        # Remove SOS and EOS characters if present
+        input_seq = remove_sos_eos_from_input(input_seq)
+        pred_ang = pred_ang[:input_seq.shape[0]]
+        true_crd = true_crd[:input_seq.shape[0] * NUM_PREDICTED_COORDS]
 
         # Generate coordinates
         pred_crd = generate_coords(pred_ang, pred_ang.shape[0], input_seq, device)

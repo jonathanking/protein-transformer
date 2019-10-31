@@ -19,12 +19,12 @@ from tqdm import tqdm
 
 from dataset import prepare_dataloaders
 from losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
-from models.transformer.Models import Transformer, MISSING_CHAR
-from models.transformer.Optim import ScheduledOptim
+from models.transformer_nmt.Transformer import Transformer
+from models.transformer_nmt.Optimizer import ScheduledOptim
 from log import *
 from models.nmt_models import EncoderOnlyTransformer
+from protein.Sidechains import NUM_PREDICTED_ANGLES
 
-wandb.init(project="protein-transformer", entity="koes-group")
 
 def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):
     """
@@ -33,25 +33,15 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
     n_batches = 0
-    pbar = tqdm(training_data, mininterval=2, leave=False) if not args.cluster else training_data
+    batch_iter = tqdm(training_data, leave=False, unit="bch") if not args.cluster else training_data
 
-    for step, batch in enumerate(pbar):
+
+    for step, batch in enumerate(batch_iter):
         optimizer.zero_grad()
-        src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
+        src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
         if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
             continue
-        if args.model == "enc-dec":
-            # Replace nans with missing character
-            tgt_ang_no_nan = tgt_ang.clone().detach()
-            tgt_ang_no_nan[torch.isnan(tgt_ang_no_nan)] = MISSING_CHAR
-            # Provide encoder with time steps SOS..t and decoder with SOS..t-1
-            pred = model(src_seq.argmax(dim=-1), src_pos_enc, tgt_ang_no_nan[:, :-1], tgt_pos_enc[:, :-1],
-                         has_missing_residues=torch.isnan(tgt_ang).all(dim=-1).any().byte())
-            # Remove SOS character for downstream functions
-            tgt_ang = tgt_ang[:,1:]
-            src_seq = src_seq[:,1:]
-        else:
-            pred = model(src_seq.argmax(dim=-1))
+        pred = model(src_seq, tgt_ang)
         pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, device)
         d_loss, ln_d_loss = d_loss.to('cpu'), ln_d_loss.to('cpu')
         m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
@@ -67,8 +57,8 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         optimizer.step()
 
         # Record performance metrics
-        do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer,
-                               pbar, START_TIME, pred_coords, tgt_crds[-1], step)
+        do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
+                               log_writer, batch_iter, START_TIME, pred_coords, tgt_crds[-1], step)
         n_batches += 1
 
     metrics = update_metrics_end_of_epoch(metrics, "train", n_batches)
@@ -83,22 +73,16 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
     model.eval()
     metrics = reset_metrics_for_epoch(metrics, mode)
     n_batches = 0.0
-    pbar = tqdm(validation_data, mininterval=2, leave=False) if not args.cluster else validation_data
+    batch_iter = tqdm(validation_data, mininterval=.5, leave=False) if not args.cluster else validation_data
 
     with torch.no_grad():
-        for batch in pbar:
-            src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = map(lambda x: x.to(device), batch)
-            if args.model == "enc-dec":
-                pred = model.predict(src_seq.argmax(dim=-1), src_pos_enc)
-                # Remove SOS character for downstream functions
-                tgt_ang = tgt_ang[:, 1:]
-                src_seq = src_seq[:, 1:]
-            else:
-                pred = model(src_seq.argmax(dim=-1))
+        for batch in batch_iter:
+            src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
+            pred = model(src_seq, tgt_ang)
             pred_coords, d_loss, ln_d_loss, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, device, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
-            do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode)
+            do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, batch_iter, mode)
             n_batches += 1
 
     metrics = update_metrics_end_of_epoch(metrics, mode, n_batches)
@@ -213,7 +197,7 @@ def load_model(model, optimizer, args):
     return model, optimizer, True, checkpoint['metrics']
 
 
-def make_model(args):
+def make_model(args, device):
     """
     Returns requested model architecture. Currently only enc-only and enc-dec
     are supported.
@@ -223,19 +207,23 @@ def make_model(args):
                                        nhead=args.n_head,
                                        dmodel=args.d_model,
                                        dff=args.d_inner_hid,
-                                       max_seq_len=500,
+                                       max_seq_len=MAX_SEQ_LEN,
                                        dropout=args.dropout)
     elif args.model == "enc-dec":
-        model = Transformer(args,
-                            d_k=args.d_k,
-                            d_v=args.d_v,
-                            d_model=args.d_model,
-                            d_inner=args.d_inner_hid,
-                            n_layers=args.n_layers,
-                            n_head=args.n_head,
+        model = Transformer(dm=args.d_model,
+                            dff=args.d_inner_hid,
+                            din=len(VOCAB),
+                            dout=NUM_PREDICTED_ANGLES * 2,
+                            n_heads=args.n_head,
+                            n_enc_layers=args.n_layers,
+                            n_dec_layers=args.n_layers,
+                            max_seq_len=MAX_SEQ_LEN,
+                            pad_char=VOCAB.pad_id,
+                            missing_coord_filler=MISSING_COORD_FILLER,
+                            device=device,
                             dropout=args.dropout,
-                            complete_tf=args.fraction_complete_tf,
-                            subseq_tf=args.fraction_subseq_tf)
+                            fraction_complete_tf=args.fraction_complete_tf,
+                            fraction_subseq_tf=args.fraction_subseq_tf)
     else:
         raise argparse.ArgumentError("Model architecture not implemented.")
     return model
@@ -248,8 +236,12 @@ def main():
     global LOGFILEHEADER
     global START_EPOCH
     global START_TIME
+    global MISSING_COORD_FILLER
+    global MAX_SEQ_LEN
+    MAX_SEQ_LEN = 500
     START_EPOCH = 0
     START_TIME = time.time()
+    MISSING_COORD_FILLER = 0
 
     torch.set_printoptions(precision=5, sci_mode=False)
     parser = argparse.ArgumentParser()
@@ -333,12 +325,11 @@ def main():
     # Load dataset
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
-    training_data, validation_data, test_data = prepare_dataloaders(data, args,
-                                                                    use_start_char=args.model == "enc-dec")
+    training_data, validation_data, test_data = prepare_dataloaders(data, args)
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
-    model = make_model(args).to(device)
+    model = make_model(args, device).to(device)
 
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
@@ -363,6 +354,9 @@ def main():
         log_f = open(args.log_file, 'w', buffering=args.buffering_mode)
         log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
+
+    # Prepare Weights and Biases logging
+    wandb.init(project="protein-transformer", entity="koes-group")
     wandb.watch(model, "all")
     wandb.config.update(args)
     if type(data["date"]) == set:
@@ -371,7 +365,9 @@ def main():
         wandb.config.update({"data_creation_date": data["date"]})
     n_params = sum(p.numel() for p in model.parameters())
     n_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    wandb.config.update({"n_params": n_params, "n_trainable_params": n_trainable_params})
+    wandb.config.update({"n_params": n_params,
+                         "n_trainable_params": n_trainable_params,
+                         "max_seq_len": MAX_SEQ_LEN})
 
     print(args, "\n")
 

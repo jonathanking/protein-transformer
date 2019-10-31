@@ -5,6 +5,7 @@ import wandb
 import sys
 import torch
 
+from dataset import VOCAB
 
 def print_train_batch_status(args, items):
     """
@@ -24,25 +25,19 @@ def print_train_batch_status(args, items):
         loss = metrics["train"]["batch-ln-drmsd"]
     lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling else ""
     speed = metrics["train"]["speed"]
-    if len(training_losses) <= 32:
-        rolling_avg = np.mean(training_losses)
-    else:
-        rolling_avg = np.mean(training_losses[-32:])
 
     if args.cluster:
-        print('Loss = {0:.6f}, 32avg = {1:.6f}{2}, speed = {speed}'.format(
+        print('Loss = {0:.6f}{1}, speed = {speed}'.format(
             float(loss),
-            rolling_avg,
             lr_string,
             speed=speed))
     else:
-        pbar.set_description('\r  - (Train) drmsd = {0:.6f}, ln-drmsd = {lnd:0.6f}, rmse = {3:.6f},'
-                             ' 32avg = {1:.6f}, comb = {4:.6f}{2}, res/sec = {speed}'.format(
-            float(train_drmsd_loss),
-            rolling_avg,
-            lr_string,
-            np.sqrt(float(train_mse_loss)),
-            float(train_comb_loss),
+        pbar.set_description('\r  - (Train) drmsd={drmsd:.2f}, lndrmsd={lnd:0.4f}, rmse={rmse:.4f},'
+                             ' c={comb:.2f}{lr}, res/s={speed}'.format(
+            drmsd=float(train_drmsd_loss),
+            lr=lr_string,
+            rmse=np.sqrt(float(train_mse_loss)),
+            comb=float(train_comb_loss),
             lnd=metrics["train"]["batch-ln-drmsd"],
             speed=speed))
 
@@ -173,7 +168,10 @@ def log_structure(pred_coords, gold_item):
     """
     Logs a 3D structure prediction to wandb.
     """
+    gold_item_non_batch_pad = (gold_item != VOCAB.pad_id).any(dim=-1)
+    gold_item = gold_item[gold_item_non_batch_pad]
     gold_item_non_nan = torch.isnan(gold_item).eq(0)
+
     bb_mask = np.asarray([[1, 1, 1] + [0] * 10] * (pred_coords.shape[0] // 13), dtype=np.bool)
     wandb.log({"backbone_cloud": wandb.Object3D(
         pred_coords[bb_mask.flatten() & gold_item_non_nan[:bb_mask.shape[0]*13].cpu().detach().numpy().all(axis=1)].detach().numpy())},
@@ -235,7 +233,7 @@ def update_metrics(metrics, mode, drmsd, ln_drmsd, mse, combined, src_seq, rmsd=
     if rmsd: metrics[mode]["epoch-rmsd"] += rmsd.item()
 
     # Compute and update speed
-    num_res = (src_seq != 0).any(dim=-1).sum().item()
+    num_res = (src_seq != VOCAB.pad_id).sum().item()
     metrics[mode]["speed"] = round(num_res / (time.time() - metrics[mode]["batch-time"]), 2)
     metrics[mode]["batch-time"] = time.time()
     metrics[mode]["speed-history"].append(metrics[mode]["speed"])

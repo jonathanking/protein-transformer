@@ -12,9 +12,9 @@ NUM_RESIDUES = 0
 class EncoderOnlyTransformer(nn.Module):
     """ A Transformer that only uses Encoder layers. """
 
-    def __init__( self, nlayers, nhead, dmodel, dff, max_seq_len, dropout=0.1):
+    def __init__( self, nlayers, nhead, dmodel, dff, max_seq_len, vocab, dropout=0.1):
         super().__init__()
-        self.encoder = Encoder(20, dmodel, dff, nhead, nlayers, max_seq_len, dropout)
+        self.encoder = Encoder(len(vocab), dmodel, dff, nhead, nlayers, max_seq_len, dropout)
         self.output_projection = torch.nn.Linear(dmodel, NUM_PREDICTED_ANGLES*2)
         self.tanh = nn.Tanh()
         self._init_parameters()
@@ -42,7 +42,7 @@ class EncoderOnlyTransformer(nn.Module):
         angle_means = np.load(angle_mean_path)
         return angle_means
 
-    def forward(self, enc_input):
+    def forward(self, enc_input, dec_input=None):
         src_mask = (enc_input != PAD_CHAR).unsqueeze(-2)
         enc_output = self.encoder(enc_input, src_mask)
         enc_output = self.output_projection(enc_output)
