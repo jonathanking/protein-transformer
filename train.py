@@ -325,6 +325,7 @@ def main():
     LOGFILEHEADER = prepare_log_header(args)
 
     # Load dataset
+    args.add_sos_eos = args.model == "enc-dec"
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
     training_data, validation_data, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)

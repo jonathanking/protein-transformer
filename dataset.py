@@ -113,13 +113,13 @@ class ProteinDataset(torch.utils.data.Dataset):
     This dataset can hold lists of sequences, angles, and coordinates for
     each protein.
     """
-    def __init__(self, seqs=None, angs=None, crds=None):
+    def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
         # TODO use raw sequences in dataset; allows for pad character
         self.vocab = ProteinVocabulary()
-        self._seqs = [VOCAB.aa_seq2indices(s) for s in seqs]
+        self._seqs = [VOCAB.aa_seq2indices(s, add_sos_eos) for s in seqs]
         self._angs = angs
         self._crds = crds
 
@@ -150,7 +150,8 @@ def prepare_dataloaders(data, args, max_seq_len):
         ProteinDataset(
             seqs=data['train']['seq']*args.repeat_train,
             crds=data['train']['crd']*args.repeat_train,
-            angs=data['train']['ang']*args.repeat_train),
+            angs=data['train']['ang']*args.repeat_train,
+            add_sos_eos=args.add_sos_eos),
         num_workers=2,
         batch_size=args.batch_size,
         collate_fn=collate,
@@ -160,7 +161,8 @@ def prepare_dataloaders(data, args, max_seq_len):
         ProteinDataset(
             seqs=data['valid'][70]['seq'],
             crds=data['valid'][70]['crd'],
-            angs=data['valid'][70]['ang']),
+            angs=data['valid'][70]['ang'],
+            add_sos_eos=args.add_sos_eos),
         num_workers=2,
         batch_size=args.batch_size,
         collate_fn=collate)
@@ -169,7 +171,8 @@ def prepare_dataloaders(data, args, max_seq_len):
         ProteinDataset(
             seqs=data['test']['seq'],
             crds=data['test']['crd'],
-            angs=data['test']['ang']),
+            angs=data['test']['ang'],
+            add_sos_eos=args.add_sos_eos),
         num_workers=2,
         batch_size=args.batch_size,
         collate_fn=collate)
