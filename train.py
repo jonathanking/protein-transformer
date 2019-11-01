@@ -22,7 +22,7 @@ from losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
 from models.transformer.Transformer import Transformer
 from models.transformer.Optimizer import ScheduledOptim
 from log import *
-from models.nmt_models import EncoderOnlyTransformer
+from models.encoder_only import EncoderOnlyTransformer
 from protein.Sidechains import NUM_PREDICTED_ANGLES
 
 
