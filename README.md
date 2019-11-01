@@ -29,12 +29,14 @@ usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
                 [--restart] [--restart_opt]
                 data name
 
-positional arguments:
+optional arguments:
+  -h, --help            show this help message and exit
+
+Required Args:
   data                  Path to training data.
   name                  The model name.
 
-optional arguments:
-  -h, --help            show this help message and exit
+Training Args:
   -lr LEARNING_RATE, --learning_rate LEARNING_RATE
   -e EPOCHS, --epochs EPOCHS
   -b BATCH_SIZE, --batch_size BATCH_SIZE
@@ -73,6 +75,8 @@ optional arguments:
   --repeat_train REPEAT_TRAIN
                         Duplicate the training set X times. Useful for
                         training on small datasets.
+
+Model Args:
   -m {enc-dec,enc-only}, --model {enc-dec,enc-only}
                         Model architecture type. Encoder only or
                         encoder/decoder model.
@@ -96,6 +100,8 @@ optional arguments:
   --angle_mean_path ANGLE_MEAN_PATH
                         Path to vector of means for every predicted angle.
                         Used to initialize model output.
+
+Saving Args:
   --log_structure_step LOG_STRUCTURE_STEP
                         Frequency of logging structure data during training.
   --log_wandb_step LOG_WANDB_STEP

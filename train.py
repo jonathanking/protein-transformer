@@ -246,73 +246,77 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Required args
-    parser.add_argument('data', help="Path to training data.")
-    parser.add_argument("name", type=str, help="The model name.")
+    required = parser.add_argument_group("Required Args")
+    required.add_argument('data', help="Path to training data.")
+    required.add_argument("name", type=str, help="The model name.")
 
     # Training parameters
-    parser.add_argument("-lr", "--learning_rate", type=float, default=1e-2)
-    parser.add_argument('-e', '--epochs', type=int, default=10)
-    parser.add_argument("-b", '--batch_size', type=int, default=8)
-    parser.add_argument('-es', '--early_stopping', type=int, default=None,
+    training = parser.add_argument_group("Training Args")
+    training.add_argument("-lr", "--learning_rate", type=float, default=1e-2)
+    training.add_argument('-e', '--epochs', type=int, default=10)
+    training.add_argument("-b", '--batch_size', type=int, default=8)
+    training.add_argument('-es', '--early_stopping', type=int, default=None,
                         help="Stops if training hasn't improved in X epochs")
-    parser.add_argument('-nws', '--n_warmup_steps', type=int, default=10_000,
+    training.add_argument('-nws', '--n_warmup_steps', type=int, default=10_000,
                         help="Number of warmup training steps when using lr-scheduling as proposed in the original"
                              "Transformer paper.")
-    parser.add_argument('-cg', '--clip', type=float, default=1, help="Gradient clipping value.")
-    parser.add_argument('-cl', '--combined_loss', action='store_true',
+    training.add_argument('-cg', '--clip', type=float, default=1, help="Gradient clipping value.")
+    training.add_argument('-cl', '--combined_loss', action='store_true',
                         help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
-    parser.add_argument('--train_only', action='store_true',
+    training.add_argument('--train_only', action='store_true',
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
-    parser.add_argument('--lr_scheduling', action='store_true',
+    training.add_argument('--lr_scheduling', action='store_true',
                         help='Use learning rate scheduling as described in original paper.')
-    parser.add_argument('--without_angle_means', action='store_true',
+    training.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
-    parser.add_argument('--eval_train', action='store_true',
+    training.add_argument('--eval_train', action='store_true',
                         help="Perform an evaluation of the entire training set after a training epoch.")
-    parser.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
+    training.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
                         help="Training optimizer.")
-    parser.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
+    training.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
                         help="Fraction of the time to use teacher forcing for every timestep of the batch. Model trains"
                              "fastest when this is 1.")
-    parser.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
+    training.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
                         help="Fraction of the time to use teacher forcing on a per-timestep basis.")
-    parser.add_argument("--skip_missing_res_train", action="store_true",
+    training.add_argument("--skip_missing_res_train", action="store_true",
                         help="When training, skip over batches that have missing residues. This can make training"
                              "faster if using teacher forcing.")
-    parser.add_argument("--repeat_train", type=int, default=1,
+    training.add_argument("--repeat_train", type=int, default=1,
                         help="Duplicate the training set X times. Useful for training on small datasets.")
 
     # Model parameters
-    parser.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only"], default="enc-only",
+    model_args = parser.add_argument_group("Model Args")
+    model_args.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only"], default="enc-only",
                         help="Model architecture type. Encoder only or encoder/decoder model.")
-    parser.add_argument('-dm', '--d_model', type=int, default=512,
+    model_args.add_argument('-dm', '--d_model', type=int, default=512,
                         help="Dimension of each sequence item in the model. Each layer uses the same dimension for "
                              "simplicity.")
-    parser.add_argument('-dih', '--d_inner_hid', type=int, default=2048,
+    model_args.add_argument('-dih', '--d_inner_hid', type=int, default=2048,
                         help="Dimmension of the inner layer of the feed-forward layer at the end of every Transformer"
                              " block.")
-    parser.add_argument('-nh', '--n_head', type=int, default=8, help="Number of attention heads.")
-    parser.add_argument('-nl', '--n_layers', type=int, default=6,
+    model_args.add_argument('-nh', '--n_head', type=int, default=8, help="Number of attention heads.")
+    model_args.add_argument('-nl', '--n_layers', type=int, default=6,
                         help="Number of layers in the model. If using encoder/decoder model, the encoder and decoder"
                              " both have this number of layers.")
-    parser.add_argument('-do', '--dropout', type=float, default=0.1, help="Dropout applied between layers.")
-    parser.add_argument('--postnorm', action='store_true',
+    model_args.add_argument('-do', '--dropout', type=float, default=0.1, help="Dropout applied between layers.")
+    model_args.add_argument('--postnorm', action='store_true',
                         help="Use post-layer normalization, as depicted in the original figure for the Transformer "
                              "model. May not train as well as pre-layer normalization.")
-    parser.add_argument("--angle_mean_path", type=str, default="protein/casp12_190927_100_angle_means.npy",
+    model_args.add_argument("--angle_mean_path", type=str, default="protein/casp12_190927_100_angle_means.npy",
                         help="Path to vector of means for every predicted angle. Used to initialize model output.")
 
 
     # Saving args
-    parser.add_argument('--log_structure_step', type=int, default=10,
+    saving_args = parser.add_argument_group("Saving Args")
+    saving_args.add_argument('--log_structure_step', type=int, default=10,
                         help="Frequency of logging structure data during training.")
-    parser.add_argument('--log_wandb_step', type=int, default=1,
+    saving_args.add_argument('--log_wandb_step', type=int, default=1,
                         help="Frequency of logging to wandb during training.")
-    parser.add_argument('--no_cuda', action='store_true')
-    parser.add_argument('--cluster', action='store_true', help="Set of parameters to facilitate training on a remote" +
+    saving_args.add_argument('--no_cuda', action='store_true')
+    saving_args.add_argument('--cluster', action='store_true', help="Set of parameters to facilitate training on a remote" +
                                                                " cluster. Limited I/O, etc.")
-    parser.add_argument('--restart', action='store_true', help="Does not resume training.")
-    parser.add_argument('--restart_opt', action='store_true', help="Resumes training but does not load the optimizer"
+    saving_args.add_argument('--restart', action='store_true', help="Does not resume training.")
+    saving_args.add_argument('--restart_opt', action='store_true', help="Resumes training but does not load the optimizer"
                                                                    "state. ")
 
     args = parser.parse_args()
