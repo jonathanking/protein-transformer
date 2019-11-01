@@ -26,6 +26,7 @@ class PDB_Creator(object):
         Output:
             saves PDB file to disk
         """
+        import pymol
         self.coords = coords
         if seq and not mapping:
             assert len(seq) == coords.shape[0] / atoms_per_res, "The sequence length must match the coordinate length" \
@@ -191,6 +192,16 @@ class PDB_Creator(object):
         with open(path, "w") as outfile:
             outfile.write("\n".join(self.lines))
         print(f"PDB {title} written to {path}.")
+
+    def save_gltf(self, path, title="test"):
+        """
+        This function first creates a PDB file, then converts it to a GLTF
+        (3D Object) file. Used for visualizign with Weights and Biases. """
+        assert ".gltf" in path, "requested filepath must end with '.gtlf'."
+        self.save_pdb(path.replace(".gltf", ".pdb"), title)
+        pymol.cmd.load(path.replace(".gltf", ".pdb"))
+        pymol.cmd.save(path)
+
 
     def _get_seq_from_mapping(self):
         """
