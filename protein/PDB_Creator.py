@@ -2,6 +2,7 @@ import numpy as np
 from prody import calcTransformation
 import torch
 from protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
+import models
 
 
 class PDB_Creator(object):
