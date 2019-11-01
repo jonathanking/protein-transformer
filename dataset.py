@@ -69,7 +69,7 @@ class ProteinVocabulary(object):
         self.aa2id['<'] = self.sos_id
         self.aa2id['>'] = self.eos_id
         self.aa2id['?'] = self.unk_id
-        self.id2aa = {v: k for k, v in self.aa2id.items()}
+        self._id2aa = {v: k for k, v in self.aa2id.items()}
         self.stdaas = "ARNDCQEGHILKMFPSTWYV"
         for aa in self.stdaas:
             self.add(aa)
@@ -90,12 +90,12 @@ class ProteinVocabulary(object):
         return f"ProteinVocabulary[size={len(self)}]"
 
     def id2aa(self, id):
-        return self.id2aa[id]
+        return self._id2aa[id]
 
     def add(self, aa):
         if aa not in self:
             aaid = self.aa2id[aa] = len(self)
-            self.id2aa[aaid] = aa
+            self._id2aa[aaid] = aa
             return aaid
         else:
             return self[aa]
@@ -105,6 +105,14 @@ class ProteinVocabulary(object):
             return [self["<"]] + [self[aa] for aa in seq] + [self[">"]]
         else:
             return [self[aa] for aa in seq]
+
+    def indices2aa_seq(self, indices, include_sos_eos=False):
+        seq = ""
+        for i in indices:
+            c = self.id2aa(i)
+            if include_sos_eos or (c != self.sos_id and c != self.eos_id and c != self.pad_id):
+                seq += c
+        return seq
 
 
 

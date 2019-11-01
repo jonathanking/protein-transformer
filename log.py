@@ -7,6 +7,7 @@ import torch
 
 from dataset import VOCAB
 from protein.Sidechains import NUM_PREDICTED_COORDS
+from protein.PDB_Creator import PDB_Creator
 
 def print_train_batch_status(args, items):
     """
@@ -20,7 +21,7 @@ def print_train_batch_status(args, items):
     train_drmsd_loss = metrics["train"]["batch-drmsd"]
     train_mse_loss = metrics["train"]["batch-mse"]
     train_comb_loss = metrics["train"]["batch-combined"]
-    if args.combined_loss:
+    if args.loss  == "combined":
         loss = train_comb_loss
     else:
         loss = metrics["train"]["batch-ln-drmsd"]
@@ -162,10 +163,10 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
         print("A nan loss has occurred. Exiting training.")
         sys.exit(1)
     if do_log_str:
-        log_structure(pred_coords, tgt_coords)
+        log_structure(pred_coords, tgt_coords, src_seq[-1])
 
 
-def log_structure(pred_coords, gold_item):
+def log_structure(pred_coords, gold_item, src_seq):
     """
     Logs a 3D structure prediction to wandb.
     """
@@ -180,6 +181,9 @@ def log_structure(pred_coords, gold_item):
                         .cpu().detach().numpy().all(axis=1)].detach().numpy())},
         commit=False)
     wandb.log({"structure_cloud": wandb.Object3D(pred_coords[gold_item_non_nan].reshape(-1,3).detach().numpy())})
+    creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
+    creator.save_gltf("test.gltf")
+    wandb.log({"structure": wandb.Object3D("test.gltf")})
 
 
 def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):
@@ -286,7 +290,7 @@ def prepare_log_header(args):
     """
     Returns the column ordering for the logfile.
     """
-    if args.combined_loss:
+    if args.loss == "combined":
         return 'drmsd,ln_drmsd,rmse,rmsd,combined,lr,mode,granularity,time,speed\n'
     else:
         return 'drmsd,ln_drmsd,rmse,rmsd,lr,mode,granularity,time,speed\n'

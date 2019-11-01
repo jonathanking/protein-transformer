@@ -31,7 +31,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
     n_batches = 0
-    batch_iter = tqdm(training_data, leave=False, unit="bch") if not args.cluster else training_data
+    batch_iter = tqdm(training_data, leave=False, unit="batch") if not args.cluster else training_data
 
 
     for step, batch in enumerate(batch_iter):
@@ -43,7 +43,16 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
         m_loss = mse_over_angles(pred, tgt_ang)
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=0.5)
-        loss = c_loss if args.combined_loss else ln_d_loss
+
+        if args.loss == "rmse":
+            loss = m_loss
+        elif args.loss == "drmsd":
+            loss = d_loss
+        elif args.loss == "ln-drmsd":
+            loss = ln_d_loss
+        elif args.loss == "combined":
+            loss = c_loss
+
         loss.backward()
 
         # Clip gradients
@@ -258,8 +267,8 @@ def main():
                         help="Number of warmup training steps when using lr-scheduling as proposed in the original"
                              "Transformer paper.")
     training.add_argument('-cg', '--clip', type=float, default=1, help="Gradient clipping value.")
-    training.add_argument('-cl', '--combined_loss', action='store_true',
-                        help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
+    training.add_argument('-l', '--loss', choices=["rmse", "drmsd", "ln-drmsd", "combined"], default="combined",
+                        help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based root mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combinaation of RMSE and ln-DRMSD.")
     training.add_argument('--train_only', action='store_true',
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
     training.add_argument('--lr_scheduling', action='store_true',

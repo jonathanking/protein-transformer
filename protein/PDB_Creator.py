@@ -3,7 +3,7 @@ from prody import calcTransformation
 import torch
 from protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
 import models
-
+import pymol
 
 class PDB_Creator(object):
     """
@@ -26,7 +26,7 @@ class PDB_Creator(object):
         Output:
             saves PDB file to disk
         """
-        import pymol
+
         self.coords = coords
         if seq and not mapping:
             assert len(seq) == coords.shape[0] / atoms_per_res, "The sequence length must match the coordinate length" \
@@ -200,7 +200,9 @@ class PDB_Creator(object):
         assert ".gltf" in path, "requested filepath must end with '.gtlf'."
         self.save_pdb(path.replace(".gltf", ".pdb"), title)
         pymol.cmd.load(path.replace(".gltf", ".pdb"))
+        pymol.util.chainbow("all")
         pymol.cmd.save(path)
+        pymol.cmd.delete("all")
 
 
     def _get_seq_from_mapping(self):
