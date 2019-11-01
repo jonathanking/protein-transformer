@@ -5,8 +5,6 @@ from models.transformer.Encoder import Encoder
 import numpy as np
 from protein.Sidechains import NUM_PREDICTED_ANGLES
 
-PAD_CHAR = 0
-NUM_RESIDUES = 0
 
 class EncoderOnlyTransformer(nn.Module):
     """ A Transformer that only uses Encoder layers. """
