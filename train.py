@@ -9,10 +9,7 @@ acid sequence.
 import argparse
 import csv
 import os
-import sys
-import time
 
-import torch
 import torch.optim as optim
 import torch.utils.data
 from tqdm import tqdm
