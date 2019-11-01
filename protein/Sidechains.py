@@ -278,7 +278,7 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
     n0 = bb_arr[-2]  # Ca from cur res, Ca from cur
     swap = True
     for l, a, dihe in zip(lens, angs, dihedrals):
-        next_pt = Structure.nerf(n2, n1, n0, l, a, dihe, device=torch.device("cpu"))  # CB
+        next_pt = Structure.nerf(n2, n1, n0, l, a, dihe)  # CB
         n2, n1, n0 = n1, n0, next_pt  # N, CA, CB
         sc_pts.append(next_pt)
         if first_sc and swap:

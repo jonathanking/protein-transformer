@@ -16,6 +16,7 @@ import torch
 import torch.optim as optim
 import torch.utils.data
 from tqdm import tqdm
+import wandb
 
 from dataset import prepare_dataloaders
 from losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
@@ -42,9 +43,8 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
             continue
         pred = model(src_seq, tgt_ang)
-        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, device)
-        d_loss, ln_d_loss = d_loss.to('cpu'), ln_d_loss.to('cpu')
-        m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
+        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
+        m_loss = mse_over_angles(pred, tgt_ang)
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=0.5)
         loss = c_loss if args.combined_loss else ln_d_loss
         loss.backward()
@@ -79,8 +79,8 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
         for batch in batch_iter:
             src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
             pred = model(src_seq, tgt_ang)
-            pred_coords, d_loss, ln_d_loss, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, device, return_rmsd=True)
-            m_loss = mse_over_angles(pred, tgt_ang).to('cpu')
+            pred_coords, d_loss, ln_d_loss, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device("cpu"), return_rmsd=True)
+            m_loss = mse_over_angles(pred, tgt_ang)
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
             do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, batch_iter, mode)
             n_batches += 1

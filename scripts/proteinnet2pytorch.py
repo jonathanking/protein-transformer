@@ -24,11 +24,11 @@ import tqdm
 sys.path.append("/home/jok120/protein-transformer/scripts/utils/")
 sys.path.append("../scripts/utils")
 sys.path.extend("../protein/")
-from structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
+from protein.structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
     no_nans_infs_allzeros, parse_astral_summary_file, \
     get_chain_from_astral_id, get_header_seq_from_astral_id, GLOBAL_PAD_CHAR
-from proteinnet_parsing import parse_raw_proteinnet
-from structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError, SequenceError, ContigMultipleMatchingError, ShortStructureError
+from scripts.utils.proteinnet_parsing import parse_raw_proteinnet
+from scripts.utils.structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError, SequenceError, ContigMultipleMatchingError, ShortStructureError
 
 
 
@@ -209,9 +209,8 @@ def unpack_processed_results(results):
             # PDB failed to download
             continue
         ang, coords, seq, i = r
-        oh = seq_to_onehot(seq)
-        if no_nans_infs_allzeros(oh) and no_nans_infs_allzeros(ang) and no_nans_infs_allzeros(coords):
-            all_ohs.append(oh)
+        if no_nans_infs_allzeros(ang) and no_nans_infs_allzeros(coords):
+            all_ohs.append(seq)
             all_angs.append(ang)
             all_crds.append(coords)
             all_ids.append(i)
@@ -229,12 +228,10 @@ def validate_data_dict(data):
     test_len = len(data["test"]["seq"])
     assert all([l == train_len
                 for l in map(len, [data["train"][k]
-                                   for k in ["ang", "ids", "mask", "evolutionary",
-                                             "secondary"]])]), "Train lengths don't match."
+                                   for k in ["ang", "ids"]])]), "Train lengths don't match."
     assert all([l == test_len
                 for l in map(len, [data["test"][k]
-                                   for k in ["ang", "ids", "mask", "evolutionary",
-                                             "secondary"]])]), "Test lengths don't match."
+                                   for k in ["ang", "ids"]])]), "Test lengths don't match."
     for split in VALID_SPLITS:
         valid_len = len(data["valid"][split]["seq"])
         assert all([l == valid_len for l in map(len, [data["valid"][split][k] for k in ["ang", "ids", "crd"]])]), \
@@ -313,17 +310,18 @@ def main():
 
     # Download and preprocess all data from PDB IDs
     lim = None
+    train_pdb_ids = ["3P7K_1_A"]
     with Pool(multiprocessing.cpu_count()) as p:
         train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim])))
 
     valid_result_meta = {}
     for split, vids in group_validation_set(valid_ids).items():
         with Pool(multiprocessing.cpu_count()) as p:
-            valid_results = list(tqdm.tqdm(p.imap(work, vids), total=len(vids)))
+            valid_results = list(tqdm.tqdm(p.imap(work, ["3P7K_1_A"]), total=len(vids)))
         valid_result_meta[split] = valid_results
 
     with Pool(multiprocessing.cpu_count()) as p:
-        test_results = list(tqdm.tqdm(p.imap(work, test_casp_ids), total=len(test_casp_ids)))
+        test_results = list(tqdm.tqdm(p.imap(work, ["3P7K_1_A"]), total=len(test_casp_ids)))
     print("Structures processed.")
     print_failure_summary()
 

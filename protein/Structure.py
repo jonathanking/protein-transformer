@@ -19,7 +19,7 @@ def generate_coords(angles, pad_loc, input_seq, device):
     bb_arr = init_backbone(angles, device)
     next_bb_pts = extend_backbone(1, angles, bb_arr, device)
     sc_arr = init_sidechain(angles, [next_bb_pts[0], bb_arr[2], bb_arr[1], bb_arr[0]], input_seq)
-    total_arr = bb_arr + sc_arr + (10 - len(sc_arr)) * [torch.zeros(3)]
+    total_arr = bb_arr + sc_arr + (10 - len(sc_arr)) * [torch.zeros(3, device=device)]
 
     for i in range(1, pad_loc):
         bb_pts = extend_backbone(i, angles, bb_arr, device)
@@ -28,7 +28,7 @@ def generate_coords(angles, pad_loc, input_seq, device):
         # Extend sidechain
         sc_pts = Sidechains.extend_sidechain(i, angles, bb_arr, input_seq)
 
-        total_arr += bb_pts + sc_pts + (10 - len(sc_pts)) * [torch.zeros(3)]
+        total_arr += bb_pts + sc_pts + (10 - len(sc_pts)) * [torch.zeros(3, device=device)]
 
     return torch.stack(total_arr)
 
@@ -89,18 +89,11 @@ def init_backbone(angles, device):
     points (which are arbitrary) and returns a TensorArray of the size
     required to hold all the coordinates.
     """
-    a1 = torch.FloatTensor([0.00001, 0, 0])
-
-    if device.type == "cuda":
-        a2 = a1 + torch.cuda.FloatTensor([BONDLENS["n-ca"], 0, 0])
-        a3x = torch.cos(np.pi - angles[0, 3]) * BONDLENS["ca-c"]
-        a3y = torch.sin(np.pi - angles[0, 3]) * BONDLENS['ca-c']
-        a3 = a2 + torch.cuda.FloatTensor([a3x, a3y, 0])
-    else:
-        a2 = a1 + torch.FloatTensor([BONDLENS["n-ca"], 0, 0])
-        a3x = torch.cos(np.pi - angles[0, 3]) * BONDLENS["ca-c"]
-        a3y = torch.sin(np.pi - angles[0, 3]) * BONDLENS['ca-c']
-        a3 = a2 + torch.FloatTensor([a3x, a3y, 0])
+    a1 = torch.tensor([0.00001, 0, 0], device=device)
+    a2 = a1 + torch.tensor([BONDLENS["n-ca"], 0, 0], device=device)
+    a3x = torch.cos(np.pi - angles[0, 3]) * BONDLENS["ca-c"]
+    a3y = torch.sin(np.pi - angles[0, 3]) * BONDLENS['ca-c']
+    a3 = a2 + torch.tensor([a3x, a3y, 0], device=device)
 
     starting_coords = [a1, a2, a3]
 
@@ -131,13 +124,13 @@ def extend_backbone(i, angles, coords, device):
         p3 = bb_pts[-3]
         p2 = bb_pts[-2]
         p1 = bb_pts[-1]
-        next_pt = nerf(p3, p2, p1, b, t, dihedral, device)
+        next_pt = nerf(p3, p2, p1, b, t, dihedral)
         bb_pts.append(next_pt)
 
     return bb_pts[-3:]
 
 
-def nerf(a, b, c, l, theta, chi, device):
+def nerf(a, b, c, l, theta, chi):
     """
     Natural extension reference frame method for placing the 4th atom given
     atoms 1-3 and the relevant angle inforamation. This code was originally

@@ -50,7 +50,6 @@ def drmsd_loss_from_angles(pred_angs, true_crds, input_seqs, device, return_rmsd
     tensor provided to the function.
     """
 
-    device = torch.device("cpu")
     pred_angs, true_crds, input_seqs = pred_angs.to(device), true_crds.to(device), input_seqs.to(device)
 
     pred_angs = inverse_trig_transform(pred_angs)

@@ -22,7 +22,7 @@ class EncoderOnlyTransformer(nn.Module):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-        self.output_projection.bias = nn.Parameter(torch.FloatTensor(np.arctanh(np.load(self.angle_mean_path))))
+        self.output_projection.bias = nn.Parameter(torch.tensor(np.arctanh(np.load(self.angle_mean_path))))
         nn.init.zeros_(self.output_projection.weight)
 
     def forward(self, enc_input, dec_input=None):
