@@ -18,7 +18,7 @@ class Encoder(torch.nn.Module):
 
         self.emb_dropout = torch.nn.Dropout(dropout)
         self.input_embedding = torch.nn.Embedding(self.din, self.dm)
-        self.positional_enc = PositionalEncoding(dm, max_seq_len)
+        self.positional_enc = PositionalEncoding(dm, dropout, max_seq_len)
 
         self.enc_layers = torch.nn.ModuleList([EncoderLayer(dm, dff, n_heads, dropout) for _ in range(self.n_enc_layers)])
 

@@ -1,7 +1,7 @@
 """ This file contains models based off of ones I built in a NMT course. """
 import torch
 import torch.nn as nn
-from models.transformer_nmt.Encoder import Encoder
+from models.transformer.Encoder import Encoder
 import numpy as np
 from protein.Sidechains import NUM_PREDICTED_ANGLES
 import os.path as path

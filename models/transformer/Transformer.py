@@ -15,7 +15,7 @@ class Transformer(torch.nn.Module):
     """
     def __init__(self, dm, dff, din, dout, n_heads, n_enc_layers, n_dec_layers,
                  max_seq_len, pad_char, missing_coord_filler, device, dropout, fraction_complete_tf,
-                 fraction_subseq_tf):
+                 fraction_subseq_tf, angle_mean_path):
         super(Transformer, self).__init__()
         self.din = din
         self.dout = dout
@@ -30,6 +30,7 @@ class Transformer(torch.nn.Module):
         self.device = device
         self.fraction_subseq_tf = fraction_subseq_tf
         self.fraction_complete_tf = fraction_complete_tf
+        self.angle_mean_path = angle_mean_path
 
         self.decoder_sos_char = -0.1
 
@@ -92,7 +93,8 @@ class Transformer(torch.nn.Module):
             angles = self.tanh(angles)
 
             # Update the next timestep in the placeholder with predicted angle randomly or if next residue is missing
-            feed_prediction = t + 1 < max_len and ((np.random.random() > self.fraction_subseq_tf) or dec_input[:, t].all(dim=-1) == self.missing_coord_filler)
+            feed_prediction = t + 1 < max_len and ((np.random.random() > self.fraction_subseq_tf) or
+                                                   dec_input[:, t].all(dim=-1) == self.missing_coord_filler)
             if t + 1 < max_len and feed_prediction:
                 working_input_seq.data[:, t] = angles.data
 
@@ -108,11 +110,9 @@ class Transformer(torch.nn.Module):
             if p.dim() > 1:
                 torch.nn.init.xavier_uniform_(p)
         # Initialize final projection layer to predict mean of angle distribution
-        # TODO abstract out angle-mean path
-        angle_mean_path = "protein/casp12_190927_100_angle_means.npy"
-        angle_means = np.load(angle_mean_path)
+        angle_means = np.load(self.angle_mean_path)
         self.output_projection.bias = torch.nn.Parameter(torch.FloatTensor(np.arctanh(angle_means)))
-        torch.nn.init.xavier_normal_(self.output_projection.weight, gain=0.00001)
+        torch.nn.init.xavier_uniform_(self.output_projection.weight, gain=0.00001)
 
 
     def subsequent_mask(self, length):

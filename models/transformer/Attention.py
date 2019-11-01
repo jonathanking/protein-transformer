@@ -51,7 +51,6 @@ class MultiHeadedAttention(torch.nn.Module):
         # Q                         = [ n_batch x L x dm ] = [ n_batch x L x (n_heads * dk) ]
         # Q.view                    = [ n_batch x L x n_heads x dk ]
         # Q.transpose               = [ n_batch x n_heads x L x dk ]
-        # TODO why no contiguous here?
         Q, K, V = (x.view(n_batch, -1, self.n_heads, self.dk).transpose(1, 2) for x in (Q, K, V))
 
         # Apply scaled dot-product attention across batch, head dims. Add head dim to mask for broadcasting.

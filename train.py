@@ -19,8 +19,8 @@ from tqdm import tqdm
 
 from dataset import prepare_dataloaders
 from losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
-from models.transformer_nmt.Transformer import Transformer
-from models.transformer_nmt.Optimizer import ScheduledOptim
+from models.transformer.Transformer import Transformer
+from models.transformer.Optimizer import ScheduledOptim
 from log import *
 from models.nmt_models import EncoderOnlyTransformer
 from protein.Sidechains import NUM_PREDICTED_ANGLES
@@ -132,7 +132,7 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
     validation set performance. Returns True iff model was saved.
     """
     cur_loss, loss_history = metrics["loss_to_compare"], metrics["losses_to_compare"]
-    if args.save_mode == 'all' or len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
+    if len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
         model_state_dict = model.state_dict()
         checkpoint = {
             'model_state_dict': model_state_dict,
@@ -145,11 +145,7 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
     else:
         return False
 
-    if args.save_mode == 'all':
-        chkpt_file_name = args.chkpt_path + "_epoch-{0}_vloss-{1}.chkpt".format(
-            epoch_i, cur_loss)
-    else:
-        chkpt_file_name = args.chkpt_path + "_best.chkpt"
+    chkpt_file_name = args.chkpt_path + "_best.chkpt"
 
     torch.save(checkpoint, chkpt_file_name)
     wandb.save(chkpt_file_name)
@@ -208,7 +204,9 @@ def make_model(args, device):
                                        dmodel=args.d_model,
                                        dff=args.d_inner_hid,
                                        max_seq_len=MAX_SEQ_LEN,
-                                       dropout=args.dropout)
+                                       dropout=args.dropout,
+                                       vocab=VOCAB,
+                                       angle_mean_path=args.angle_mean_path)
     elif args.model == "enc-dec":
         model = Transformer(dm=args.d_model,
                             dff=args.d_inner_hid,
@@ -223,7 +221,8 @@ def make_model(args, device):
                             device=device,
                             dropout=args.dropout,
                             fraction_complete_tf=args.fraction_complete_tf,
-                            fraction_subseq_tf=args.fraction_subseq_tf)
+                            fraction_subseq_tf=args.fraction_subseq_tf,
+                            angle_mean_path=args.angle_mean_path)
     else:
         raise argparse.ArgumentError("Model architecture not implemented.")
     return model
@@ -259,7 +258,7 @@ def main():
     parser.add_argument('-nws', '--n_warmup_steps', type=int, default=10_000,
                         help="Number of warmup training steps when using lr-scheduling as proposed in the original"
                              "Transformer paper.")
-    parser.add_argument('-cg', '--clip', type=float, default=None, help="Gradient clipping value.")
+    parser.add_argument('-cg', '--clip', type=float, default=1, help="Gradient clipping value.")
     parser.add_argument('-cl', '--combined_loss', action='store_true',
                         help="Use a loss that combines (quasi-equally) DRMSD and MSE.")
     parser.add_argument('--train_only', action='store_true',
@@ -300,13 +299,15 @@ def main():
     parser.add_argument('--postnorm', action='store_true',
                         help="Use post-layer normalization, as depicted in the original figure for the Transformer "
                              "model. May not train as well as pre-layer normalization.")
+    parser.add_argument("--angle_mean_path", type=str, default="protein/casp12_190927_100_angle_means.npy",
+                        help="Path to vector of means for every predicted angle. Used to initialize model output.")
+
 
     # Saving args
     parser.add_argument('--log_structure_step', type=int, default=10,
                         help="Frequency of logging structure data during training.")
     parser.add_argument('--log_wandb_step', type=int, default=1,
                         help="Frequency of logging to wandb during training.")
-    parser.add_argument('--save_mode', type=str, choices=['all', 'best'], default='best')
     parser.add_argument('--no_cuda', action='store_true')
     parser.add_argument('--cluster', action='store_true', help="Set of parameters to facilitate training on a remote" +
                                                                " cluster. Limited I/O, etc.")
@@ -318,9 +319,6 @@ def main():
     args.cuda = not args.no_cuda
     args.buffering_mode = 1
     LOGFILEHEADER = prepare_log_header(args)
-    if args.save_mode == "all" and not args.restart:
-        print("You cannot resume this model because it was saved with mode 'all'.")
-        exit(1)
 
     # Load dataset
     data = torch.load(args.data)
@@ -338,8 +336,7 @@ def main():
         optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()),
                               lr=args.learning_rate)
     if args.lr_scheduling:
-        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps,
-                                   simple=False)
+        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps)
 
     # Prepare log and checkpoint files
     args.chkpt_path = "./data/checkpoints/" + args.name

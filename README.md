@@ -23,10 +23,10 @@ usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
                 [-fsstf FRACTION_SUBSEQ_TF] [--skip_missing_res_train]
                 [--repeat_train REPEAT_TRAIN] [-m {enc-dec,enc-only}]
                 [-dm D_MODEL] [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS]
-                [-do DROPOUT] [--postnorm]
+                [-do DROPOUT] [--postnorm] [--angle_mean_path ANGLE_MEAN_PATH]
                 [--log_structure_step LOG_STRUCTURE_STEP]
-                [--log_wandb_step LOG_WANDB_STEP] [--save_mode {all,best}]
-                [--no_cuda] [--cluster] [--restart] [--restart_opt]
+                [--log_wandb_step LOG_WANDB_STEP] [--no_cuda] [--cluster]
+                [--restart] [--restart_opt]
                 data name
 
 positional arguments:
@@ -93,11 +93,13 @@ optional arguments:
   --postnorm            Use post-layer normalization, as depicted in the
                         original figure for the Transformer model. May not
                         train as well as pre-layer normalization.
+  --angle_mean_path ANGLE_MEAN_PATH
+                        Path to vector of means for every predicted angle.
+                        Used to initialize model output.
   --log_structure_step LOG_STRUCTURE_STEP
                         Frequency of logging structure data during training.
   --log_wandb_step LOG_WANDB_STEP
                         Frequency of logging to wandb during training.
-  --save_mode {all,best}
   --no_cuda
   --cluster             Set of parameters to facilitate training on a remote
                         cluster. Limited I/O, etc.

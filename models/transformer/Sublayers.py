@@ -29,8 +29,6 @@ class PositionwiseFeedForward(torch.nn.Module):
         self.layer2 = torch.nn.Linear(dh, dm)
         self.relu = torch.nn.ReLU()
         self.dropout = torch.nn.Dropout(dropout)
-        # TODO: is this implementation with linear layers accurate?
-
 
     def forward(self, input_seq):
         return self.layer2(self.dropout(self.relu(self.layer1(input_seq))))
@@ -39,27 +37,29 @@ class PositionwiseFeedForward(torch.nn.Module):
 class PositionalEncoding(torch.nn.Module):
     """
     Positional encoding layer for the Transformer model.
+    From Alexander Rush,
+    https://github.com/harvardnlp/annotated-transformer/blob/master/The%20Annotated%20Transformer.ipynb
     """
-    def __init__(self, dm, max_seq_len):
+
+    def __init__(self, dm, dropout, max_seq_len):
         super(PositionalEncoding, self).__init__()
-        self.dm = dm
-        self.max_seq_len = max_seq_len
-        pos_encodings = self.create_encodings()
-        self.register_buffer('pos_encodings', pos_encodings)
+        self.dropout = torch.nn.Dropout(p=dropout)
 
-    def forward(self, seq):
-        return self.pos_encodings[0:seq.shape[1]]
+        # Compute the positional encodings once in log space.
+        pe = torch.zeros(max_seq_len, dm)
+        position = torch.arange(0, max_seq_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, dm, 2) *
+                             -(np.log(10000.0) / dm))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
 
-    def create_encodings(self):
-        return torch.stack([self.get_pos_enc_for_word(i) for i in range(self.max_seq_len)])
 
-    def get_pos_enc_for_word(self, pos):
-        enc = torch.zeros(self.dm)
-        for i in range(self.dm // 2):
-            denominator = 10000**(2*i/self.dm)
-            enc[2*i] = np.sin(pos/denominator)
-            enc[2*i + 1] = np.cos(pos/denominator)
-        return enc
+    def forward(self, x):
+        x = x + torch.autograd.Variable(self.pe[:, :x.size(1)],
+                         requires_grad=False)
+        return self.dropout(x)
 
 
 if __name__ == "__main__":
