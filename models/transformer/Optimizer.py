@@ -15,7 +15,7 @@ class ScheduledOptim():
         self.n_current_steps = 0
         self.init_lr = np.power(d_model, -0.5)
 
-    def step_and_update_lr(self):
+    def step(self):
         """
         Update the base optimizer.
         """
@@ -41,7 +41,7 @@ class ScheduledOptim():
 
         self.n_current_steps += 1
         lr = self.init_lr * self._get_lr_scale()
-
+        self.cur_lr = lr
         for param_group in self._optimizer.param_groups:
             param_group['lr'] = lr
 
