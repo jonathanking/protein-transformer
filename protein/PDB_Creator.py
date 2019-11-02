@@ -30,7 +30,7 @@ class PDB_Creator(object):
         self.coords = coords
         if seq and not mapping:
             assert len(seq) == coords.shape[0] / atoms_per_res, "The sequence length must match the coordinate length" \
-                                                                "and contain 1 letter AA codes." + \
+                                                                " and contain 1 letter AA codes." + \
                                                                 str(coords.shape[0]) + " " + str(len(seq))
             self.seq = seq
             self.mapping = self._make_mapping_from_seq()
@@ -191,17 +191,29 @@ class PDB_Creator(object):
         self.lines = [self._make_header(title)] + self.lines + [self._make_footer()]
         with open(path, "w") as outfile:
             outfile.write("\n".join(self.lines))
-        print(f"PDB {title} written to {path}.")
 
     def save_gltf(self, path, title="test"):
         """
         This function first creates a PDB file, then converts it to a GLTF
         (3D Object) file. Used for visualizign with Weights and Biases. """
         assert ".gltf" in path, "requested filepath must end with '.gtlf'."
-        self.save_pdb(path.replace(".gltf", ".pdb"), title)
-        pymol.cmd.load(path.replace(".gltf", ".pdb"))
-        pymol.util.chainbow("all")
-        pymol.cmd.save(path)
+        pymol.cmd.load(path.replace(".gltf", ".pdb"), title)
+        pymol.cmd.color("oxygen", title)
+        pymol.cmd.save(path, quiet=True)
+        pymol.cmd.delete("all")
+
+    def save_gltfs(self, path1, path2, title="test"):
+        """
+        This function first creates a PDB file, then converts it to a GLTF
+        (3D Object) file. Used for visualizign with Weights and Biases. """
+        assert ".pdb" in path1, "requested filepaths must end with '.pdb'."
+        pymol.cmd.load(path1, "true")
+        pymol.cmd.load(path2, "pred")
+        pymol.cmd.color("marine", "true")
+        pymol.cmd.color("oxygen", "pred")
+
+        pymol.cmd.align("true", "pred", quiet=True)
+        pymol.cmd.save(os.path.join(os.path.dirname(path1), os.path.basename(path1).split("_")[0] + "_true_pred.gltf"),quiet=True)
         pymol.cmd.delete("all")
 
 

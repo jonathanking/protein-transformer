@@ -96,10 +96,7 @@ def update_loss_trackers(args, epoch_i, metrics):
         mode = "train"
     else:
         mode = "valid"
-    if args.combined_loss:
-        loss_str = "combined"
-    else:
-        loss_str = "drmsd"
+    loss_str = args.loss
 
     loss_to_compare = metrics[mode][f"epoch-{loss_str}"]
     losses_to_compare = metrics[mode][f"epoch-history-{loss_str}"]
@@ -163,10 +160,10 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
         print("A nan loss has occurred. Exiting training.")
         sys.exit(1)
     if do_log_str:
-        log_structure(pred_coords, tgt_coords, src_seq[-1])
+        log_structure(args, pred_coords, tgt_coords, src_seq[-1])
 
 
-def log_structure(pred_coords, gold_item, src_seq):
+def log_structure(args, pred_coords, gold_item, src_seq):
     """
     Logs a 3D structure prediction to wandb.
     """
@@ -180,10 +177,16 @@ def log_structure(pred_coords, gold_item, src_seq):
         pred_coords[bb_mask.flatten() & gold_item_non_nan[:bb_mask.shape[0] * NUM_PREDICTED_COORDS]
                         .cpu().detach().numpy().all(axis=1)].detach().numpy())},
         commit=False)
-    wandb.log({"structure_cloud": wandb.Object3D(pred_coords[gold_item_non_nan].reshape(-1,3).detach().numpy())})
+    wandb.log({"structure_cloud": wandb.Object3D(pred_coords[gold_item_non_nan].reshape(-1,3).detach().numpy())}, commit=False)
     creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    creator.save_gltf("test.gltf")
-    wandb.log({"structure": wandb.Object3D("test.gltf")})
+    creator.save_pdb(f"data/logs/structures/{args.name}_pred.pdb", title="pred")
+    creator.save_gltf(f"data/logs/structures/{args.name}_pred.gltf")
+    gold_item[torch.isnan(gold_item)] = 0
+    t_creator = PDB_Creator(gold_item.cpu().detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
+    t_creator.save_pdb(f"data/logs/structures/{args.name}_true.pdb", title="true")
+    t_creator.save_gltfs(f"data/logs/structures/{args.name}_true.pdb", f"data/logs/structures/{args.name}_pred.pdb")
+    wandb.log({"structure_comparison": wandb.Object3D(f"data/logs/structures/{args.name}_true_pred.gltf")}, commit=False)
+    wandb.log({"structure_prediction": wandb.Object3D(f"data/logs/structures/{args.name}_pred.gltf")}, commit=True)
 
 
 def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):

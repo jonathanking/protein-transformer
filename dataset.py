@@ -110,7 +110,7 @@ class ProteinVocabulary(object):
         seq = ""
         for i in indices:
             c = self.id2aa(i)
-            if include_sos_eos or (c != self.sos_id and c != self.eos_id and c != self.pad_id):
+            if include_sos_eos or (i != self.sos_id and i != self.eos_id and i != self.pad_id):
                 seq += c
         return seq
 

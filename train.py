@@ -33,7 +33,6 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     n_batches = 0
     batch_iter = tqdm(training_data, leave=False, unit="batch") if not args.cluster else training_data
 
-
     for step, batch in enumerate(batch_iter):
         optimizer.zero_grad()
         src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
@@ -42,7 +41,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         pred = model(src_seq, tgt_ang)
         pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
         m_loss = mse_over_angles(pred, tgt_ang)
-        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=0.5)
+        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
 
         if args.loss == "rmse":
             loss = m_loss
@@ -50,9 +49,8 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
             loss = d_loss
         elif args.loss == "ln-drmsd":
             loss = ln_d_loss
-        elif args.loss == "combined":
+        else:
             loss = c_loss
-
         loss.backward()
 
         # Clip gradients
@@ -87,7 +85,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
             pred = model(src_seq, tgt_ang)
             pred_coords, d_loss, ln_d_loss, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device("cpu"), return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang)
-            c_loss = combine_drmsd_mse(ln_d_loss, m_loss)
+            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss)
             do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, batch_iter, mode)
             n_batches += 1
 
@@ -258,7 +256,7 @@ def main():
 
     # Training parameters
     training = parser.add_argument_group("Training Args")
-    training.add_argument("-lr", "--learning_rate", type=float, default=1e-2)
+    training.add_argument("-lr", "--learning_rate", type=float, default=1e-4)
     training.add_argument('-e', '--epochs', type=int, default=10)
     training.add_argument("-b", '--batch_size', type=int, default=8)
     training.add_argument('-es', '--early_stopping', type=int, default=None,
@@ -314,7 +312,7 @@ def main():
 
     # Saving args
     saving_args = parser.add_argument_group("Saving Args")
-    saving_args.add_argument('--log_structure_step', type=int, default=10,
+    saving_args.add_argument('--log_structure_step', type=int, default=1,
                         help="Frequency of logging structure data during training.")
     saving_args.add_argument('--log_wandb_step', type=int, default=1,
                         help="Frequency of logging to wandb during training.")
