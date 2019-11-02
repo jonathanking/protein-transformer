@@ -31,7 +31,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
     n_batches = 0
-    batch_iter = tqdm(training_data, leave=False, unit="batch") if not args.cluster else training_data
+    batch_iter = tqdm(training_data, leave=False, unit="batch", dynamic_ncols=True) if not args.cluster else training_data
 
     for step, batch in enumerate(batch_iter):
         optimizer.zero_grad()
