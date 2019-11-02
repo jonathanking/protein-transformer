@@ -312,7 +312,7 @@ def main():
 
     # Saving args
     saving_args = parser.add_argument_group("Saving Args")
-    saving_args.add_argument('--log_structure_step', type=int, default=1,
+    saving_args.add_argument('--log_structure_step', type=int, default=10,
                         help="Frequency of logging structure data during training.")
     saving_args.add_argument('--log_wandb_step', type=int, default=1,
                         help="Frequency of logging to wandb during training.")
