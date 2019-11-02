@@ -4,6 +4,7 @@ import torch
 from protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
 import models
 import pymol
+import os
 
 class PDB_Creator(object):
     """
