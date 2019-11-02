@@ -193,11 +193,13 @@ class PDB_Creator(object):
         with open(path, "w") as outfile:
             outfile.write("\n".join(self.lines))
 
-    def save_gltf(self, path, title="test"):
+    def save_gltf(self, path, title="test", create_pdb=False):
         """
         This function first creates a PDB file, then converts it to a GLTF
         (3D Object) file. Used for visualizign with Weights and Biases. """
         assert ".gltf" in path, "requested filepath must end with '.gtlf'."
+        if create_pdb:
+            self.save_pdb(path.replace(".gltf", ".pdb"), title)
         pymol.cmd.load(path.replace(".gltf", ".pdb"), title)
         pymol.cmd.color("oxygen", title)
         pymol.cmd.save(path, quiet=True)
@@ -214,7 +216,8 @@ class PDB_Creator(object):
         pymol.cmd.color("oxygen", "pred")
 
         pymol.cmd.align("true", "pred", quiet=True)
-        pymol.cmd.save(os.path.join(os.path.dirname(path1), os.path.basename(path1).split("_")[0] + "_true_pred.gltf"),quiet=True)
+        pymol.cmd.save(os.path.join(os.path.dirname(path1),
+                                    os.path.basename(path1).split("_")[0] + "_true_pred.gltf"),quiet=True)
         pymol.cmd.delete("all")
 
 
