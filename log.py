@@ -169,15 +169,7 @@ def log_structure(args, pred_coords, gold_item, src_seq):
     """
     gold_item_non_batch_pad = (gold_item != VOCAB.pad_id).any(dim=-1)
     gold_item = gold_item[gold_item_non_batch_pad]
-    gold_item_non_nan = torch.isnan(gold_item).eq(0)
 
-    bb_mask = np.asarray([[1, 1, 1] + [0] * (NUM_PREDICTED_COORDS - 3)] *
-                         (pred_coords.shape[0] // NUM_PREDICTED_COORDS), dtype=np.bool)
-    wandb.log({"backbone_cloud": wandb.Object3D(
-        pred_coords[bb_mask.flatten() & gold_item_non_nan[:bb_mask.shape[0] * NUM_PREDICTED_COORDS]
-                        .cpu().detach().numpy().all(axis=1)].detach().numpy())},
-        commit=False)
-    wandb.log({"structure_cloud": wandb.Object3D(pred_coords[gold_item_non_nan].reshape(-1,3).detach().numpy())}, commit=False)
     creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
     creator.save_pdb(f"data/logs/structures/{args.name}_pred.pdb", title="pred")
     creator.save_gltf(f"data/logs/structures/{args.name}_pred.gltf")
