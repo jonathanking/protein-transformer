@@ -62,7 +62,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
 def get_losses(args, step, device, pred, tgt_ang, tgt_crds, src_seq):
     """
     Returns the computed losses/metrics for a batch. The variable 'loss'
-    will differ depending on the loss the user requested to train one.
+    will differ depending on the loss the user requested to train on.
     """
     m_loss = mse_over_angles(pred, tgt_ang)
 
