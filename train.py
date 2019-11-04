@@ -40,8 +40,17 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
             continue
         pred = model(src_seq, tgt_ang)
         m_loss = mse_over_angles(pred, tgt_ang)
-        if args.loss == "rmse":
-            pred_coords, d_loss, ln_d_loss = None, None, None
+
+        if args.loss == "ln-drmsd" or (args.loss == "mse" and step % 100 == 0):
+            pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred,
+                                                                    tgt_crds,
+                                                                    src_seq,
+                                                                    torch.device(
+                                                                        'cpu'))
+            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
+            loss = ln_d_loss
+        elif args.loss == "mse":
+            pred_coords, d_loss, ln_d_loss = None, torch.tensor(0), torch.tensor(0)
             c_loss = 0
             loss = m_loss
         elif args.loss == "drmsd":
@@ -52,15 +61,6 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
                                                                         'cpu'))
             c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
             loss = d_loss
-        elif args.loss == "ln-drmsd":
-
-            pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred,
-                                                                    tgt_crds,
-                                                                    src_seq,
-                                                                    torch.device(
-                                                                        'cpu'))
-            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
-            loss = ln_d_loss
         else:
 
             pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred,
