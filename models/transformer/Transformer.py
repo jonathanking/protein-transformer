@@ -63,7 +63,7 @@ class Transformer(torch.nn.Module):
         has_missing_residues = torch.isnan(dec_input).all(dim=-1).any().byte()
 
         # Decoder input only receives time steps SOS..t-1
-        dec_input[:, 1:] = dec_input[:, :-1]
+        dec_input[:, 1:] = dec_input.clone()[:, :-1]
         dec_input[:, 0] = self.decoder_sos_char
 
 
