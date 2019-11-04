@@ -145,7 +145,7 @@ class ProteinDataset(torch.utils.data.Dataset):
         return self._seqs[idx]
 
 
-def prepare_dataloaders(data, args, max_seq_len):
+def prepare_dataloaders(data, args, max_seq_len, num_workers=2):
     """
     Using the pre-processed data, stored in a nested Python dictionary, this
     function returns train, validation, and test set dataloaders with 2 workers
@@ -164,7 +164,7 @@ def prepare_dataloaders(data, args, max_seq_len):
             crds=data['train']['crd']*args.repeat_train,
             angs=data['train']['ang']*args.repeat_train,
             add_sos_eos=args.add_sos_eos),
-        num_workers=2,
+        num_workers=num_workers,
         batch_size=args.batch_size,
         collate_fn=collate,
         shuffle=True)
@@ -175,7 +175,7 @@ def prepare_dataloaders(data, args, max_seq_len):
             crds=data['valid'][70]['crd'],
             angs=data['valid'][70]['ang'],
             add_sos_eos=args.add_sos_eos),
-        num_workers=2,
+        num_workers=num_workers,
         batch_size=args.batch_size,
         collate_fn=collate,
         worker_init_fn=_init_fn)
@@ -186,7 +186,7 @@ def prepare_dataloaders(data, args, max_seq_len):
             crds=data['test']['crd'],
             angs=data['test']['ang'],
             add_sos_eos=args.add_sos_eos),
-        num_workers=2,
+        num_workers=num_workers,
         batch_size=args.batch_size,
         collate_fn=collate,
         worker_init_fn=_init_fn)
