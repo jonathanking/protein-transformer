@@ -308,6 +308,9 @@ def main():
                              "faster if using teacher forcing.")
     training.add_argument("--repeat_train", type=int, default=1,
                         help="Duplicate the training set X times. Useful for training on small datasets.")
+    training.add_argument("-s", "--seed", type=float, default=11_731,
+                          help="The random number generator seed for numpy "
+                               "and torch.")
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
@@ -348,6 +351,8 @@ def main():
     args.cuda = not args.no_cuda
     args.buffering_mode = 1
     LOGFILEHEADER = prepare_log_header(args)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
 
     # Load dataset
     args.add_sos_eos = args.model == "enc-dec"
