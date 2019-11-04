@@ -153,6 +153,10 @@ def prepare_dataloaders(data, args, max_seq_len):
     method only returns set '70'.
     """
     collate = make_paired_collate_fn_with_max_len(max_seq_len)
+
+    def _init_fn(worker_id):
+        np.random.seed(int(args.seed))
+
     # TODO: load and evaluate multiple validation sets
     train_loader = torch.utils.data.DataLoader(
         ProteinDataset(
@@ -173,7 +177,8 @@ def prepare_dataloaders(data, args, max_seq_len):
             add_sos_eos=args.add_sos_eos),
         num_workers=2,
         batch_size=args.batch_size,
-        collate_fn=collate)
+        collate_fn=collate,
+        worker_init_fn=_init_fn)
 
     test_loader = torch.utils.data.DataLoader(
         ProteinDataset(
@@ -183,7 +188,8 @@ def prepare_dataloaders(data, args, max_seq_len):
             add_sos_eos=args.add_sos_eos),
         num_workers=2,
         batch_size=args.batch_size,
-        collate_fn=collate)
+        collate_fn=collate,
+        worker_init_fn=_init_fn)
 
     return train_loader, valid_loader, test_loader
 

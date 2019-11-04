@@ -9,6 +9,7 @@ acid sequence.
 import argparse
 import csv
 import os
+import random
 
 import torch.optim as optim
 import torch.utils.data
@@ -253,6 +254,21 @@ def make_model(args, device):
     return model
 
 
+def seed_rngs(args):
+    """
+    Seed all necessary random number generators.
+    """
+    seed = args.seed
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
+
 def main():
     """
     Argument parsing, model loading, and model training.
@@ -351,8 +367,7 @@ def main():
     args.cuda = not args.no_cuda
     args.buffering_mode = 1
     LOGFILEHEADER = prepare_log_header(args)
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
+    seed_rngs(argparse)
 
     # Load dataset
     args.add_sos_eos = args.model == "enc-dec"
