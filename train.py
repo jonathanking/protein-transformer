@@ -51,7 +51,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
             loss = ln_d_loss
         elif args.loss == "mse":
             pred_coords, d_loss, ln_d_loss = None, torch.tensor(0), torch.tensor(0)
-            c_loss = 0
+            c_loss = torch.tensor(0)
             loss = m_loss
         elif args.loss == "drmsd":
             pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred,
