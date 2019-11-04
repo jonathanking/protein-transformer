@@ -158,29 +158,35 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
     validation set performance. Returns True iff model was saved.
     """
     cur_loss, loss_history = metrics["loss_to_compare"], metrics["losses_to_compare"]
+    do_time_chkpt = (time.time() - metrics["last_chkpt_time"]) / 3600 > args.checkpoint_time_interval
+
     if len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
-        model_state_dict = model.state_dict()
-        checkpoint = {
-            'model_state_dict': model_state_dict,
-            'settings': args,
-            'epoch': epoch_i,
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': cur_loss,
-            'metrics': metrics,
-            'elapsed_time':time.time() - START_TIME}
+        modifier = "best"
+    elif do_time_chkpt:
+        modifier = "latest"
     else:
         return False
 
-    chkpt_file_name = args.chkpt_path + "_best.chkpt"
+    chkpt_file_name = args.chkpt_path + f"_{modifier}.chkpt"
+    wandb.run.summary[f"{modifier}_validation_loss"] = cur_loss
+    wandb.run.summary[f"{modifier}_validation_epoch"] = epoch_i
+
+    model_state_dict = model.state_dict()
+    checkpoint = {
+        'model_state_dict': model_state_dict,
+        'settings': args,
+        'epoch': epoch_i,
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': cur_loss,
+        'metrics': metrics,
+        'elapsed_time': time.time() - START_TIME}
 
     torch.save(checkpoint, chkpt_file_name)
     wandb.save(chkpt_file_name)
+    wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
+    wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
+    metrics["last_chkpt_time"] = time.time()
     print('\r    - [Info] The checkpoint file has been updated.')
-    wandb.run.summary["best_validation_loss"] = cur_loss
-    wandb.run.summary["avg_evaluation_speed"] = np.mean(
-        metrics["valid"]["speed-history"])
-    wandb.run.summary["avg_training_speed"] = np.mean(
-        metrics["train"]["speed-history"])
 
     return True
 
@@ -296,7 +302,7 @@ def main():
     training.add_argument("-lr", "--learning_rate", type=float, default=1e-4)
     training.add_argument('-e', '--epochs', type=int, default=10)
     training.add_argument("-b", '--batch_size', type=int, default=8)
-    training.add_argument('-es', '--early_stopping', type=int, default=None,
+    training.add_argument('-es', '--early_stopping', type=int, default=10,
                         help="Stops if training hasn't improved in X epochs")
     training.add_argument('-nws', '--n_warmup_steps', type=int, default=10_000,
                         help="Number of warmup training steps when using lr-scheduling as proposed in the original"
@@ -353,21 +359,25 @@ def main():
     # Saving args
     saving_args = parser.add_argument_group("Saving Args")
     saving_args.add_argument('--log_structure_step', type=int, default=10,
-                        help="Frequency of logging structure data during training.")
+                             help="Frequency of logging structure data during training.")
     saving_args.add_argument('--log_wandb_step', type=int, default=1,
-                        help="Frequency of logging to wandb during training.")
+                             help="Frequency of logging to wandb during training.")
     saving_args.add_argument('--no_cuda', action='store_true')
-    saving_args.add_argument('--cluster', action='store_true', help="Set of parameters to facilitate training on a remote" +
-                                                               " cluster. Limited I/O, etc.")
+    saving_args.add_argument('--cluster', action='store_true',
+                             help="Set of parameters to facilitate training on a remote" +
+                                  " cluster. Limited I/O, etc.")
     saving_args.add_argument('--restart', action='store_true', help="Does not resume training.")
-    saving_args.add_argument('--restart_opt', action='store_true', help="Resumes training but does not load the optimizer"
-                                                                   "state. ")
+    saving_args.add_argument('--restart_opt', action='store_true',
+                             help="Resumes training but does not load the optimizer state. ")
+    training.add_argument("--checkpoint_time_interval", type=float, default=1,
+                          help="The amount of time (in hours) after which a model checkpoint is made, "
+                               "regardless of its performance. ")
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda
     args.buffering_mode = 1
     LOGFILEHEADER = prepare_log_header(args)
-    seed_rngs(argparse)
+    seed_rngs(args)
 
     # Load dataset
     args.add_sos_eos = args.model == "enc-dec"

@@ -215,6 +215,7 @@ def init_metrics(args):
                "history-lr": [],
                "epoch_last_improved": -1,
                "best_valid_loss_so_far": np.inf,
+               "last_chkpt_time": time.time()
                }
     if not args.lr_scheduling:
         metrics["history-lr"] = [0]
