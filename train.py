@@ -39,17 +39,36 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
             continue
         pred = model(src_seq, tgt_ang)
-        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
         m_loss = mse_over_angles(pred, tgt_ang)
-        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
-
         if args.loss == "rmse":
+            pred_coords, d_loss, ln_d_loss = None, None, None
+            c_loss = 0
             loss = m_loss
         elif args.loss == "drmsd":
+            pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred,
+                                                                    tgt_crds,
+                                                                    src_seq,
+                                                                    torch.device(
+                                                                        'cpu'))
+            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
             loss = d_loss
         elif args.loss == "ln-drmsd":
+
+            pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred,
+                                                                    tgt_crds,
+                                                                    src_seq,
+                                                                    torch.device(
+                                                                        'cpu'))
+            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
             loss = ln_d_loss
         else:
+
+            pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred,
+                                                                    tgt_crds,
+                                                                    src_seq,
+                                                                    torch.device(
+                                                                        'cpu'))
+            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
             loss = c_loss
         loss.backward()
 
@@ -265,7 +284,7 @@ def main():
                         help="Number of warmup training steps when using lr-scheduling as proposed in the original"
                              "Transformer paper.")
     training.add_argument('-cg', '--clip', type=float, default=1, help="Gradient clipping value.")
-    training.add_argument('-l', '--loss', choices=["rmse", "drmsd", "ln-drmsd", "combined"], default="combined",
+    training.add_argument('-l', '--loss', choices=["mse", "drmsd", "ln-drmsd", "combined"], default="combined",
                         help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based root mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combinaation of RMSE and ln-DRMSD.")
     training.add_argument('--train_only', action='store_true',
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")

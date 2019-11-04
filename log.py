@@ -159,7 +159,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     if np.isnan(loss.item()):
         print("A nan loss has occurred. Exiting training.")
         sys.exit(1)
-    if do_log_str:
+    if do_log_str and pred_coords is not None:
         log_structure(args, pred_coords, tgt_coords, src_seq[-1])
 
 
