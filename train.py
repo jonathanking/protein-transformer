@@ -39,37 +39,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
             continue
         pred = model(src_seq, tgt_ang)
-        m_loss = mse_over_angles(pred, tgt_ang)
-
-        if args.loss == "ln-drmsd" or (args.loss == "mse" and step % 100 == 0):
-            pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred,
-                                                                    tgt_crds,
-                                                                    src_seq,
-                                                                    torch.device(
-                                                                        'cpu'))
-            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
-            loss = ln_d_loss
-        elif args.loss == "mse":
-            pred_coords, d_loss, ln_d_loss = None, torch.tensor(0), torch.tensor(0)
-            c_loss = torch.tensor(0)
-            loss = m_loss
-        elif args.loss == "drmsd":
-            pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred,
-                                                                    tgt_crds,
-                                                                    src_seq,
-                                                                    torch.device(
-                                                                        'cpu'))
-            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
-            loss = d_loss
-        else:
-
-            pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred,
-                                                                    tgt_crds,
-                                                                    src_seq,
-                                                                    torch.device(
-                                                                        'cpu'))
-            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
-            loss = c_loss
+        loss, d_loss, ln_d_loss, m_loss, c_loss, pred_coords = get_losses(args, step, device, pred, tgt_ang, tgt_crds, src_seq)
         loss.backward()
 
         # Clip gradients
@@ -87,6 +57,38 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     metrics = update_metrics_end_of_epoch(metrics, "train", n_batches)
 
     return metrics
+
+
+def get_losses(args, step, device, pred, tgt_ang, tgt_crds, src_seq):
+    """
+    Returns the computed losses/metrics for a batch. The variable 'loss'
+    will differ depending on the loss the user requested to train one.
+    """
+    m_loss = mse_over_angles(pred, tgt_ang)
+
+    if args.loss == "ln-drmsd":
+        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
+        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
+        loss = ln_d_loss
+    elif args.loss == "mse" and step % args.log_structure_step != 0:
+        # Other losses are not computed for computational efficiency.
+        pred_coords, d_loss, ln_d_loss = None, torch.tensor(0), torch.tensor(0)
+        c_loss = torch.tensor(0)
+        loss = m_loss
+    elif args.loss == "mse" and step % args.log_structure_step == 0:
+        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
+        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
+        loss = m_loss
+    elif args.loss == "drmsd":
+        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
+        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
+        loss = d_loss
+    else:
+        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
+        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
+        loss = c_loss
+
+    return loss, d_loss, ln_d_loss, m_loss, c_loss, pred_coords
 
 
 def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
