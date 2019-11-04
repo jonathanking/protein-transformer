@@ -46,7 +46,7 @@ SHORT_ERRORS = m.list()
 def get_chain_from_trainid(proteinnet_id):
     """
     Given a ProteinNet ID of a training or validation set item, this function returns the associated
-    ProDy-parsed chain object. "1A9U_2_A"
+    ProDy-parsed chain object. "1A9U_2_A" ("4EDJ_djsldfj-")
     """
     # Try parsing the ID as a PDB ID. If it fails, assume it's an ASTRAL ID.
     try:
@@ -56,7 +56,7 @@ def get_chain_from_trainid(proteinnet_id):
     except ValueError:
         try:
             pdbid, astral_id = proteinnet_id.split("_")
-            return get_chain_from_astral_id(astral_id, ASTRAL_ID_MAPPING)
+            return get_chain_from_astral_id(astral_id.replace("-", "_"), ASTRAL_ID_MAPPING)
         except KeyError:
             MISSING_ASTRAL_IDS.append(1)
             return None
@@ -310,18 +310,17 @@ def main():
 
     # Download and preprocess all data from PDB IDs
     lim = None
-    train_pdb_ids = ["3P7K_1_A"]
     with Pool(multiprocessing.cpu_count()) as p:
         train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim])))
 
     valid_result_meta = {}
     for split, vids in group_validation_set(valid_ids).items():
         with Pool(multiprocessing.cpu_count()) as p:
-            valid_results = list(tqdm.tqdm(p.imap(work, ["3P7K_1_A"]), total=len(vids)))
+            valid_results = list(tqdm.tqdm(p.imap(work, vids), total=len(vids)))
         valid_result_meta[split] = valid_results
 
     with Pool(multiprocessing.cpu_count()) as p:
-        test_results = list(tqdm.tqdm(p.imap(work, ["3P7K_1_A"]), total=len(test_casp_ids)))
+        test_results = list(tqdm.tqdm(p.imap(work, test_casp_ids), total=len(test_casp_ids)))
     print("Structures processed.")
     print_failure_summary()
 
@@ -367,7 +366,7 @@ if __name__ == "__main__":
     VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
     TRAIN_FILE = f"training_{args.training_set}.pt"
     PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT = None, None, None
-    ASTRAL_FILE = "../data/dir.des.scope.2.07-stable.txt"
+    ASTRAL_FILE = "data/dir.des.scope.2.07-stable.txt"
     ASTRAL_ID_MAPPING = parse_astral_summary_file(ASTRAL_FILE)
     SUFFIX = str(datetime.datetime.today().strftime("%y%m%d")) + f"_{args.training_set}"
     match = re.search(r"casp\d+", args.input_dir, re.IGNORECASE)
