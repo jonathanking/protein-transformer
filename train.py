@@ -69,7 +69,7 @@ def get_losses(args, step, device, pred, tgt_ang, tgt_crds, src_seq):
 
     if args.loss == "ln-drmsd":
         pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
-        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
+        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=args.combined_drmsd_weight)
         loss = ln_d_loss
     elif args.loss == "mse" and step % args.log_structure_step != 0:
         # Other losses are not computed for computational efficiency.
@@ -78,15 +78,15 @@ def get_losses(args, step, device, pred, tgt_ang, tgt_crds, src_seq):
         loss = m_loss
     elif args.loss == "mse" and step % args.log_structure_step == 0:
         pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
-        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
+        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=args.combined_drmsd_weight)
         loss = m_loss
     elif args.loss == "drmsd":
         pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
-        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
+        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=args.combined_drmsd_weight)
         loss = d_loss
     else:
         pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
-        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=0.5)
+        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=args.combined_drmsd_weight)
         loss = c_loss
 
     return loss, d_loss, ln_d_loss, m_loss, c_loss, pred_coords
@@ -107,7 +107,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
             pred = model(src_seq, tgt_ang)
             pred_coords, d_loss, ln_d_loss, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device("cpu"), return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang)
-            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss)
+            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=args.combined_drmsd_weight)
             do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, batch_iter, mode)
             n_batches += 1
 
@@ -199,7 +199,10 @@ def load_model(model, optimizer, args):
     """
     global START_EPOCH
     global START_TIME
-    chkpt_file_name = args.chkpt_path + "_best.chkpt"
+    if args.load_chkpt:
+        chkpt_file_name = args.load_chkpt
+    else:
+        chkpt_file_name = args.chkpt_path + "_best.chkpt"
 
     # Try to load the model checkpoint, if it exists
     if os.path.exists(chkpt_file_name) and not args.restart:
@@ -333,6 +336,8 @@ def main():
     training.add_argument("-s", "--seed", type=float, default=11_731,
                           help="The random number generator seed for numpy "
                                "and torch.")
+    training.add_argument("--combined_drmsd_weight", type=float, default=0.5,
+                                help="When combining losses, use weight w for loss = w * drmsd + (1-w) * mse.")
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
@@ -369,9 +374,11 @@ def main():
     saving_args.add_argument('--restart', action='store_true', help="Does not resume training.")
     saving_args.add_argument('--restart_opt', action='store_true',
                              help="Resumes training but does not load the optimizer state. ")
-    training.add_argument("--checkpoint_time_interval", type=float, default=1,
+    saving_args.add_argument("--checkpoint_time_interval", type=float, default=1,
                           help="The amount of time (in hours) after which a model checkpoint is made, "
                                "regardless of its performance. ")
+    saving_args.add_argument('--load_chkpt', type=str, default=None,
+                        help="Path from which to load a model checkpoint.")
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda
