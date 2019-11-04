@@ -201,11 +201,17 @@ def init_metrics(args):
     Returns an empty metric dictionary for recording model performance.
     """
     metrics = {"train": {"epoch-history-drmsd": [],
-                         "epoch-history-combined": []},
+                         "epoch-history-combined": [],
+                         "epoch-history-ln-drmsd": [],
+                         "epoch-history-mse": []},
                "valid": {"epoch-history-drmsd": [],
-                         "epoch-history-combined": []},
+                         "epoch-history-combined": [],
+                         "epoch-history-ln-drmsd": [],
+                         "epoch-history-mse": []},
                "test":  {"epoch-history-drmsd": [],
-                         "epoch-history-combined": []},
+                         "epoch-history-combined": [],
+                         "epoch-history-ln-drmsd": [],
+                         "epoch-history-mse": []},
                "history-lr": [],
                "epoch_last_improved": -1,
                "best_valid_loss_so_far": np.inf,
@@ -278,6 +284,8 @@ def update_metrics_end_of_epoch(metrics, mode, n_batches):
         metrics[mode]["epoch-rmsd"] /= n_batches
     metrics[mode]["epoch-history-combined"].append(metrics[mode]["epoch-combined"])
     metrics[mode]["epoch-history-drmsd"].append(metrics[mode]["epoch-drmsd"])
+    metrics[mode]["epoch-history-mse"].append(metrics[mode]["epoch-mse"])
+    metrics[mode]["epoch-history-ln-drmsd"].append(metrics[mode]["epoch-ln-drmsd"])
     return metrics
 
 
