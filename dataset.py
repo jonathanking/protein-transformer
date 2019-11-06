@@ -145,7 +145,7 @@ class ProteinDataset(torch.utils.data.Dataset):
         return self._seqs[idx]
 
 
-def prepare_dataloaders(data, args, max_seq_len, num_workers=2):
+def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
     """
     Using the pre-processed data, stored in a nested Python dictionary, this
     function returns train, validation, and test set dataloaders with 2 workers

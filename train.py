@@ -392,6 +392,7 @@ def main():
     args.buffering_mode = 1
     LOGFILEHEADER = prepare_log_header(args)
     seed_rngs(args)
+    torch.set_num_threads(1)
 
     # Load dataset
     args.add_sos_eos = args.model == "enc-dec"
@@ -442,6 +443,7 @@ def main():
     wandb.run.summary["stopped_training_early"] = False
 
     print(args, "\n")
+    del data
 
     # Begin training
     train(model, metrics, training_data, validation_data, test_data, optimizer,

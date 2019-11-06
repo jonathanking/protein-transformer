@@ -10,6 +10,7 @@ from protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 from protein.Structure import generate_coords
 from dataset import VOCAB
 
+GLOBAL_POOL = Parallel(multiprocessing.cpu_count())
 
 def combine_drmsd_mse(d, mse, w=.5):
     """
@@ -111,9 +112,9 @@ def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("c
     pred_angs = inverse_trig_transform(pred_angs)
 
     # Compute drmsd in parallel over the batch
-    results = Parallel(n_jobs=multiprocessing.cpu_count(),
-                       backend="loky")(delayed(drmsd_work)(ang, crd, seq, return_rmsd, do_backward)
-                                       for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
+    results = GLOBAL_POOL(delayed(drmsd_work)(ang, crd, seq, return_rmsd, do_backward)
+                          for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
+
 
     # Unpack the multiprocessing results
     grads, losses, len_normalized_losses, rmsds = [], [], [], []
