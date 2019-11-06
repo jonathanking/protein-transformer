@@ -439,6 +439,7 @@ def main():
     wandb.config.update({"n_params": n_params,
                          "n_trainable_params": n_trainable_params,
                          "max_seq_len": MAX_SEQ_LEN})
+    wandb.run.summary["stopped_training_early"] = False
 
     print(args, "\n")
 

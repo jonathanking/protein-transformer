@@ -108,6 +108,7 @@ def update_loss_trackers(args, epoch_i, metrics):
     elif args.early_stopping and epoch_i - metrics["epoch_last_improved"] > args.early_stopping:
         # Model hasn't improved in X epochs
         print("No improvement for {} epochs. Stopping model training early.".format(args.early_stopping))
+        wandb.run.summary["stopped_training_early"] = True
         raise EarlyStoppingCondition
 
     metrics["loss_to_compare"] = loss_to_compare
