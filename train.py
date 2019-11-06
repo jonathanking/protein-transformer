@@ -183,7 +183,7 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
 
     torch.save(checkpoint, chkpt_file_name)
     wandb.save(chkpt_file_name)
-    wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
+    if not args.train_only: wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
     wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
     metrics["last_chkpt_time"] = time.time()
     print('\r    - [Info] The checkpoint file has been updated.')
