@@ -18,7 +18,6 @@ def print_train_batch_status(args, items):
     # Extract relevant metrics
     pbar, metrics, src_seq = items
     cur_lr = metrics["history-lr"][-1]
-    training_losses = metrics["train"]["batch-history"]
     train_drmsd_loss = metrics["train"]["batch-drmsd"]
     train_mse_loss = metrics["train"]["batch-mse"]
     train_comb_loss = metrics["train"]["batch-combined"]
@@ -28,6 +27,7 @@ def print_train_batch_status(args, items):
         loss = metrics["train"]["batch-ln-drmsd"]
     lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling else ""
     speed = metrics["train"]["speed"]
+    speed_avg = np.mean(metrics["train"]["speeds"])
 
     if args.cluster:
         print('Loss = {0:.6f}{1}, speed = {speed}'.format(
@@ -36,13 +36,13 @@ def print_train_batch_status(args, items):
             speed=speed))
     else:
         pbar.set_description('\r  - (Train) drmsd={drmsd:.2f}, lndrmsd={lnd:0.7f}, rmse={rmse:.4f},'
-                             ' c={comb:.2f}{lr}, res/s={speed}'.format(
+                             ' c={comb:.2f}{lr}, res/s={speed:2f}'.format(
             drmsd=float(train_drmsd_loss),
             lr=lr_string,
             rmse=np.sqrt(float(train_mse_loss)),
             comb=float(train_comb_loss),
             lnd=metrics["train"]["batch-ln-drmsd"],
-            speed=speed))
+            speed=speed_avg))
 
 
 def print_eval_batch_status(args, items):
@@ -247,6 +247,10 @@ def update_metrics(metrics, mode, drmsd, ln_drmsd, mse, combined, src_seq, rmsd=
     # Compute and update speed
     num_res = (src_seq != VOCAB.pad_id).sum().item()
     metrics[mode]["speed"] = round(num_res / (time.time() - metrics[mode]["batch-time"]), 2)
+    if "speeds" not in metrics[mode].keys():
+        metrics[mode]["speeds"] = []
+    metrics[mode]["speeds"].append(metrics[mode]["speed"])
+
     metrics[mode]["batch-time"] = time.time()
     metrics[mode]["speed-history"].append(metrics[mode]["speed"])
 
