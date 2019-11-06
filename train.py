@@ -17,12 +17,14 @@ from tqdm import tqdm
 import wandb
 
 from dataset import prepare_dataloaders
-from losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
+from losses import compute_batch_drmsd, mse_over_angles, combine_drmsd_mse
 from models.transformer.Transformer import Transformer
 from models.transformer.Optimizer import ScheduledOptim
 from log import *
 from models.encoder_only import EncoderOnlyTransformer
 from protein.Sidechains import NUM_PREDICTED_ANGLES
+
+
 
 
 def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):
@@ -40,8 +42,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
             continue
         pred = model(src_seq, tgt_ang)
-        loss, d_loss, ln_d_loss, m_loss, c_loss, pred_coords = get_losses(args, step, device, pred, tgt_ang, tgt_crds, src_seq)
-        loss.backward()
+        loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq)
 
         # Clip gradients
         if args.clip:
@@ -52,7 +53,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
 
         # Record performance metrics
         do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
-                               log_writer, batch_iter, START_TIME, pred_coords, tgt_crds[-1], step)
+                               log_writer, batch_iter, START_TIME, pred, tgt_crds[-1], step)
         n_batches += 1
 
     metrics = update_metrics_end_of_epoch(metrics, "train", n_batches)
@@ -60,36 +61,39 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     return metrics
 
 
-def get_losses(args, step, device, pred, tgt_ang, tgt_crds, src_seq):
+def get_losses(args, pred, tgt_ang, tgt_crds, src_seq):
     """
     Returns the computed losses/metrics for a batch. The variable 'loss'
     will differ depending on the loss the user requested to train on.
     """
+    # TODO remove outdated reference to loss
+    # Always compute MSE loss b/c it's computationally cheap.
     m_loss = mse_over_angles(pred, tgt_ang)
 
     if args.loss == "ln-drmsd":
-        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
-        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=args.combined_drmsd_weight)
+        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False)
+        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
         loss = ln_d_loss
-    elif args.loss == "mse" and step % args.log_structure_step != 0:
-        # Other losses are not computed for computational efficiency.
-        pred_coords, d_loss, ln_d_loss = None, torch.tensor(0), torch.tensor(0)
-        c_loss = torch.tensor(0)
-        loss = m_loss
-    elif args.loss == "mse" and step % args.log_structure_step == 0:
-        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
-        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=args.combined_drmsd_weight)
-        loss = m_loss
-    elif args.loss == "drmsd":
-        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
-        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=args.combined_drmsd_weight)
-        loss = d_loss
-    else:
-        pred_coords, d_loss, ln_d_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device('cpu'))
-        c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=args.combined_drmsd_weight)
-        loss = c_loss
 
-    return loss, d_loss, ln_d_loss, m_loss, c_loss, pred_coords
+    elif args.loss == "mse":
+        # Other losses are not computed for computational efficiency.
+        d_loss, ln_d_loss, c_loss = torch.tensor(0), torch.tensor(0), torch.tensor(0)
+        loss = m_loss
+        m_loss.backward()
+
+    elif args.loss == "drmsd":
+        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False)
+        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
+        loss = d_loss
+
+    else:
+        # Combined loss
+        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=True)
+        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
+        loss = c_loss
+        c_loss.backward()
+
+    return loss, d_loss, ln_d_loss, m_loss, c_loss
 
 
 def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
@@ -105,9 +109,9 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
         for batch in batch_iter:
             src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
             pred = model(src_seq, tgt_ang)
-            pred_coords, d_loss, ln_d_loss, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq, torch.device("cpu"), return_rmsd=True)
+            d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True)
             m_loss = mse_over_angles(pred, tgt_ang)
-            c_loss = combine_drmsd_mse(ln_d_loss.to(device), m_loss, w=args.combined_drmsd_weight)
+            c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
             do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, batch_iter, mode)
             n_batches += 1
 
@@ -183,7 +187,8 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
 
     torch.save(checkpoint, chkpt_file_name)
     wandb.save(chkpt_file_name)
-    wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
+    if not args.train_only:
+        wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
     wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
     metrics["last_chkpt_time"] = time.time()
     print('\r    - [Info] The checkpoint file has been updated.')
@@ -276,6 +281,8 @@ def seed_rngs(args):
     torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
+    if torch.backends.cudnn.deterministic:
+        print("[Info] cudnn.deterministic set to True. CUDNN-optimized code may be slow.")
 
 
 def main():

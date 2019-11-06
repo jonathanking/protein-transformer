@@ -8,6 +8,7 @@ import torch
 from dataset import VOCAB
 from protein.Sidechains import NUM_PREDICTED_COORDS
 from protein.PDB_Creator import PDB_Creator
+from losses import angles_to_coords, inverse_trig_transform
 
 def print_train_batch_status(args, items):
     """
@@ -34,7 +35,7 @@ def print_train_batch_status(args, items):
             lr_string,
             speed=speed))
     else:
-        pbar.set_description('\r  - (Train) drmsd={drmsd:.2f}, lndrmsd={lnd:0.4f}, rmse={rmse:.4f},'
+        pbar.set_description('\r  - (Train) drmsd={drmsd:.2f}, lndrmsd={lnd:0.7f}, rmse={rmse:.4f},'
                              ' c={comb:.2f}{lr}, res/s={speed}'.format(
             drmsd=float(train_drmsd_loss),
             lr=lr_string,
@@ -132,7 +133,7 @@ def log_batch(log_writer, metrics, start_time,  mode="valid", end_of_epoch=False
 
 
 def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer, pbar,
-                           start_time, pred_coords, tgt_coords, step):
+                           start_time, pred_angs, tgt_coords, step):
     """
     Performs all necessary logging at the end of a batch in the training epoch.
     Updates custom metrics dictionary and wandb logs. Prints status of training.
@@ -159,7 +160,9 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     if np.isnan(loss.item()):
         print("A nan loss has occurred. Exiting training.")
         sys.exit(1)
-    if do_log_str and pred_coords is not None:
+    if do_log_str:
+        with torch.no_grad():
+            pred_coords = angles_to_coords(inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(), remove_batch_padding=True)
         log_structure(args, pred_coords, tgt_coords, src_seq[-1])
 
 
@@ -169,7 +172,6 @@ def log_structure(args, pred_coords, gold_item, src_seq):
     """
     gold_item_non_batch_pad = (gold_item != VOCAB.pad_id).any(dim=-1)
     gold_item = gold_item[gold_item_non_batch_pad]
-
     creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
     creator.save_pdb(f"data/logs/structures/{args.name}_pred.pdb", title="pred")
     creator.save_gltf(f"data/logs/structures/{args.name}_pred.gltf")

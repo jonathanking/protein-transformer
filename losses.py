@@ -45,23 +45,22 @@ def remove_sos_eos_from_input(input_seq):
     return input_seq[start_idx : end_idx]
 
 
-def drmsd_work(ang_crd_seq):
+def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True):
     """
     A version of drmsd loss meant to be used in parallel. Operates on a tuple
     of predicted angles, coordinates, and sequence. Works for 1 protein at a
     time.
     """
-    pred_ang, true_crd, input_seq = ang_crd_seq
+    # Record leaf-node pointer to access gradients at end
+    starting_ang = pred_ang
+
     # Remove batch-level masking
     batch_mask = input_seq.ne(VOCAB.pad_id)
     input_seq = input_seq[batch_mask]
-    # Remove SOS and EOS characters if present
-    input_seq = remove_sos_eos_from_input(input_seq)
-    pred_ang = pred_ang[:input_seq.shape[0]]
     true_crd = true_crd[:input_seq.shape[0] * NUM_PREDICTED_COORDS]
 
-    # Generate coordinates
-    pred_crd = generate_coords(pred_ang, pred_ang.shape[0], input_seq, torch.device("cpu"))
+    # Compute coordinates
+    pred_crd = angles_to_coords(pred_ang, input_seq)
 
     # Remove coordinate-level masking for missing atoms
     true_crd_non_nan = torch.isnan(true_crd).eq(0)
@@ -71,108 +70,70 @@ def drmsd_work(ang_crd_seq):
     # Compute drmsd between existing atoms only
     loss = drmsd(pred_crds_masked, true_crds_masked)
     l_normed = loss / pred_crds_masked.shape[0]
-    return pred_crd, loss, l_normed
+
+    if do_backward:
+        l_normed.backward()
+
+    if return_rmsd:
+        return starting_ang.grad, loss.item(), l_normed.item(), rmsd(pred_crds_masked.data.numpy(),
+                                                                     true_crds_masked.data.numpy())
+    else:
+        return starting_ang.grad, loss.item(), l_normed.item()
 
 
-def drmsd_work(ang_crd_seq):
+def angles_to_coords(angles, seq, remove_batch_padding=False):
     """
-    A version of drmsd loss meant to be used in parallel. Operates on a tuple
-    of predicted angles, coordinates, and sequence. Works for 1 protein at a
-    time.
+    Convert torsional angles to coordinates.
     """
-    pred_ang, true_crd, input_seq = ang_crd_seq
-    # Remove batch-level masking
-    batch_mask = input_seq.ne(VOCAB.pad_id)
-    input_seq = input_seq[batch_mask]
+    pred_ang, input_seq = angles, seq
+    if remove_batch_padding:
+        # Remove batch-level masking
+        batch_mask = input_seq.ne(VOCAB.pad_id)
+        input_seq = input_seq[batch_mask]
+
     # Remove SOS and EOS characters if present
     input_seq = remove_sos_eos_from_input(input_seq)
     pred_ang = pred_ang[:input_seq.shape[0]]
-    true_crd = true_crd[:input_seq.shape[0] * NUM_PREDICTED_COORDS]
 
     # Generate coordinates
-    pred_crd = generate_coords(pred_ang, pred_ang.shape[0], input_seq, torch.device("cpu"))
-
-    # Remove coordinate-level masking for missing atoms
-    true_crd_non_nan = torch.isnan(true_crd).eq(0)
-    pred_crds_masked = pred_crd[true_crd_non_nan].reshape(-1, 3)
-    true_crds_masked = true_crd[true_crd_non_nan].reshape(-1, 3)
-
-    # Compute drmsd between existing atoms only
-    loss = drmsd(pred_crds_masked, true_crds_masked)
-    l_normed = loss / pred_crds_masked.shape[0]
-    return pred_crd, loss, l_normed
+    return generate_coords(pred_ang, pred_ang.shape[0], input_seq, torch.device("cpu"))
 
 
-def drmsd_rmsd_work(ang_crd_seq):
-    """
-    Differs from drmsd_work only in that it also computes/returns rmsd.
-    A version of drmsd loss meant to be used in parallel. Operates on a tuple
-    of predicted angles, coordinates, and sequence. Works for 1 protein at a
-    time.
-    """
-    pred_ang, true_crd, input_seq = ang_crd_seq
-    # Remove batch-level masking
-    batch_mask = input_seq.ne(VOCAB.pad_id)
-    input_seq = input_seq[batch_mask]
-    # Remove SOS and EOS characters if present
-    input_seq = remove_sos_eos_from_input(input_seq)
-    pred_ang = pred_ang[:input_seq.shape[0]]
-    true_crd = true_crd[:input_seq.shape[0] * NUM_PREDICTED_COORDS]
-
-    # Generate coordinates
-    pred_crd = generate_coords(pred_ang, pred_ang.shape[0], input_seq, torch.device("cpu"))
-
-    # Remove coordinate-level masking for missing atoms
-    true_crd_non_nan = torch.isnan(true_crd).eq(0)
-    pred_crds_masked = pred_crd[true_crd_non_nan].reshape(-1, 3)
-    true_crds_masked = true_crd[true_crd_non_nan].reshape(-1, 3)
-
-    # Compute drmsd between existing atoms only
-    loss = drmsd(pred_crds_masked, true_crds_masked)
-    l_normed = loss / pred_crds_masked.shape[0]
-    return pred_crd, loss, l_normed, rmsd(pred_crds_masked.data.numpy(), true_crds_masked.data.numpy())
-
-
-
-
-def drmsd_loss_from_angles(pred_angs, true_crds, input_seqs, device, return_rmsd=False):
+def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("cpu"), return_rmsd=False,
+                        do_backward=False, retain_graph=False):
     """
     Calculate DRMSD loss by first generating predicted coordinates from
     angles. Then, predicted coordinates are compared with the true coordinate
     tensor provided to the function.
     """
-
     pred_angs, true_crds, input_seqs = pred_angs.to(device), true_crds.to(device), input_seqs.to(device)
 
     pred_angs = inverse_trig_transform(pred_angs)
 
-    losses = []
-    len_normalized_losses = []
-    rmsds = []
-    if not return_rmsd:
-        fn = drmsd_work
-    else:
-        fn = drmsd_rmsd_work
-
     # Compute drmsd in parallel over the batch
     results = Parallel(n_jobs=multiprocessing.cpu_count(),
-                       backend="loky")(delayed(fn)(a_c_s)
-                                       for a_c_s in zip(pred_angs, true_crds, input_seqs))
+                       backend="loky")(delayed(drmsd_work)(ang, crd, seq, return_rmsd, do_backward)
+                                       for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
 
     # Unpack the multiprocessing results
+    grads, losses, len_normalized_losses, rmsds = [], [], [], []
     for r in results:
         if len(r) == 4:
-            pred_crd, l, ln, rmsd_val = r
+            grad, l, ln, rmsd_val = r
             rmsds.append(rmsd_val)
         else:
-            pred_crd, l, ln = r
+            grad, l, ln = r
+        grads.append(grad)
         losses.append(l)
         len_normalized_losses.append(ln)
 
+    if do_backward:
+        pred_angs.backward(gradient=torch.stack(grads), retain_graph=retain_graph)
+
     if return_rmsd:
-        return pred_crd, torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses)), np.mean(rmsds)
+        return np.mean(losses), np.mean(len_normalized_losses), np.mean(rmsds)
     else:
-        return pred_crd, torch.mean(torch.stack(losses)), torch.mean(torch.stack(len_normalized_losses))
+        return np.mean(losses), np.mean(len_normalized_losses)
 
 
 def mse_over_angles(pred, true):
