@@ -15,6 +15,7 @@ import torch.optim as optim
 import torch.utils.data
 from tqdm import tqdm
 import wandb
+from joblib import Parallel
 
 from dataset import prepare_dataloaders
 from losses import compute_batch_drmsd, mse_over_angles, combine_drmsd_mse
@@ -27,7 +28,7 @@ from protein.Sidechains import NUM_PREDICTED_ANGLES
 
 
 
-def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):
+def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics, pool=None):
     """
     One complete training epoch.
     """
@@ -42,7 +43,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
             continue
         pred = model(src_seq, tgt_ang)
-        loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq)
+        loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool)
 
         # Clip gradients
         if args.clip:
@@ -61,7 +62,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     return metrics
 
 
-def get_losses(args, pred, tgt_ang, tgt_crds, src_seq):
+def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None):
     """
     Returns the computed losses/metrics for a batch. The variable 'loss'
     will differ depending on the loss the user requested to train on.
@@ -71,7 +72,7 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq):
     m_loss = mse_over_angles(pred, tgt_ang)
 
     if args.loss == "ln-drmsd":
-        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False)
+        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False, pool=pool)
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
         loss = ln_d_loss
 
@@ -82,7 +83,7 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq):
         m_loss.backward()
 
     elif args.loss == "drmsd":
-        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False)
+        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False, pool=pool)
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
         loss = d_loss
 
@@ -123,12 +124,13 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
     """
     Model training control loop.
     """
+    TRAINING_POOL = Parallel(min(torch.multiprocessing.cpu_count(), args.batch_size))
     for epoch_i in range(START_EPOCH, args.epochs):
         print(f'[ Epoch {epoch_i} ]')
 
         # Train epoch
         start = time.time()
-        metrics = train_epoch(model, training_data, optimizer, device, args, log_writer, metrics)
+        metrics = train_epoch(model, training_data, optimizer, device, args, log_writer, metrics, pool=TRAINING_POOL)
         if args.eval_train:
            metrics = eval_epoch(model, training_data, device, args, metrics, mode="train")
         print_end_of_epoch_status("train", (start, metrics))
@@ -281,6 +283,8 @@ def seed_rngs(args):
     torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.enabled = True
     if torch.backends.cudnn.deterministic:
         print("[Info] cudnn.deterministic set to True. CUDNN-optimized code may be slow.")
 

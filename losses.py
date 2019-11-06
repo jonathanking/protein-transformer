@@ -10,8 +10,6 @@ from protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 from protein.Structure import generate_coords
 from dataset import VOCAB
 
-GLOBAL_POOL = Parallel(multiprocessing.cpu_count())
-
 def combine_drmsd_mse(d, mse, w=.5):
     """
     Returns a combination of drmsd and mse loss that first normalizes their
@@ -53,6 +51,7 @@ def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True):
     time.
     """
     # Record leaf-node pointer to access gradients at end
+    pred_ang.requires_grad_()
     starting_ang = pred_ang
 
     # Remove batch-level masking
@@ -100,20 +99,28 @@ def angles_to_coords(angles, seq, remove_batch_padding=False):
     return generate_coords(pred_ang, pred_ang.shape[0], input_seq, torch.device("cpu"))
 
 
+def parallel_coords_only(ang, seq):
+    coords = angles_to_coords(ang, seq)
+    return coords
+
+
 def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("cpu"), return_rmsd=False,
-                        do_backward=False, retain_graph=False):
+                        do_backward=False, retain_graph=False, pool=None):
     """
     Calculate DRMSD loss by first generating predicted coordinates from
     angles. Then, predicted coordinates are compared with the true coordinate
     tensor provided to the function.
     """
     pred_angs, true_crds, input_seqs = pred_angs.to(device), true_crds.to(device), input_seqs.to(device)
-
     pred_angs = inverse_trig_transform(pred_angs)
 
     # Compute drmsd in parallel over the batch
-    results = GLOBAL_POOL(delayed(drmsd_work)(ang, crd, seq, return_rmsd, do_backward)
+    if pool is not None:
+        results = pool(delayed(drmsd_work)(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward)
                           for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
+    else:
+        results = (drmsd_work(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward=True)
+                              for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
 
 
     # Unpack the multiprocessing results
