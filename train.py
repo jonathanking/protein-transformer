@@ -97,7 +97,7 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None):
     return loss, d_loss, ln_d_loss, m_loss, c_loss
 
 
-def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
+def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool=None):
     """
     One compete evaluation epoch.
     """
@@ -110,7 +110,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid"):
         for batch in batch_iter:
             src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
             pred = model(src_seq, tgt_ang)
-            d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True)
+            d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True, do_backward=False, pool=pool)
             m_loss = mse_over_angles(pred, tgt_ang)
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
             do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, batch_iter, mode)
@@ -124,22 +124,22 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
     """
     Model training control loop.
     """
-    TRAINING_POOL = Parallel(min(torch.multiprocessing.cpu_count(), args.batch_size))
+    drmsd_worker_pool = Parallel(min(torch.multiprocessing.cpu_count(), args.batch_size))
     for epoch_i in range(START_EPOCH, args.epochs):
         print(f'[ Epoch {epoch_i} ]')
 
         # Train epoch
         start = time.time()
-        metrics = train_epoch(model, training_data, optimizer, device, args, log_writer, metrics, pool=TRAINING_POOL)
+        metrics = train_epoch(model, training_data, optimizer, device, args, log_writer, metrics, pool=drmsd_worker_pool)
         if args.eval_train:
-           metrics = eval_epoch(model, training_data, device, args, metrics, mode="train")
+           metrics = eval_epoch(model, training_data, device, args, metrics, mode="train", pool=drmsd_worker_pool)
         print_end_of_epoch_status("train", (start, metrics))
         log_batch(log_writer, metrics, START_TIME, mode="train", end_of_epoch=True)
 
         # Valid epoch
         if not args.train_only:
             start = time.time()
-            metrics = eval_epoch(model, validation_data, device, args, metrics)
+            metrics = eval_epoch(model, validation_data, device, args, metrics, pool=drmsd_worker_pool)
             print_end_of_epoch_status("valid", (start, metrics))
             log_batch(log_writer, metrics, START_TIME, mode="valid", end_of_epoch=True)
 

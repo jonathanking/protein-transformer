@@ -119,7 +119,7 @@ def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("c
         results = pool(delayed(drmsd_work)(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward)
                           for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
     else:
-        results = (drmsd_work(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward=True)
+        results = (drmsd_work(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward=do_backward)
                               for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
 
 
