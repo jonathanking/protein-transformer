@@ -65,7 +65,7 @@ def print_end_of_epoch_status(mode, items):
     cur_lr = metrics["history-lr"][-1]
     drmsd_loss = metrics[mode]["epoch-drmsd"]
     mse_loss = metrics[mode]["epoch-mse"]
-    rmsd_loss_str = "{:6.3f}".format(metrics[mode]["epoch-rmsd"]) if metrics[mode]["epoch-rmsd"] else "nan"
+    rmsd_loss_str = "{:6.3f}".format(metrics[mode]["epoch-rmsd"]) if metrics[mode]["epoch-rmsd"] != 0 else "nan"
     comb_loss = metrics[mode]["epoch-combined"]
     avg_speed = np.mean(metrics[mode]["speed-history"])
     print('\r  - ({mode})   drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd}, comb: {comb: 6.3f}, '
@@ -266,10 +266,7 @@ def reset_metrics_for_epoch(metrics, mode):
     metrics[mode]["epoch-ln-drmsd"] = metrics[mode]["batch-ln-drmsd"] = 0
     metrics[mode]["epoch-mse"] = metrics[mode]["batch-mse"] = 0
     metrics[mode]["epoch-combined"] = metrics[mode]["batch-combined"] = 0
-    if mode == "train":
-        metrics[mode]["epoch-rmsd"] = metrics[mode]["batch-rmsd"] = None
-    else:
-        metrics[mode]["epoch-rmsd"] = metrics[mode]["batch-rmsd"] = 0
+    metrics[mode]["epoch-rmsd"] = metrics[mode]["batch-rmsd"] = 0
     metrics[mode]["batch-history"] = []
     metrics[mode]["batch-time"] = time.time()
     metrics[mode]["speed-history"] = []
@@ -284,11 +281,7 @@ def update_metrics_end_of_epoch(metrics, mode, n_batches):
     metrics[mode]["epoch-ln-drmsd"] /= n_batches
     metrics[mode]["epoch-mse"] /= n_batches
     metrics[mode]["epoch-combined"] /= n_batches
-    # We don't bother to compute rmsd when training, but is included in the metrics for completeness
-    if mode == "train":
-        metrics[mode]["epoch-rmsd"] = None
-    else:
-        metrics[mode]["epoch-rmsd"] /= n_batches
+    metrics[mode]["epoch-rmsd"] /= n_batches
     metrics[mode]["epoch-history-combined"].append(metrics[mode]["epoch-combined"])
     metrics[mode]["epoch-history-drmsd"].append(metrics[mode]["epoch-drmsd"])
     metrics[mode]["epoch-history-mse"].append(metrics[mode]["epoch-mse"])
