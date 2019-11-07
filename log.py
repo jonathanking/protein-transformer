@@ -6,7 +6,6 @@ import sys
 import torch
 
 from dataset import VOCAB
-from protein.Sidechains import NUM_PREDICTED_COORDS
 from protein.PDB_Creator import PDB_Creator
 from losses import angles_to_coords, inverse_trig_transform
 
@@ -26,17 +25,16 @@ def print_train_batch_status(args, items):
     else:
         loss = metrics["train"]["batch-ln-drmsd"]
     lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling else ""
-    speed = metrics["train"]["speed"]
     speed_avg = np.mean(metrics["train"]["speeds"])
 
     if args.cluster:
-        print('Loss = {0:.6f}{1}, speed = {speed}'.format(
+        print('Loss = {0:.6f}{1}, res/s={speed:.0f}'.format(
             float(loss),
             lr_string,
-            speed=speed))
+            speed=speed_avg))
     else:
         pbar.set_description('\r  - (Train) drmsd={drmsd:.2f}, lndrmsd={lnd:0.7f}, rmse={rmse:.4f},'
-                             ' c={comb:.2f}{lr}, res/s={speed:2f}'.format(
+                             ' c={comb:.2f}{lr}, res/s={speed:.0f}'.format(
             drmsd=float(train_drmsd_loss),
             lr=lr_string,
             rmse=np.sqrt(float(train_mse_loss)),
@@ -71,7 +69,7 @@ def print_end_of_epoch_status(mode, items):
     comb_loss = metrics[mode]["epoch-combined"]
     avg_speed = np.mean(metrics[mode]["speed-history"])
     print('\r  - ({mode})   drmsd: {d: 6.3f}, rmse: {m: 6.3f}, rmsd: {rmsd}, comb: {comb: 6.3f}, '
-          'elapse: {elapse:3.3f} min, lr: {lr: {lr_precision}}, res/sec = {speed:.2f}'.format(
+          'elapse: {elapse:3.3f} min, lr: {lr: {lr_precision}}, res/sec = {speed:.0f}'.format(
         mode=mode.capitalize(),
         d=drmsd_loss,
         m=np.sqrt(mse_loss),
@@ -81,6 +79,7 @@ def print_end_of_epoch_status(mode, items):
         comb=comb_loss,
         lr_precision="5.2e" if (cur_lr < .001 and cur_lr != 0) else "5.3f",
         speed=avg_speed))
+
     # Log end of epoch stats with wandb
     wandb.run.summary[f"final_epoch_{mode}_drmsd"] = metrics[mode]["epoch-drmsd"]
     wandb.run.summary[f"final_epoch_{mode}_mse"] = metrics[mode]["epoch-mse"]
@@ -246,7 +245,7 @@ def update_metrics(metrics, mode, drmsd, ln_drmsd, mse, combined, src_seq, rmsd=
 
     # Compute and update speed
     num_res = (src_seq != VOCAB.pad_id).sum().item()
-    metrics[mode]["speed"] = round(num_res / (time.time() - metrics[mode]["batch-time"]), 2)
+    metrics[mode]["speed"] = num_res / (time.time() - metrics[mode]["batch-time"])
     if "speeds" not in metrics[mode].keys():
         metrics[mode]["speeds"] = []
     metrics[mode]["speeds"].append(metrics[mode]["speed"])
