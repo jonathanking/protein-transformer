@@ -393,6 +393,7 @@ def main():
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda
+    assert "_" not in args.name, "Please do not use a '_' in your model name. Conflicts with structure files."
     args.buffering_mode = 1
     LOGFILEHEADER = prepare_log_header(args)
     seed_rngs(args)
@@ -430,6 +431,8 @@ def main():
         log_f = open(args.log_file, 'w', buffering=args.buffering_mode)
         log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
+    structure_path = "data/logs/structures/"
+    os.makedirs(structure_path, exist_ok=True)
 
     # Prepare Weights and Biases logging
     wandb.init(project="protein-transformer", entity="koes-group")
