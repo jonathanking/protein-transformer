@@ -89,7 +89,7 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None):
 
     else:
         # Combined loss
-        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=True)
+        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=True, pool=pool)
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
         loss = c_loss
         c_loss.backward()
