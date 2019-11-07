@@ -349,6 +349,8 @@ def main():
                                "and torch.")
     training.add_argument("--combined_drmsd_weight", type=float, default=0.5,
                                 help="When combining losses, use weight w for loss = w * drmsd + (1-w) * mse.")
+    training.add_argument("--sort_training_data", type=str, choices=["True", "reverse", "False"], default="reverse",
+                          help="Sort training data by length. True (default) implies ascending order.")
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")

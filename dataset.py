@@ -121,15 +121,27 @@ class ProteinDataset(torch.utils.data.Dataset):
     This dataset can hold lists of sequences, angles, and coordinates for
     each protein.
     """
-    def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True):
+    def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True,
+                 sort_by_length=True, reverse_sort=True):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
-        # TODO use raw sequences in dataset; allows for pad character
         self.vocab = ProteinVocabulary()
         self._seqs = [VOCAB.aa_seq2indices(s, add_sos_eos) for s in seqs]
         self._angs = angs
         self._crds = crds
+
+        if sort_by_length:
+            sorted_len_indices = [a[0] for a in sorted(enumerate(angs),
+                                                       key=lambda x:x[1].shape[0],
+                                                       reverse=reverse_sort)]
+            new_seqs = [self._seqs[i] for i in sorted_len_indices]
+            self._seqs = new_seqs
+            new_angs = [self._angs[i] for i in sorted_len_indices]
+            self._angs = new_angs
+            new_crds = [self._crds[i] for i in sorted_len_indices]
+            self._crds = new_crds
+
 
     @property
     def n_insts(self):
@@ -153,6 +165,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
     method only returns set '70'.
     """
     collate = make_paired_collate_fn_with_max_len(max_seq_len)
+    sort_data_by_len = args.sort_training_data in ["True", "reverse"]
+    reverse_sort = args.sort_training_data == "reverse"
 
     def _init_fn(worker_id):
         np.random.seed(int(args.seed))
@@ -163,18 +177,22 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
             seqs=data['train']['seq']*args.repeat_train,
             crds=data['train']['crd']*args.repeat_train,
             angs=data['train']['ang']*args.repeat_train,
-            add_sos_eos=args.add_sos_eos),
+            add_sos_eos=args.add_sos_eos,
+            sort_by_length=sort_data_by_len,
+            reverse_sort=reverse_sort),
         num_workers=num_workers,
         batch_size=args.batch_size,
         collate_fn=collate,
-        shuffle=True)
+        shuffle=not sort_data_by_len)
 
     valid_loader = torch.utils.data.DataLoader(
         ProteinDataset(
             seqs=data['valid'][70]['seq'],
             crds=data['valid'][70]['crd'],
             angs=data['valid'][70]['ang'],
-            add_sos_eos=args.add_sos_eos),
+            add_sos_eos=args.add_sos_eos,
+            sort_by_length=sort_data_by_len,
+            reverse_sort=reverse_sort),
         num_workers=num_workers,
         batch_size=args.batch_size,
         collate_fn=collate,
@@ -185,7 +203,9 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
             seqs=data['test']['seq'],
             crds=data['test']['crd'],
             angs=data['test']['ang'],
-            add_sos_eos=args.add_sos_eos),
+            add_sos_eos=args.add_sos_eos,
+            sort_by_length=sort_data_by_len,
+            reverse_sort=reverse_sort),
         num_workers=num_workers,
         batch_size=args.batch_size,
         collate_fn=collate,
