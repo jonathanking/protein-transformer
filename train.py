@@ -104,19 +104,34 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     model.eval()
     metrics = reset_metrics_for_epoch(metrics, mode)
     n_batches = 0.0
-    batch_iter = tqdm(validation_data, mininterval=.5, leave=False) if not args.cluster else validation_data
+    batch_iter = tqdm(validation_data, mininterval=.5, leave=False, unit="batch", dynamic_ncols=True) \
+        if not args.cluster else validation_data
+
+    d_loss_total, ln_d_loss_total, r_loss_total, m_loss_total, c_loss_total = 0, 0, 0, 0, 0
+    if args.loss == "mse" and mode == "train":
+        d_loss, ln_d_loss, r_loss = torch.tensor(0), torch.tensor(0), torch.tensor(0)
 
     with torch.no_grad():
         for batch in batch_iter:
             src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
             pred = model(src_seq, tgt_ang)
-            d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True, do_backward=False, pool=pool)
+
+            if not (args.loss == "mse" and mode == "train"):
+                d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True,
+                                                                do_backward=False, pool=pool)
             m_loss = mse_over_angles(pred, tgt_ang)
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
-            do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, batch_iter, mode)
+
+            d_loss_total += d_loss.item()
+            ln_d_loss_total += ln_d_loss.item()
+            r_loss_total += r_loss.item()
+            m_loss_total += m_loss.item()
+            c_loss_total += c_loss.item()
             n_batches += 1
 
     metrics = update_metrics_end_of_epoch(metrics, mode, n_batches)
+    do_eval_epoch_logging(metrics, d_loss_total / n_batches, ln_d_loss / n_batches, m_loss / n_batches,
+                          c_loss / n_batches, r_loss / n_batches, src_seq, args, batch_iter, mode)
     return metrics
 
 
