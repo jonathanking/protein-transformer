@@ -107,7 +107,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     batch_iter = tqdm(validation_data, mininterval=.5, leave=False, unit="batch", dynamic_ncols=True) \
         if not args.cluster else validation_data
 
-    d_loss_total, ln_d_loss_total, r_loss_total, m_loss_total, c_loss_total = 0, 0, 0, 0, 0
+    d_loss_total, ln_d_loss_total, r_loss_total, m_loss_total, c_loss_total = torch.tensor(0), torch.tensor(0), torch.tensor(0), torch.tensor(0), torch.tensor(0)
     if args.loss == "mse" and mode == "train":
         d_loss, ln_d_loss, r_loss = torch.tensor(0), torch.tensor(0), torch.tensor(0)
 
@@ -122,16 +122,17 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
             m_loss = mse_over_angles(pred, tgt_ang)
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
 
-            d_loss_total += d_loss.item()
-            ln_d_loss_total += ln_d_loss.item()
-            r_loss_total += r_loss.item()
-            m_loss_total += m_loss.item()
-            c_loss_total += c_loss.item()
+            d_loss_total += d_loss
+            ln_d_loss_total += ln_d_loss
+            r_loss_total += r_loss
+            m_loss_total += m_loss
+            c_loss_total += c_loss
             n_batches += 1
 
-    metrics = update_metrics_end_of_epoch(metrics, mode, n_batches)
     do_eval_epoch_logging(metrics, d_loss_total / n_batches, ln_d_loss / n_batches, m_loss / n_batches,
                           c_loss / n_batches, r_loss / n_batches, src_seq, args, batch_iter, mode)
+
+    metrics = update_metrics_end_of_epoch(metrics, mode, n_batches)
     return metrics
 
 
