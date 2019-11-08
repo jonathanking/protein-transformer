@@ -48,14 +48,13 @@ def print_eval_batch_status(args, items):
     Print the status line during evaluation after a single batch update.
     Will only be seen if using a progress bar. Otherwise, there is no information logged.
     """
-    pbar, d_loss, mode, m_loss, c_loss, speed = items
+    pbar, d_loss, mode, m_loss, c_loss = items
     if not args.cluster:
-        pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}, res/s={speed:.0f}'.format(
+        pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
             float(d_loss),
             mode,
             np.sqrt(float(m_loss)),
-            float(c_loss),
-            speed=speed))
+            float(c_loss)))
 
 
 def print_end_of_epoch_status(mode, items):
