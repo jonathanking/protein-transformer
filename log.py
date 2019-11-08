@@ -196,8 +196,7 @@ def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
                f"{mode.title()} Epoch RMSD": r_loss,
                f"{mode.title()} Epoch DRMSD": d_loss,
                f"{mode.title()} Epoch ln-DRMSD": ln_d_loss,
-               f"{mode.title()} Epoch Combined Loss": c_loss,
-               f"{mode.title()} Epoch Speed": metrics[mode]["speed"]}, commit=do_commit)
+               f"{mode.title()} Epoch Combined Loss": c_loss}, commit=do_commit)
 
 
 
