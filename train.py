@@ -121,7 +121,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
                                                                 do_backward=False, pool=pool)
             m_loss = mse_over_angles(pred, tgt_ang)
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
-            print_eval_batch_status(args, (batch_iter, d_loss, mode, m_loss, c_loss, np.mean(metrics[mode]["speeds"])))
+            print_eval_batch_status(args, (batch_iter, d_loss, mode, m_loss, c_loss))
 
             d_loss_total += d_loss
             ln_d_loss_total += ln_d_loss
@@ -131,9 +131,9 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
             n_batches += 1
 
     do_eval_epoch_logging(metrics, d_loss_total / n_batches, ln_d_loss_total / n_batches, m_loss_total / n_batches,
-                          c_loss_total / n_batches, r_loss_total / n_batches, src_seq, args, batch_iter, mode)
+                          c_loss_total / n_batches, r_loss_total / n_batches, src_seq, args, batch_iter, mode, n_batches)
 
-    metrics = update_metrics_end_of_epoch(metrics, mode, n_batches)
+
     return metrics
 
 

@@ -186,12 +186,12 @@ def log_structure(args, pred_coords, gold_item, src_seq):
     wandb.log({"structure_prediction": wandb.Object3D(f"data/logs/structures/{args.name}_pred.gltf")}, commit=True)
 
 
-def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):
+def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode, n_batches):
     """
     Performs all necessary logging at the end of an evaluation batch.
     Updates custom metrics dictionary and wandb logs. Prints status of training.
     """
-    metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
+    metrics = update_metrics_end_of_epoch(metrics, mode, n_batches)
     do_commit = mode != "train"
     wandb.log({f"{mode.title()} Epoch RMSE": np.sqrt(m_loss.item()),
                f"{mode.title()} Epoch RMSD": r_loss,
