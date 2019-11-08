@@ -127,6 +127,8 @@ def log_batch(log_writer, metrics, start_time,  mode="valid", end_of_epoch=False
         be = "epoch"
     else:
         be = "batch"
+    if "speed" not in m.keys():
+        m["speed"] =0
     log_writer.writerow([m[f"{be}-drmsd"], m[f"{be}-ln-drmsd"], np.sqrt(m[f"{be}-mse"]),
                          m[f"{be}-rmsd"], m[f"{be}-combined"], metrics["history-lr"][-1],
                          mode, "epoch", round(t - start_time, 4), m["speed"]])
