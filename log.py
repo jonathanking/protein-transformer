@@ -191,12 +191,13 @@ def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
     Updates custom metrics dictionary and wandb logs. Prints status of training.
     """
     metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
+    do_commit = mode != "train"
     wandb.log({f"{mode.title()} Epoch RMSE": np.sqrt(m_loss.item()),
                f"{mode.title()} Epoch RMSD": r_loss,
                f"{mode.title()} Epoch DRMSD": d_loss,
                f"{mode.title()} Epoch ln-DRMSD": ln_d_loss,
                f"{mode.title()} Epoch Combined Loss": c_loss,
-               f"{mode.title()} Epoch Speed": metrics[mode]["speed"]})
+               f"{mode.title()} Epoch Speed": metrics[mode]["speed"]}, commit=do_commit)
     print_eval_batch_status(args, (pbar, d_loss, mode, m_loss, c_loss))
 
 
