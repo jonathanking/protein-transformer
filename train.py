@@ -107,9 +107,9 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     batch_iter = tqdm(validation_data, mininterval=.5, leave=False, unit="batch", dynamic_ncols=True) \
         if not args.cluster else validation_data
 
-    d_loss_total, ln_d_loss_total, r_loss_total, m_loss_total, c_loss_total = torch.tensor(0), torch.tensor(0), torch.tensor(0), torch.tensor(0), torch.tensor(0)
+    d_loss_total, ln_d_loss_total, r_loss_total, m_loss_total, c_loss_total = torch.tensor(0.), torch.tensor(0.), torch.tensor(0.), torch.tensor(0.), torch.tensor(0.)
     if args.loss == "mse" and mode == "train":
-        d_loss, ln_d_loss, r_loss = torch.tensor(0), torch.tensor(0), torch.tensor(0)
+        d_loss, ln_d_loss, r_loss = torch.tensor(0.), torch.tensor(0.), torch.tensor(0.)
 
     with torch.no_grad():
         for batch in batch_iter:
