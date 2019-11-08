@@ -145,11 +145,11 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     metrics = update_metrics(metrics, "train", d_loss, ln_d_loss, m_loss, c_loss, src_seq,
                              tracking_loss=loss, batch_level=True)
     if not step or step % args.log_wandb_step == 0:
-        wandb.log({"Train RMSE": np.sqrt(m_loss.item()),
-                   "Train DRMSD": d_loss,
-                   "Train ln-DRMSD": ln_d_loss,
-                   "Train Combined Loss": c_loss,
-                   "Train Speed": metrics["train"]["speed"]}, commit=not do_log_lr and not do_log_str)
+        wandb.log({"Train Batch RMSE": np.sqrt(m_loss.item()),
+                   "Train Batch DRMSD": d_loss,
+                   "Train Batch ln-DRMSD": ln_d_loss,
+                   "Train Batch Combined Loss": c_loss,
+                   "Train Batch Speed": metrics["train"]["speed"]}, commit=not do_log_lr and not do_log_str)
     if args.lr_scheduling:
         metrics["history-lr"].append(optimizer.cur_lr)
         if not step or step % args.log_wandb_step  == 0:
@@ -169,6 +169,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
 def log_structure(args, pred_coords, gold_item, src_seq):
     """
     Logs a 3D structure prediction to wandb.
+    # TODO save PDB files with numbers in addition to just GLTF files
     """
     gold_item_non_batch_pad = (gold_item != VOCAB.pad_id).any(dim=-1)
     gold_item = gold_item[gold_item_non_batch_pad]
@@ -189,12 +190,12 @@ def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
     Updates custom metrics dictionary and wandb logs. Prints status of training.
     """
     metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
-    wandb.log({f"{mode.title()} RMSE": np.sqrt(m_loss.item()),
-               f"{mode.title()} RMSD": r_loss,
-               f"{mode.title()} DRMSD": d_loss,
-               f"{mode.title()} ln-DRMSD": ln_d_loss,
-               f"{mode.title()} Combined Loss": c_loss,
-               f"{mode.title()} Speed": metrics[mode]["speed"]})
+    wandb.log({f"{mode.title()} Epoch RMSE": np.sqrt(m_loss.item()),
+               f"{mode.title()} Epoch RMSD": r_loss,
+               f"{mode.title()} Epoch DRMSD": d_loss,
+               f"{mode.title()} Epoch ln-DRMSD": ln_d_loss,
+               f"{mode.title()} Epoch Combined Loss": c_loss,
+               f"{mode.title()} Epoch Speed": metrics[mode]["speed"]})
     print_eval_batch_status(args, (pbar, d_loss, mode, m_loss, c_loss))
 
 
