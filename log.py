@@ -138,6 +138,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     Performs all necessary logging at the end of a batch in the training epoch.
     Updates custom metrics dictionary and wandb logs. Prints status of training.
     Also checks for NaN losses.
+    # TODO log structure using a subprocess for speed
     """
     do_log_str = not step or step % args.log_structure_step == 0
     do_log_lr  = args.lr_scheduling and (not step or args.log_wandb_step % step == 0)
