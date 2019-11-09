@@ -28,7 +28,7 @@ console.txt
 
 # Tools
 wandb/
-.idea/**
+.idea/
 
 # Torque HPC output files
 *.o*-*
