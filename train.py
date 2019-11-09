@@ -52,7 +52,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         optimizer.step()
 
         # Record performance metrics
-        do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
+        metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
                                log_writer, batch_iter, START_TIME, pred, tgt_crds[-1], step)
 
     metrics = update_metrics_end_of_epoch(metrics, "train")
@@ -104,7 +104,6 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     batch_iter = tqdm(validation_data, mininterval=.5, leave=False, unit="batch", dynamic_ncols=True) \
         if not args.cluster else validation_data
 
-    d_loss_total, ln_d_loss_total, r_loss_total, m_loss_total, c_loss_total = torch.tensor(0.), torch.tensor(0.), torch.tensor(0.), torch.tensor(0.), torch.tensor(0.)
     if args.loss == "mse" and mode == "train":
         d_loss, ln_d_loss, r_loss = torch.tensor(0.), torch.tensor(0.), torch.tensor(0.)
 
@@ -119,16 +118,11 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
             m_loss = mse_over_angles(pred, tgt_ang)
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
 
-            do_eval_batch_logging(args, batch_iter, d_loss, mode, m_loss, c_loss)
+            # Record performance metrics
+            metrics = do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq,  args,  batch_iter,
+                           pred, tgt_crds, mode)
 
-            d_loss_total += d_loss
-            ln_d_loss_total += ln_d_loss
-            r_loss_total += r_loss
-            m_loss_total += m_loss
-            c_loss_total += c_loss
-
-    do_eval_epoch_logging(metrics, d_loss_total , ln_d_loss_total , m_loss_total ,
-                          c_loss_total , r_loss_total , src_seq, args, batch_iter, mode)
+    do_eval_epoch_logging(metrics, mode)
 
 
     return metrics
