@@ -1,7 +1,7 @@
 # Attention is all you need (to Predict Protein Structure)
 [//]: # (Badges)
-[![Travis Build Status](https://travis-ci.org/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer.svg?branch=master)](https://travis-ci.org/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer)
-[![codecov](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer/branch/master/graph/badge.svg)](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer/branch/master)
+[![Build Status](https://travis-ci.com/jonathanking/protein-transformer.svg?branch=continuous_integration)](https://travis-ci.com/jonathanking/protein-transformer)
+[![codecov](https://codecov.io/gh/jonathanking/protein-transformer/branch/continuous_integration/graph/badge.svg)](https://codecov.io/gh/jonathanking/protein-transformer)
 [![Documentation Status](https://readthedocs.org/projects/protein-transformer/badge/?version=latest)](https://protein-transformer.readthedocs.io/en/latest/?badge=latest)
 
 
