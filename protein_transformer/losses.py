@@ -91,11 +91,19 @@ def drmsd_loss_from_angles(pred_angs, true_crds, input_seqs, device, return_rmsd
 
 
 def mse_over_angles(pred, true):
-    """
+    """Returns the mean squared error between two tensor batches.
+
     Given a predicted angle tensor and a true angle tensor (batch-padded with
     zeros, and missing-item-padded with nans), this function first removes
     batch then item padding before using torch's built-in MSE loss function.
+
+    Args:
+        pred true (np.ndarray): 4-dimensional tensors
+
+    Returns:
+        MSE loss between true and pred.
     """
+
     ang_non_zero = true.ne(0).any(dim=2)
     tgt_ang_non_zero = true[ang_non_zero]
     ang_non_nans = torch.isnan(tgt_ang_non_zero).eq(0)
@@ -120,10 +128,18 @@ def pairwise_internal_dist(x):
 
 
 def drmsd(a, b):
-    """
-    Given two coordinate tensors, returns the dRMSD score between them. Both
+    """ Returns distance root-mean-squared-deviation between tensors a and b.
+
+    Given 2 coordinate tensors, returns the dRMSD between them. Both
     tensors must be the exact same shape.
+
+    Args:
+        a, b (torch.Tensor): coordinate tensor with shape (L x 3)
+
+    Returns:
+        res (torch.Tensor): DRMSD between a and b.
     """
+
     a_ = pairwise_internal_dist(a)
     b_ = pairwise_internal_dist(b)
 
