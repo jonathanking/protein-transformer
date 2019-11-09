@@ -1,5 +1,6 @@
 name: test
 channels:
+  - pytorch
 dependencies:
     # Base depends
   - python
@@ -7,6 +8,11 @@ dependencies:
 
     # My package depends
   - numpy
+  - tqdm
+  - pytorch
+  - cpuonly
+  - scipy
+
 
     # Testing
   - pytest
@@ -16,4 +22,6 @@ dependencies:
     # Pip-only installs
   #- pip:
   #  - codecov
+  - pip :
+      - ProDy
 
