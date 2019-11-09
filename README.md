@@ -2,6 +2,8 @@
 [//]: # (Badges)
 [![Travis Build Status](https://travis-ci.org/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer.svg?branch=master)](https://travis-ci.org/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer)
 [![codecov](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer/branch/master/graph/badge.svg)](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer/branch/master)
+[![Documentation Status](https://readthedocs.org/projects/protein-transformer/badge/?version=latest)](https://protein-transformer.readthedocs.io/en/latest/?badge=latest)
+
 
 
 This project explores sequence modeling techniques to predict complete (all-atom) protein structure. The work was inspired by language modeling methodologies, and as such incorporates Transformer and attention based models. Importantly, this is also a work in progress and an active research project. I welcome any thoughts or interest! 
