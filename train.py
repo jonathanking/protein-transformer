@@ -34,7 +34,6 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     """
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
-    n_batches = 0
     batch_iter = tqdm(training_data, leave=False, unit="batch", dynamic_ncols=True) if not args.cluster else training_data
 
     for step, batch in enumerate(batch_iter):
@@ -55,9 +54,8 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
         # Record performance metrics
         do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
                                log_writer, batch_iter, START_TIME, pred, tgt_crds[-1], step)
-        n_batches += 1
 
-    metrics = update_metrics_end_of_epoch(metrics, "train", n_batches)
+    metrics = update_metrics_end_of_epoch(metrics, "train")
 
     return metrics
 
@@ -103,7 +101,6 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     """
     model.eval()
     metrics = reset_metrics_for_epoch(metrics, mode)
-    n_batches = 0.0
     batch_iter = tqdm(validation_data, mininterval=.5, leave=False, unit="batch", dynamic_ncols=True) \
         if not args.cluster else validation_data
 
@@ -121,17 +118,17 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
                                                                 do_backward=False, pool=pool)
             m_loss = mse_over_angles(pred, tgt_ang)
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
-            print_eval_batch_status(args, (batch_iter, d_loss, mode, m_loss, c_loss))
+
+            do_eval_batch_logging(args, batch_iter, d_loss, mode, m_loss, c_loss)
 
             d_loss_total += d_loss
             ln_d_loss_total += ln_d_loss
             r_loss_total += r_loss
             m_loss_total += m_loss
             c_loss_total += c_loss
-            n_batches += 1
 
-    do_eval_epoch_logging(metrics, d_loss_total / n_batches, ln_d_loss_total / n_batches, m_loss_total / n_batches,
-                          c_loss_total / n_batches, r_loss_total / n_batches, src_seq, args, batch_iter, mode, n_batches)
+    do_eval_epoch_logging(metrics, d_loss_total , ln_d_loss_total , m_loss_total ,
+                          c_loss_total , r_loss_total , src_seq, args, batch_iter, mode)
 
 
     return metrics

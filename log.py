@@ -187,12 +187,12 @@ def log_structure(args, pred_coords, gold_item, src_seq):
     wandb.log({"structure_prediction": wandb.Object3D(f"data/logs/structures/{args.name}_pred.gltf")}, commit=True)
 
 
-def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode, n_batches):
+def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):
     """
     Performs all necessary logging at the end of an evaluation batch.
     Updates custom metrics dictionary and wandb logs. Prints status of training.
     """
-    metrics = update_metrics_end_of_epoch(metrics, mode, n_batches)
+    metrics = update_metrics_end_of_epoch(metrics, mode)
     do_commit = mode != "train"
     wandb.log({f"{mode.title()} Epoch RMSE": np.sqrt(m_loss.item()),
                f"{mode.title()} Epoch RMSD": r_loss,
@@ -200,6 +200,46 @@ def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
                f"{mode.title()} Epoch ln-DRMSD": ln_d_loss,
                f"{mode.title()} Epoch Combined Loss": c_loss}, commit=do_commit)
 
+
+def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer, pbar,
+                           start_time, pred_angs, tgt_coords, step):
+    """
+       Performs all necessary logging at the end of a batch in an eval epoch.
+       Updates custom metrics dictionary and wandb logs. Prints status of
+       training.
+       Also checks for NaN losses.
+    """
+    do_log_str = not step or step % args.log_structure_step == 0
+    do_log_lr = args.lr_scheduling and (
+                not step or args.log_wandb_step % step == 0)
+
+    metrics = update_metrics(metrics, "train", d_loss, ln_d_loss, m_loss,
+                             c_loss, src_seq,
+                             tracking_loss=loss, batch_level=True)
+    if not step or step % args.log_wandb_step == 0:
+        wandb.log({"Train Batch RMSE": np.sqrt(m_loss.item()),
+                   "Train Batch DRMSD": d_loss,
+                   "Train Batch ln-DRMSD": ln_d_loss,
+                   "Train Batch Combined Loss": c_loss,
+                   "Train Batch Speed": metrics["train"]["speed"]},
+                  commit=not do_log_lr and not do_log_str)
+    if args.lr_scheduling:
+        metrics["history-lr"].append(optimizer.cur_lr)
+        if not step or step % args.log_wandb_step == 0:
+            wandb.log({"Learning Rate": optimizer.cur_lr},
+                      commit=not do_log_str)
+    log_batch(log_writer, metrics, start_time, mode="train", end_of_epoch=False)
+    print_train_batch_status(args, (pbar, metrics, src_seq))
+    # Check for NaNs
+    if np.isnan(loss.item()):
+        print("A nan loss has occurred. Exiting training.")
+        sys.exit(1)
+    if do_log_str:
+        with torch.no_grad():
+            pred_coords = angles_to_coords(
+                inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
+                remove_batch_padding=True)
+        log_structure(args, pred_coords, tgt_coords, src_seq[-1])
 
 
 def init_metrics(args):
@@ -221,7 +261,8 @@ def init_metrics(args):
                "history-lr": [],
                "epoch_last_improved": -1,
                "best_valid_loss_so_far": np.inf,
-               "last_chkpt_time": time.time()
+               "last_chkpt_time": time.time(),
+               "n_batches": 0
                }
     if not args.lr_scheduling:
         metrics["history-lr"] = [0]
@@ -274,13 +315,15 @@ def reset_metrics_for_epoch(metrics, mode):
     metrics[mode]["batch-history"] = []
     metrics[mode]["batch-time"] = time.time()
     metrics[mode]["speed-history"] = []
+    metrics[mode]["n_batches"] = 0
     return metrics
 
 
-def update_metrics_end_of_epoch(metrics, mode, n_batches):
+def update_metrics_end_of_epoch(metrics, mode):
     """
     Averages the running metrics over an epoch
     """
+    n_batches = metrics["n_batches"]
     metrics[mode]["epoch-drmsd"] /= n_batches
     metrics[mode]["epoch-ln-drmsd"] /= n_batches
     metrics[mode]["epoch-mse"] /= n_batches
