@@ -1,9 +1,9 @@
 # Datasets, files, etc.
-data/**/*.pkl
-data/**/*.torch
-data/**/*.pt
-data/**/*.pdb
-data/**/prev/**
+ro  data/**/*.pkl
+ro  data/**/*.torch
+ro  data/**/*.pt
+ro  data/**/*.pdb
+ro  data/**/prev/**
 **/*.pdb
 **/*.cif*
 

@@ -1,4 +1,4 @@
-from protein.Sidechains import SC_DATA
+from .Sidechains import SC_DATA
 
 
 class AminoAcid(object):

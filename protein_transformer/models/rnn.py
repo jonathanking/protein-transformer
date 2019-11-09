@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 
-from protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
+from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 
 
 class MyRNN(nn.Module):

@@ -267,7 +267,7 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
     amino acid code, generates the coords for that specific AA.
     """
     # TODO: clarify behavior with first sidechain. Here, it must reorganize its input to carefully place the first CB
-    import protein.Structure as Structure
+    from .Structure import nerf
     lens = map(lambda bondname: BONDLENS[bondname], SC_DATA[aa_code]["bonds"])
     angs = map(lambda anglname: torch.tensor(deg2rad(BONDANGS[anglname])), SC_DATA[aa_code]["angles"])
     i, angles, bb_arr = info
@@ -278,7 +278,7 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
     n0 = bb_arr[-2]  # Ca from cur res, Ca from cur
     swap = True
     for l, a, dihe in zip(lens, angs, dihedrals):
-        next_pt = Structure.nerf(n2, n1, n0, l, a, dihe)  # CB
+        next_pt = nerf(n2, n1, n0, l, a, dihe)  # CB
         n2, n1, n0 = n1, n0, next_pt  # N, CA, CB
         sc_pts.append(next_pt)
         if first_sc and swap:
@@ -297,7 +297,7 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
             n = bb_arr[-3]
             ca = bb_arr[-2]
             cb = sc_pts[0]
-        new_pt = Structure.nerf(n, ca, cb,
+        new_pt = nerf(n, ca, cb,
                                 BONDLENS["ct-3c"], torch.tensor(np.deg2rad(BONDANGS['cx-3c-ct'])),
                                 angles[i, 9], device=torch.device("cpu"))
         sc_pts.append(new_pt)
@@ -311,7 +311,7 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
             ca = bb_arr[-2]
             cb = sc_pts[0]
             cg = sc_pts[1]
-        new_pt = Structure.nerf(ca, cb, cg,
+        new_pt = nerf(ca, cb, cg,
                                 BONDLENS["ct-3c"], torch.tensor(np.deg2rad(BONDANGS['2c-3c-ct'])),
                                 angles[i, 9], device=torch.device("cpu"))
         sc_pts.append(new_pt)
@@ -325,7 +325,7 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
             n = bb_arr[-3]
             ca = bb_arr[-2]
             cb = sc_pts[0]
-        new_pt = Structure.nerf(n, ca, cb,
+        new_pt = nerf(n, ca, cb,
                                 BONDLENS["3c-oh"], torch.tensor(np.deg2rad(BONDANGS['cx-3c-oh'])),
                                 angles[i, 8], device=torch.device("cpu"))
         sc_pts.append(new_pt)
@@ -339,7 +339,7 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
             n = bb_arr[-3]
             ca = bb_arr[-2]
             cb = sc_pts[0]
-        new_pt = Structure.nerf(n, ca, cb,
+        new_pt = nerf(n, ca, cb,
                                 BONDLENS["ct-3c"], torch.tensor(np.deg2rad(BONDANGS['cx-3c-ct'])),
                                 angles[i, 8], device=torch.device("cpu"))
         sc_pts.append(new_pt)

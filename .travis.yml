@@ -42,7 +42,7 @@ install:
 
 
 script:
-  - pytest -v --cov=protein-transformer protein-transformer/tests/
+  - pytest -v --cov=protein_transformer protein_transformer/tests/
 
 notifications:
     email: false

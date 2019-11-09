@@ -1,8 +1,8 @@
 import numpy as np
 from prody import calcTransformation
 import torch
-from protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
-import models
+from .Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
+import protein_transformer.models as models
 import pymol
 import os
 

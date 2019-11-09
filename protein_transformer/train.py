@@ -16,13 +16,13 @@ import torch.utils.data
 from tqdm import tqdm
 import wandb
 
-from dataset import prepare_dataloaders
-from losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
-from models.transformer.Transformer import Transformer
-from models.transformer.Optimizer import ScheduledOptim
-from log import *
-from models.encoder_only import EncoderOnlyTransformer
-from protein.Sidechains import NUM_PREDICTED_ANGLES
+from .dataset import prepare_dataloaders
+from .losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
+from .models.transformer.Transformer import Transformer
+from .models.transformer.Optimizer import ScheduledOptim
+from .log import *
+from .models.encoder_only import EncoderOnlyTransformer
+from .protein.Sidechains import NUM_PREDICTED_ANGLES
 
 
 def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):

@@ -1,7 +1,7 @@
 import torch
 from .Encoder import Encoder
 from .Decoder import Decoder
-from protein.Sidechains import NUM_PREDICTED_ANGLES
+from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
 from torch.autograd import Variable
 
 

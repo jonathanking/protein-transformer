@@ -1,4 +1,8 @@
 # Attention is all you need (to Predict Protein Structure)
+[//]: # (Badges)
+[![Travis Build Status](https://travis-ci.org/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer.svg?branch=master)](https://travis-ci.org/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer)
+[![codecov](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer/branch/master/graph/badge.svg)](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/protein_transformer/branch/master)
+
 
 This project explores sequence modeling techniques to predict complete (all-atom) protein structure. The work was inspired by language modeling methodologies, and as such incorporates Transformer and attention based models. Importantly, this is also a work in progress and an active research project. I welcome any thoughts or interest! 
 
@@ -137,5 +141,15 @@ data = {"train": {"seq": [seq1, seq2, ...],
         }
 ```
 
-## Attribution
+
+### Copyright
+
+Copyright (c) 2019, Jonathan King
+
+
+#### Acknowledgements
+
 This repository was originally a fork from [https://github.com/jadore801120/attention-is-all-you-need-pytorch](https://github.com/jadore801120/attention-is-all-you-need-pytorch), but since then has been extensively rewritten to match the needs of this specific project as I have become more comfortable with Pytorch, Transformers, and the like. Many thanks for [jadore801120](https://github.com/jadore801120/) for the framework.
+ 
+Project structure (continuous integration, docs, testing) based on the 
+[Computational Molecular Science Python Cookiecutter](https://github.com/molssi/cookiecutter-cms) version 1.1.

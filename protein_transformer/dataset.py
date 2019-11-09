@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.utils.data
 
-from protein.Sidechains import NUM_PREDICTED_COORDS
+from .protein.Sidechains import NUM_PREDICTED_COORDS
 
 def make_paired_collate_fn_with_max_len(max_seq_len):
 

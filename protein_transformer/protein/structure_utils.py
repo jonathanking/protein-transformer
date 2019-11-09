@@ -4,8 +4,8 @@ import numpy as np
 import prody as pr
 import re
 
-from protein.Sidechains import NUM_PREDICTED_ANGLES, SC_DATA, NUM_PREDICTED_COORDS
-from scripts.utils.structure_exceptions import NonStandardAminoAcidError, IncompleteStructureError, MissingBackboneAtomsError, \
+from .Sidechains import NUM_PREDICTED_ANGLES, SC_DATA, NUM_PREDICTED_COORDS
+from protein_transformer.protein.structure_exceptions import NonStandardAminoAcidError, IncompleteStructureError, MissingBackboneAtomsError, \
     SequenceError, ContigMultipleMatchingError, ShortStructureError
 
 GLOBAL_PAD_CHAR = np.nan

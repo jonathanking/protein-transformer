@@ -5,9 +5,9 @@ import wandb
 import sys
 import torch
 
-from dataset import VOCAB
-from protein.Sidechains import NUM_PREDICTED_COORDS
-from protein.PDB_Creator import PDB_Creator
+from .dataset import VOCAB
+from .protein.Sidechains import NUM_PREDICTED_COORDS
+from .protein.PDB_Creator import PDB_Creator
 
 def print_train_batch_status(args, items):
     """
@@ -16,7 +16,7 @@ def print_train_batch_status(args, items):
     """
     # Extract relevant metrics
     pbar, metrics, src_seq = items
-    cur_lr = metrics["history-lr"][-1]
+    cur_lr = m.etrics["history-lr"][-1]
     training_losses = metrics["train"]["batch-history"]
     train_drmsd_loss = metrics["train"]["batch-drmsd"]
     train_mse_loss = metrics["train"]["batch-mse"]

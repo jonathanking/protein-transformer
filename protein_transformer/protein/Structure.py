@@ -1,8 +1,7 @@
 import numpy as np
 import torch
 
-import protein.Sidechains as Sidechains
-from protein.Sidechains import BONDLENS
+from .Sidechains import BONDLENS, extend_sidechain
 
 BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379,
             "CZ-NH2": 1,
@@ -26,7 +25,7 @@ def generate_coords(angles, pad_loc, input_seq, device):
         bb_arr += bb_pts
 
         # Extend sidechain
-        sc_pts = Sidechains.extend_sidechain(i, angles, bb_arr, input_seq)
+        sc_pts = extend_sidechain(i, angles, bb_arr, input_seq)
 
         total_arr += bb_pts + sc_pts + (10 - len(sc_pts)) * [torch.zeros(3, device=device)]
 
@@ -56,7 +55,7 @@ def generate_coords_with_tuples(angles, pad_loc, input_seq, device):
         bb_arr += bb_pts
 
         # Extend sidechain
-        sc_pts, aa_code, atom_names = Sidechains.extend_sidechain(i, angles, bb_arr, input_seq, return_tuples=True)
+        sc_pts, aa_code, atom_names = extend_sidechain(i, angles, bb_arr, input_seq, return_tuples=True)
         aa_codes.append(aa_code)
         atom_names_list.append(atom_names)
         sc_arr_tups += [[np.asarray(x.detach()) for x in sc_pts]]
@@ -75,11 +74,11 @@ def init_sidechain(angles, bb_arr, input_seq, return_tuples=False):
     method. Assumes the first atom of the backbone is at (0,0,0).
     """
     if return_tuples:
-        sc, aa_code, atom_names = Sidechains.extend_sidechain(0, angles, bb_arr, input_seq, return_tuples,
+        sc, aa_code, atom_names = extend_sidechain(0, angles, bb_arr, input_seq, return_tuples,
                                                               first_sc=True)
         return sc, aa_code, atom_names
     else:
-        sc = Sidechains.extend_sidechain(0, angles, bb_arr, input_seq)
+        sc = extend_sidechain(0, angles, bb_arr, input_seq)
         return sc
 
 
