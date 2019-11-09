@@ -1,9 +1,9 @@
 # Datasets, files, etc.
-ro  data/**/*.pkl
-ro  data/**/*.torch
-ro  data/**/*.pt
-ro  data/**/*.pdb
-ro  data/**/prev/**
+protein_transformer/data/**/*.pkl
+protein_transformer/data/**/*.torch
+protein_transformer/data/**/*.pt
+protein_transformer/data/**/*.pdb
+protein_transformer/data/**/prev/**
 **/*.pdb
 **/*.cif*
 
