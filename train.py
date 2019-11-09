@@ -296,6 +296,15 @@ def seed_rngs(args):
     if torch.backends.cudnn.deterministic:
         print("[Info] cudnn.deterministic set to True. CUDNN-optimized code may be slow.")
 
+class MyDataParallel(torch.nn.DataParallel):
+    """
+    Allow nn.DataParallel to call model's attributes.
+    """
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
 
 def main():
     """
@@ -418,6 +427,7 @@ def main():
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
     model = make_model(args, device).to(device)
+    model = MyDataParallel(model)
 
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
