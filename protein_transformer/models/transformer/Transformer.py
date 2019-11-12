@@ -1,12 +1,11 @@
+import numpy as np
 import torch
-from .Encoder import Encoder
-from .Decoder import Decoder
-from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
 from torch.autograd import Variable
 
+from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
+from .Decoder import Decoder
+from .Encoder import Encoder
 
-
-import numpy as np
 
 class Transformer(torch.nn.Module):
     """

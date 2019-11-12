@@ -1,6 +1,9 @@
 import torch
-from .Sublayers import PositionwiseFeedForward, PositionalEncoding, SublayerConnection
+
 from .Attention import MultiHeadedAttention
+from .Sublayers import PositionwiseFeedForward, PositionalEncoding, \
+    SublayerConnection
+
 
 class Encoder(torch.nn.Module):
     """

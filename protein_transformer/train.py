@@ -14,14 +14,15 @@ import random
 import torch.optim as optim
 import torch.utils.data
 from tqdm import tqdm
-import wandb
 
 from protein_transformer.dataset import prepare_dataloaders
-from protein_transformer.losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
-from protein_transformer.models.transformer.Transformer import Transformer
-from protein_transformer.models.transformer.Optimizer import ScheduledOptim
 from protein_transformer.log import *
+from protein_transformer.losses import drmsd_loss_from_angles, \
+    mse_over_angles, \
+    combine_drmsd_mse
 from protein_transformer.models.encoder_only import EncoderOnlyTransformer
+from protein_transformer.models.transformer.Optimizer import ScheduledOptim
+from protein_transformer.models.transformer.Transformer import Transformer
 from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
 
 

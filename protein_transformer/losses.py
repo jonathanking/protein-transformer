@@ -4,9 +4,9 @@ import numpy as np
 import prody as pr
 import torch
 
+from .dataset import VOCAB
 from .protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 from .protein.Structure import generate_coords
-from .dataset import VOCAB
 
 
 def combine_drmsd_mse(d, mse, w=.5):

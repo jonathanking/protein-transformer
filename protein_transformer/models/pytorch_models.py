@@ -1,7 +1,9 @@
 """ This file contains Transformer-based models that can be built using Pytorch built-in layers."""
+import copy
+
 import torch
 import torch.nn as nn
-import copy
+
 
 class TransformerEncoder(nn.Module):
     """TransformerEncoder is a stack of N encoder layers

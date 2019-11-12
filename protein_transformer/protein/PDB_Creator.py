@@ -1,10 +1,13 @@
-import numpy as np
-from prody import calcTransformation
-import torch
-from .Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
-import protein_transformer.models as models
-import pymol
 import os
+
+import numpy as np
+import pymol
+import torch
+from prody import calcTransformation
+
+import protein_transformer.models as models
+from .Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
+
 
 class PDB_Creator(object):
     """

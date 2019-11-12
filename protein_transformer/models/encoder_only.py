@@ -1,9 +1,10 @@
 """ This file contains models based off of ones I built in a NMT course. """
+import numpy as np
 import torch
 import torch.nn as nn
-from .transformer.Encoder import Encoder
-import numpy as np
+
 from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
+from .transformer.Encoder import Encoder
 
 
 class EncoderOnlyTransformer(nn.Module):

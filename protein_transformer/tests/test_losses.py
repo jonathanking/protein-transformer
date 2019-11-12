@@ -1,5 +1,6 @@
-from protein_transformer.losses import *
 import numpy as np
+
+from protein_transformer.losses import *
 
 
 def test_mse_loss():

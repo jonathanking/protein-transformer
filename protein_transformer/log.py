@@ -1,13 +1,14 @@
 """ A script to hold some utility functions for model logging. """
-import numpy as np
-import time
-import wandb
 import sys
+import time
+
+import numpy as np
 import torch
+import wandb
 
 from .dataset import VOCAB
-from .protein.Sidechains import NUM_PREDICTED_COORDS
 from .protein.PDB_Creator import PDB_Creator
+
 
 def print_train_batch_status(args, items):
     """
