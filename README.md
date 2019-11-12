@@ -1,6 +1,7 @@
 # Attention is all you need (to Predict Protein Structure)
 [//]: # (Badges)
 [![Build Status](https://travis-ci.com/jonathanking/protein-transformer.svg?branch=master)](https://travis-ci.com/jonathanking/protein-transformer)
+[![Documentation Status](https://readthedocs.org/projects/protein-transformer/badge/?version=latest)](https://protein-transformer.readthedocs.io/en/latest/?badge=latest) 
 
 
 
@@ -11,7 +12,9 @@ Importantly, this is also a work in progress and an active research project. I w
 If you'd like to look around, all code specific to this package can be found under the `protein_transformer` directory.
 `train.py` loads and trains models, models are defined in `models/`, and code in `protein/`
  is responsible for manipulating and generating protein structure and sequence data. Many other research documents are
-  currently included in `research/`, but are not needed to run the script. 
+  currently included in `research/`, but are not needed to run the script.
+  
+  This project, including its documentation, is currently under development. 
 
 ## Installation
 
