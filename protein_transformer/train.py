@@ -16,13 +16,13 @@ import torch.utils.data
 from tqdm import tqdm
 import wandb
 
-from .dataset import prepare_dataloaders
-from .losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
-from .models.transformer.Transformer import Transformer
-from .models.transformer.Optimizer import ScheduledOptim
-from .log import *
-from .models.encoder_only import EncoderOnlyTransformer
-from .protein.Sidechains import NUM_PREDICTED_ANGLES
+from protein_transformer.dataset import prepare_dataloaders
+from protein_transformer.losses import drmsd_loss_from_angles, mse_over_angles, combine_drmsd_mse
+from protein_transformer.models.transformer.Transformer import Transformer
+from protein_transformer.models.transformer.Optimizer import ScheduledOptim
+from protein_transformer.log import *
+from protein_transformer.models.encoder_only import EncoderOnlyTransformer
+from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
 
 
 def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics):
@@ -357,7 +357,7 @@ def main():
     model_args.add_argument('--postnorm', action='store_true',
                         help="Use post-layer normalization, as depicted in the original figure for the Transformer "
                              "model. May not train as well as pre-layer normalization.")
-    model_args.add_argument("--angle_mean_path", type=str, default="protein/casp12_190927_100_angle_means.npy",
+    model_args.add_argument("--angle_mean_path", type=str, default="./protein/casp12_190927_100_angle_means.npy",
                         help="Path to vector of means for every predicted angle. Used to initialize model output.")
 
 
@@ -406,9 +406,9 @@ def main():
         optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps)
 
     # Prepare log and checkpoint files
-    args.chkpt_path = "./data/checkpoints/" + args.name
-    os.makedirs("./data/checkpoints", exist_ok=True)
-    args.log_file = "./data/logs/" + args.name + '.train'
+    args.chkpt_path = "../data/checkpoints/" + args.name
+    os.makedirs("../data/checkpoints", exist_ok=True)
+    args.log_file = "../data/logs/" + args.name + '.train'
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
     model, optimizer, resumed, metrics = load_model(model, optimizer, args)

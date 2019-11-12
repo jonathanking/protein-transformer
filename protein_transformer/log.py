@@ -16,8 +16,7 @@ def print_train_batch_status(args, items):
     """
     # Extract relevant metrics
     pbar, metrics, src_seq = items
-    cur_lr = m.etrics["history-lr"][-1]
-    training_losses = metrics["train"]["batch-history"]
+    cur_lr = metrics["history-lr"][-1]
     train_drmsd_loss = metrics["train"]["batch-drmsd"]
     train_mse_loss = metrics["train"]["batch-mse"]
     train_comb_loss = metrics["train"]["batch-combined"]
@@ -172,14 +171,14 @@ def log_structure(args, pred_coords, gold_item, src_seq):
     gold_item = gold_item[gold_item_non_batch_pad]
 
     creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    creator.save_pdb(f"data/logs/structures/{args.name}_pred.pdb", title="pred")
-    creator.save_gltf(f"data/logs/structures/{args.name}_pred.gltf")
+    creator.save_pdb(f"../data/logs/structures/{args.name}_pred.pdb", title="pred")
+    creator.save_gltf(f"../data/logs/structures/{args.name}_pred.gltf")
     gold_item[torch.isnan(gold_item)] = 0
     t_creator = PDB_Creator(gold_item.cpu().detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    t_creator.save_pdb(f"data/logs/structures/{args.name}_true.pdb", title="true")
-    t_creator.save_gltfs(f"data/logs/structures/{args.name}_true.pdb", f"data/logs/structures/{args.name}_pred.pdb")
-    wandb.log({"structure_comparison": wandb.Object3D(f"data/logs/structures/{args.name}_true_pred.gltf")}, commit=False)
-    wandb.log({"structure_prediction": wandb.Object3D(f"data/logs/structures/{args.name}_pred.gltf")}, commit=True)
+    t_creator.save_pdb(f"../data/logs/structures/{args.name}_true.pdb", title="true")
+    t_creator.save_gltfs(f"../data/logs/structures/{args.name}_true.pdb", f"../data/logs/structures/{args.name}_pred.pdb")
+    wandb.log({"structure_comparison": wandb.Object3D(f"../data/logs/structures/{args.name}_true_pred.gltf")}, commit=False)
+    wandb.log({"structure_prediction": wandb.Object3D(f"../data/logs/structures/{args.name}_pred.gltf")}, commit=True)
 
 
 def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):

@@ -1,9 +1,9 @@
 # Datasets, files, etc.
-protein_transformer/data/**/*.pkl
-protein_transformer/data/**/*.torch
-protein_transformer/data/**/*.pt
-protein_transformer/data/**/*.pdb
-protein_transformer/data/**/prev/**
+data/**/*.pkl
+data/**/*.torch
+data/**/*.pt
+data/**/*.pdb
+data/**/prev/**
 **/*.pdb
 **/*.cif*
 
@@ -19,8 +19,8 @@ research/notebooks/**/figs/*.pdf
 scripts/proteinnet_failed_ids/**
 
 # Model files
-checkpoints/**
-logs/**
+data/checkpoints/**
+data/logs/**
 *.tch
 *.chkpt
 console.txt
