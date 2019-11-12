@@ -1,6 +1,6 @@
 # Attention is all you need (to Predict Protein Structure)
 [//]: # (Badges)
-[![Build Status](https://travis-ci.com/jonathanking/protein-transformer.svg?branch=continuous_integration)](https://travis-ci.com/jonathanking/protein-transformer)
+[![Build Status](https://travis-ci.com/jonathanking/protein-transformer.svg?branch=master)](https://travis-ci.com/jonathanking/protein-transformer)
 
 
 
@@ -27,7 +27,7 @@ will be free to import any classes or subroutines into your own training script 
 
 ## How to run
 
-After successful installation, navigate to the protein_transformer directory, where you can train a model with `train.py`.
+After successful installation, navigate to the `protein_transformer directory`, where you can train a model with `train.py`.
 
 This script takes as arguments a plethora of different architecture and training settings. Two positional arguments
  are required, the training data location and the model name.
