@@ -14,8 +14,6 @@ If you'd like to look around, all code specific to this package can be found und
  is responsible for manipulating and generating protein structure and sequence data. Many other research documents are
   currently included in `research/`, but are not needed to run the script.
   
-  This project, including its documentation, is currently under development. 
-
 ## Installation
 
 To run this code, it's recommended to first perform a developmental install of the package with pip in your current 
