@@ -4,14 +4,33 @@
 
 
 
-This project explores sequence modeling techniques to predict complete (all-atom) protein structure. The work was inspired by language modeling methodologies, and as such incorporates Transformer and attention based models. Importantly, this is also a work in progress and an active research project. I welcome any thoughts or interest! 
+This project explores sequence modeling techniques to predict complete (all-atom) protein structure. The work was 
+inspired by language modeling methodologies, and as such incorporates Transformer and attention based models. 
+Importantly, this is also a work in progress and an active research project. I welcome any thoughts or interest! 
 
-If you'd like to look around, `train.py` loads and trains models, models are defined in `models/`, and code in `protein/` is responsible for manipulating and generating protein structure and sequence data. Many other research documents are currently included in `research/`, but are not needed to run the script. 
+If you'd like to look around, all code specific to this package can be found under the `protein_transformer` directory.
+`train.py` loads and trains models, models are defined in `models/`, and code in `protein/`
+ is responsible for manipulating and generating protein structure and sequence data. Many other research documents are
+  currently included in `research/`, but are not needed to run the script. 
+
+## Installation
+
+To run this code, it's recommended to first perform a developmental install of the package with pip in your current 
+environment with `pip install -e .`. This will install the `protein_transformer` package in your environment and you 
+will be free to import any classes or subroutines into your own training script if you wish.
+
+#### Dependencies:
+* ProDy
+* Pytorch
+* numpy
+* tqdm
 
 ## How to run
 
-The code takes as arguments a plethora of different architecture and training settings. Two positional arguments are required, the training data location and the model name.
+After successful installation, navigate to the protein_transformer directory, where you can train a model with `train.py`.
 
+This script takes as arguments a plethora of different architecture and training settings. Two positional arguments
+ are required, the training data location and the model name.
 
 #### Example:
 ```
