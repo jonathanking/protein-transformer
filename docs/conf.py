@@ -53,8 +53,8 @@ extensions = [
 ]
 
 autosummary_generate = True
-napoleon_google_docstring = True
-napoleon_numpy_docstring = False
+napoleon_google_docstring = False
+napoleon_numpy_docstring = True
 napoleon_use_param = False
 napoleon_use_ivar = True
 
