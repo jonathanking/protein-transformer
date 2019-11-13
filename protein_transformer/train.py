@@ -19,7 +19,7 @@ from joblib import Parallel
 
 from protein_transformer.dataset import prepare_dataloaders
 from protein_transformer.log import *
-from protein_transformer.losses import drmsd_loss_from_angles, \
+from protein_transformer.losses import compute_batch_drmsd, \
     mse_over_angles, \
     combine_drmsd_mse
 from protein_transformer.models.encoder_only import EncoderOnlyTransformer
