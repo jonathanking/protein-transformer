@@ -180,7 +180,10 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i, scheduler):
     validation set performance. Returns True iff model was saved.
     """
     cur_loss, loss_history = metrics["loss_to_compare"], metrics["losses_to_compare"]
-    do_time_chkpt = (time.time() - metrics["last_chkpt_time"]) / 3600 > args.checkpoint_time_interval
+    if args.checkpoint_time_interval == 0:
+        do_time_chkpt = False
+    else:
+        do_time_chkpt = (time.time() - metrics["last_chkpt_time"]) / 3600 > args.checkpoint_time_interval
 
     if len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
         modifier = "best"
@@ -410,7 +413,7 @@ def main():
     saving_args.add_argument('--restart', action='store_true', help="Does not resume training.")
     saving_args.add_argument('--restart_opt', action='store_true',
                              help="Resumes training but does not load the optimizer state. ")
-    saving_args.add_argument("--checkpoint_time_interval", type=float, default=1,
+    saving_args.add_argument("--checkpoint_time_interval", type=float, default=0,
                           help="The amount of time (in hours) after which a model checkpoint is made, "
                                "regardless of its performance. ")
     saving_args.add_argument('--load_chkpt', type=str, default=None,
