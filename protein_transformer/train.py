@@ -235,7 +235,7 @@ def load_model(model, optimizer, scheduler, args):
     if os.path.exists(chkpt_file_name) and not args.restart:
         print(f"[Info] Attempting to load model from {chkpt_file_name}.")
     else:
-        return model, optimizer, False, init_metrics(args)
+        return model, optimizer,scheduler,  False, init_metrics(args)
     checkpoint = torch.load(chkpt_file_name)
     try:
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -332,8 +332,8 @@ def main():
 
     # Required args
     required = parser.add_argument_group("Required Args")
-    required.add_argument('data', help="Path to training data.")
-    required.add_argument("name", type=str, help="The model name.")
+    required.add_argument('--data', help="Path to training data.", default="../data/proteinnet/helix.py")
+    required.add_argument("--name", type=str, help="The model name.", default="hp-scan")
 
     # Training parameters
     training = parser.add_argument_group("Training Args")
@@ -412,7 +412,7 @@ def main():
     saving_args.add_argument('--cluster', action='store_true',
                              help="Set of parameters to facilitate training on a remote" +
                                   " cluster. Limited I/O, etc.")
-    saving_args.add_argument('--restart', action='store_true', help="Does not resume training.")
+    saving_args.add_argument('--restart', action='store_true', default=True, help="Does not resume training.")
     saving_args.add_argument('--restart_opt', action='store_true',
                              help="Resumes training but does not load the optimizer state. ")
     saving_args.add_argument("--checkpoint_time_interval", type=float, default=0,
@@ -473,7 +473,7 @@ def main():
     os.makedirs(structure_path, exist_ok=True)
 
     # Prepare Weights and Biases logging
-    wandb.init(project="protein-transformer", entity="koes-group")
+    wandb.init(project="protein-transformer", entity="jonathanking")
     wandb.watch(model, "all")
     wandb.config.update(args)
     if type(data["date"]) == set:
