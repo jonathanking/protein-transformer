@@ -1,4 +1,4 @@
-""" A script to hold some utility functions for model logging. """
+    """ A script to hold some utility functions for model logging. """
 import sys
 import time
 
@@ -261,10 +261,7 @@ def reset_metrics_for_epoch(metrics, mode):
     metrics[mode]["epoch-ln-drmsd"] = metrics[mode]["batch-ln-drmsd"] = 0
     metrics[mode]["epoch-mse"] = metrics[mode]["batch-mse"] = 0
     metrics[mode]["epoch-combined"] = metrics[mode]["batch-combined"] = 0
-    if mode == "train":
-        metrics[mode]["epoch-rmsd"] = metrics[mode]["batch-rmsd"] = None
-    else:
-        metrics[mode]["epoch-rmsd"] = metrics[mode]["batch-rmsd"] = 0
+    metrics[mode]["epoch-rmsd"] = metrics[mode]["batch-rmsd"] = 0
     metrics[mode]["batch-history"] = []
     metrics[mode]["batch-time"] = time.time()
     metrics[mode]["speed-history"] = []
@@ -278,12 +275,8 @@ def update_metrics_end_of_epoch(metrics, mode, n_batches):
     metrics[mode]["epoch-drmsd"] /= n_batches
     metrics[mode]["epoch-ln-drmsd"] /= n_batches
     metrics[mode]["epoch-mse"] /= n_batches
-    metrics[mode]["epoch-combined"] /= n_batches
-    # We don't bother to compute rmsd when training, but is included in the metrics for completeness
-    if mode == "train":
-        metrics[mode]["epoch-rmsd"] = None
-    else:
-        metrics[mode]["epoch-rmsd"] /= n_batches
+    metrics[mode]["epoch-combined"] /= n_batches    
+    metrics[mode]["epoch-rmsd"] /= n_batches
     metrics[mode]["epoch-history-combined"].append(metrics[mode]["epoch-combined"])
     metrics[mode]["epoch-history-drmsd"].append(metrics[mode]["epoch-drmsd"])
     metrics[mode]["epoch-history-mse"].append(metrics[mode]["epoch-mse"])
