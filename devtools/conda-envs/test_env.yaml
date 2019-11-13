@@ -12,6 +12,7 @@ dependencies:
   - pytorch
   - cpuonly
   - scipy
+  - joblib
 
 
     # Testing
