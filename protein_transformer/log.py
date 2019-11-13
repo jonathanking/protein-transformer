@@ -1,4 +1,4 @@
-    """ A script to hold some utility functions for model logging. """
+""" A script to hold some utility functions for model logging. """
 import sys
 import time
 
