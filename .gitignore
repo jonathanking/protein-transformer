@@ -19,8 +19,8 @@ research/notebooks/**/figs/*.pdf
 scripts/proteinnet_failed_ids/**
 
 # Model files
-checkpoints/**
-logs/**
+data/checkpoints/**
+data/logs/**
 *.tch
 *.chkpt
 console.txt
@@ -28,7 +28,7 @@ console.txt
 
 # Tools
 wandb/
-.idea/**
+.idea/
 
 # Torque HPC output files
 *.o*-*

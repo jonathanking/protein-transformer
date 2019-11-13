@@ -1,0 +1,27 @@
+name: test
+channels:
+  - pytorch
+dependencies:
+    # Base depends
+  - python
+  - pip
+
+    # My package depends
+  - numpy
+  - tqdm
+  - pytorch
+  - cpuonly
+  - scipy
+
+
+    # Testing
+  - pytest
+  - pytest-cov
+  - codecov
+
+    # Pip-only installs
+  #- pip:
+  #  - codecov
+  - pip :
+      - ProDy
+

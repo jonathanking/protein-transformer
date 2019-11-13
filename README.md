@@ -1,13 +1,37 @@
 # Attention is all you need (to Predict Protein Structure)
+[//]: # (Badges)
+[![Build Status](https://travis-ci.com/jonathanking/protein-transformer.svg?branch=master)](https://travis-ci.com/jonathanking/protein-transformer)
+[![Documentation Status](https://readthedocs.org/projects/protein-transformer/badge/?version=latest)](https://protein-transformer.readthedocs.io/en/latest/?badge=latest) 
 
-This project explores sequence modeling techniques to predict complete (all-atom) protein structure. The work was inspired by language modeling methodologies, and as such incorporates Transformer and attention based models. Importantly, this is also a work in progress and an active research project. I welcome any thoughts or interest! 
 
-If you'd like to look around, `train.py` loads and trains models, models are defined in `models/`, and code in `protein/` is responsible for manipulating and generating protein structure and sequence data. Many other research documents are currently included in `research/`, but are not needed to run the script. 
+
+This project explores sequence modeling techniques to predict complete (all-atom) protein structure. The work was 
+inspired by language modeling methodologies, and as such incorporates Transformer and attention based models. 
+Importantly, this is also a work in progress and an active research project. I welcome any thoughts or interest! 
+
+If you'd like to look around, all code specific to this package can be found under the `protein_transformer` directory.
+`train.py` loads and trains models, models are defined in `models/`, and code in `protein/`
+ is responsible for manipulating and generating protein structure and sequence data. Many other research documents are
+  currently included in `research/`, but are not needed to run the script.
+  
+## Installation
+
+To run this code, it's recommended to first perform a developmental install of the package with pip in your current 
+environment with `pip install -e .`. This will install the `protein_transformer` package in your environment and you 
+will be free to import any classes or subroutines into your own training script if you wish.
+
+#### Dependencies:
+* ProDy
+* Pytorch
+* numpy
+* tqdm
 
 ## How to run
 
-The code takes as arguments a plethora of different architecture and training settings. Two positional arguments are required, the training data location and the model name.
+After successful installation, navigate to the `protein_transformer directory`, where you can train a model with `train.py`.
 
+This script takes as arguments a plethora of different architecture and training settings. Two positional arguments
+ are required, the training data location and the model name.
 
 #### Example:
 ```
@@ -17,16 +41,21 @@ python train.py data/proteinnet/casp12.pt model01 -lr -0.01 -e 30 -b 12 -cl -cg 
 #### Usage:
 ```
 usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
-                [-es EARLY_STOPPING] [-nws N_WARMUP_STEPS] [-cg CLIP] [-cl]
-                [--train_only] [--lr_scheduling] [--without_angle_means]
-                [--eval_train] [-opt {adam,sgd}] [-fctf FRACTION_COMPLETE_TF]
+                [-es EARLY_STOPPING] [-nws N_WARMUP_STEPS] [-cg CLIP]
+                [-l {mse,drmsd,ln-drmsd,combined}] [--train_only]
+                [--lr_scheduling] [--without_angle_means] [--eval_train]
+                [-opt {adam,sgd}] [-fctf FRACTION_COMPLETE_TF]
                 [-fsstf FRACTION_SUBSEQ_TF] [--skip_missing_res_train]
-                [--repeat_train REPEAT_TRAIN] [-m {enc-dec,enc-only}]
-                [-dm D_MODEL] [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS]
-                [-do DROPOUT] [--postnorm] [--angle_mean_path ANGLE_MEAN_PATH]
+                [--repeat_train REPEAT_TRAIN] [-s SEED]
+                [--combined_drmsd_weight COMBINED_DRMSD_WEIGHT]
+                [-m {enc-dec,enc-only}] [-dm D_MODEL] [-dih D_INNER_HID]
+                [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT] [--postnorm]
+                [--angle_mean_path ANGLE_MEAN_PATH]
                 [--log_structure_step LOG_STRUCTURE_STEP]
                 [--log_wandb_step LOG_WANDB_STEP] [--no_cuda] [--cluster]
                 [--restart] [--restart_opt]
+                [--checkpoint_time_interval CHECKPOINT_TIME_INTERVAL]
+                [--load_chkpt LOAD_CHKPT]
                 data name
 
 optional arguments:
@@ -48,8 +77,11 @@ Training Args:
                         paper.
   -cg CLIP, --clip CLIP
                         Gradient clipping value.
-  -cl, --combined_loss  Use a loss that combines (quasi-equally) DRMSD and
-                        MSE.
+  -l {mse,drmsd,ln-drmsd,combined}, --loss {mse,drmsd,ln-drmsd,combined}
+                        Loss used to train the model. Can be root mean squared
+                        error (RMSE), distance-based root mean squared
+                        distance (DRMSD), length-normalized DRMSD (ln-DRMSD)
+                        or a combinaation of RMSE and ln-DRMSD.
   --train_only          Train, validation, and testing sets are the same. Only
                         report train accuracy.
   --lr_scheduling       Use learning rate scheduling as described in original
@@ -75,6 +107,10 @@ Training Args:
   --repeat_train REPEAT_TRAIN
                         Duplicate the training set X times. Useful for
                         training on small datasets.
+  -s SEED, --seed SEED  The random number generator seed for numpy and torch.
+  --combined_drmsd_weight COMBINED_DRMSD_WEIGHT
+                        When combining losses, use weight w for loss = w *
+                        drmsd + (1-w) * mse.
 
 Model Args:
   -m {enc-dec,enc-only}, --model {enc-dec,enc-only}
@@ -110,10 +146,13 @@ Saving Args:
   --cluster             Set of parameters to facilitate training on a remote
                         cluster. Limited I/O, etc.
   --restart             Does not resume training.
-  --restart_opt         Resumes training but does not load the optimizerstate.
-
-
-
+  --restart_opt         Resumes training but does not load the optimizer
+                        state.
+  --checkpoint_time_interval CHECKPOINT_TIME_INTERVAL
+                        The amount of time (in hours) after which a model
+                        checkpoint is made, regardless of its performance.
+  --load_chkpt LOAD_CHKPT
+                        Path from which to load a model checkpoint.
 
 ```
 
@@ -137,5 +176,15 @@ data = {"train": {"seq": [seq1, seq2, ...],
         }
 ```
 
-## Attribution
+
+### Copyright
+
+Copyright (c) 2019, Jonathan King
+
+
+#### Acknowledgements
+
 This repository was originally a fork from [https://github.com/jadore801120/attention-is-all-you-need-pytorch](https://github.com/jadore801120/attention-is-all-you-need-pytorch), but since then has been extensively rewritten to match the needs of this specific project as I have become more comfortable with Pytorch, Transformers, and the like. Many thanks for [jadore801120](https://github.com/jadore801120/) for the framework.
+ 
+Project structure (continuous integration, docs, testing) based on the 
+[Computational Molecular Science Python Cookiecutter](https://github.com/molssi/cookiecutter-cms) version 1.1.
