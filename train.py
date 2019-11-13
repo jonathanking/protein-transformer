@@ -112,9 +112,9 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
             src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
             pred = model(src_seq, tgt_ang)
 
-            if not (args.loss == "mse" and mode == "train"):
-                d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True,
-                                                                do_backward=False, pool=pool)
+            # if not (args.loss == "mse" and mode == "train"):
+            d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True,
+                                                            do_backward=False, pool=pool)
             m_loss = mse_over_angles(pred, tgt_ang)
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
 
