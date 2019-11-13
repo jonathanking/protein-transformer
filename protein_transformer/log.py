@@ -25,7 +25,7 @@ def print_train_batch_status(args, items):
         loss = train_comb_loss
     else:
         loss = metrics["train"]["batch-ln-drmsd"]
-    lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling else ""
+    lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling == "noam" else ""
     speed_avg = np.mean(metrics["train"]["speeds"])
 
     if args.cluster:
@@ -157,7 +157,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
                              tracking_loss=loss, batch_level=True)
 
     do_log_str = not step or step % args.log_structure_step == 0
-    do_log_lr  = args.lr_scheduling and (not step or args.log_wandb_step % step == 0)
+    do_log_lr  = args.lr_scheduling == "noam" and (not step or args.log_wandb_step % step == 0)
 
     if not step or step % args.log_wandb_step == 0:
         wandb.log({"Train Batch RMSE": np.sqrt(m_loss.item()),
@@ -165,7 +165,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
                    "Train Batch ln-DRMSD": ln_d_loss,
                    "Train Batch Combined Loss": c_loss,
                    "Train Batch Speed": metrics["train"]["speed"]}, commit=not do_log_lr and not do_log_str)
-    if args.lr_scheduling:
+    if args.lr_scheduling == "noam":
         metrics["history-lr"].append(optimizer.cur_lr)
         if not step or step % args.log_wandb_step  == 0:
             wandb.log({"Learning Rate": optimizer.cur_lr}, commit=not do_log_str)
@@ -247,21 +247,6 @@ def log_structure(args, pred_coords, gold_item, src_seq):
     wandb.log({"structure_prediction": wandb.Object3D(f"../data/logs/structures/{args.name}_pred.gltf")}, commit=True)
 
 
-def do_eval_epoch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq, args, pbar, mode):
-    """
-    Performs all necessary logging at the end of an evaluation batch.
-    Updates custom metrics dictionary and wandb logs. Prints status of training.
-    """
-    metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss, c_loss, src_seq, r_loss, batch_level=False)
-    wandb.log({f"{mode.title()} Epoch RMSE": np.sqrt(m_loss.item()),
-               f"{mode.title()} Epoch RMSD": r_loss,
-               f"{mode.title()} Epoch DRMSD": d_loss,
-               f"{mode.title()} Epoch ln-DRMSD": ln_d_loss,
-               f"{mode.title()} Epoch Combined Loss": c_loss,
-               f"{mode.title()} Epoch Speed": metrics[mode]["speed"]})
-    print_eval_batch_status(args, (pbar, d_loss, mode, m_loss, c_loss))
-
-
 def init_metrics(args):
     """
     Returns an empty metric dictionary for recording model performance.
@@ -284,7 +269,7 @@ def init_metrics(args):
                "last_chkpt_time": time.time(),
                "n_batches": 0
                }
-    if not args.lr_scheduling:
+    if args.lr_scheduling != "noam":
         metrics["history-lr"] = [0]
     return metrics
 
