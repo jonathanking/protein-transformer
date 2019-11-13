@@ -130,7 +130,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     return metrics
 
 
-def train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer):
+def train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer, scheduler):
     """
     Model training control loop.
     """
@@ -153,28 +153,37 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
             print_end_of_epoch_status("valid", (start, metrics))
             log_batch(log_writer, metrics, START_TIME, mode="valid", end_of_epoch=True)
 
+        # Update LR
+        if scheduler:
+            scheduler.step(metrics["valid"][f"epoch-{args.loss}"])
+
         # Checkpointing
         try:
             metrics = update_loss_trackers(args, epoch_i, metrics)
         except EarlyStoppingCondition:
             break
-        checkpoint_model(args, optimizer, model, metrics, epoch_i)
+        checkpoint_model(args, optimizer, model, metrics, epoch_i, scheduler)
+
+
 
     # Test Epoch
     if not args.train_only:
         start = time.time()
-        metrics = eval_epoch(model, test_data, device, args, metrics, mode="test")
+        metrics = eval_epoch(model, test_data, device, args, metrics, mode="test", pool=drmsd_worker_pool)
         print_end_of_epoch_status("test", (start, metrics))
         log_batch(log_writer, metrics, START_TIME, mode="test", end_of_epoch=True)
 
 
-def checkpoint_model(args, optimizer, model, metrics, epoch_i):
+def checkpoint_model(args, optimizer, model, metrics, epoch_i, scheduler):
     """
     Records model state according to a checkpointing policy. Defaults to best
     validation set performance. Returns True iff model was saved.
     """
     cur_loss, loss_history = metrics["loss_to_compare"], metrics["losses_to_compare"]
-    do_time_chkpt = (time.time() - metrics["last_chkpt_time"]) / 3600 > args.checkpoint_time_interval
+    if args.checkpoint_time_interval == 0:
+        do_time_chkpt = False
+    else:
+        do_time_chkpt = (time.time() - metrics["last_chkpt_time"]) / 3600 > args.checkpoint_time_interval
 
     if len(loss_history) == 1 or cur_loss < min(loss_history[:-1]):
         modifier = "best"
@@ -193,6 +202,7 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
         'settings': args,
         'epoch': epoch_i,
         'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
         'loss': cur_loss,
         'metrics': metrics,
         'elapsed_time': time.time() - START_TIME}
@@ -208,7 +218,7 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
     return True
 
 
-def load_model(model, optimizer, args):
+def load_model(model, optimizer, scheduler, args):
     """
     Given a model, its optimizer, and the program's arguments, resumes model
     training if the user has not specified otherwise. Assumes model was saved
@@ -238,11 +248,15 @@ def load_model(model, optimizer, args):
     if not args.restart_opt:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
+    # Reload the scheduler's state_dict
+    if scheduler:
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
     START_EPOCH = checkpoint['epoch'] + 1
     START_TIME -= checkpoint['elapsed_time']
     print(f"[Info] Resuming model training from end of Epoch {checkpoint['epoch']}. Previous validation loss"
           f" = {checkpoint['loss']:.4f}.")
-    return model, optimizer, True, checkpoint['metrics']
+    return model, optimizer, scheduler, True, checkpoint['metrics']
 
 
 def make_model(args, device):
@@ -336,8 +350,12 @@ def main():
                         help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based root mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combinaation of RMSE and ln-DRMSD.")
     training.add_argument('--train_only', action='store_true',
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
-    training.add_argument('--lr_scheduling', action='store_true',
-                        help='Use learning rate scheduling as described in original paper.')
+    training.add_argument('--lr_scheduling', type=str, choices=['noam', 'plateau'], default='plateau',
+                        help='noam: Use learning rate scheduling as described in Transformer paper, plateau: Decrease learning rate after Validation loss plateaus.')
+    training.add_argument('--patience', type=int, default=5,
+                          help="Number of epochs to wait before reducing LR for plateau scheduler.")
+    training.add_argument('--lr_threshold', type=float, default=0.0001,
+                          help="Threshold for considering improvements during training/lr scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
     training.add_argument('--eval_train', action='store_true',
@@ -397,7 +415,7 @@ def main():
     saving_args.add_argument('--restart', action='store_true', help="Does not resume training.")
     saving_args.add_argument('--restart_opt', action='store_true',
                              help="Resumes training but does not load the optimizer state. ")
-    saving_args.add_argument("--checkpoint_time_interval", type=float, default=1,
+    saving_args.add_argument("--checkpoint_time_interval", type=float, default=0,
                           help="The amount of time (in hours) after which a model checkpoint is made, "
                                "regardless of its performance. ")
     saving_args.add_argument('--load_chkpt', type=str, default=None,
@@ -421,14 +439,22 @@ def main():
     device = torch.device('cuda' if args.cuda else 'cpu')
     model = make_model(args, device).to(device)
 
+    # Prepare optimizer
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
                                betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
     elif args.optimizer == "sgd":
         optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()),
                               lr=args.learning_rate)
-    if args.lr_scheduling:
+
+    # Prepare scheduler
+    if args.lr_scheduling == "noam":
         optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps)
+        scheduler = None
+    else:
+        # Construct an LR scheduler with patience = 5 and a factor of 1/10
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience,
+                                                               verbose=True, threshold=args.lr_threshold)
 
     # Prepare log and checkpoint files
     args.chkpt_path = "../data/checkpoints/" + args.name
@@ -436,7 +462,7 @@ def main():
     args.log_file = "../data/logs/" + args.name + '.train'
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
-    model, optimizer, resumed, metrics = load_model(model, optimizer, args)
+    model, optimizer, scheduler, resumed, metrics = load_model(model, optimizer, scheduler, args)
     if resumed:
         log_f = open(args.log_file, 'a', buffering=args.buffering_mode)
     else:
@@ -466,7 +492,7 @@ def main():
 
     # Begin training
     train(model, metrics, training_data, validation_data, test_data, optimizer,
-          device, args, log_writer)
+          device, args, log_writer, scheduler)
     log_f.close()
 
 
