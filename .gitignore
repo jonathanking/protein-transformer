@@ -6,6 +6,7 @@ data/**/*.pdb
 data/**/prev/**
 **/*.pdb
 **/*.cif*
+*.pt
 
 # Local notekeeping and research
 research/analysis/**/*.csv
