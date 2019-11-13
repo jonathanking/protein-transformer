@@ -354,6 +354,8 @@ def main():
                         help='noam: Use learning rate scheduling as described in Transformer paper, plateau: Decrease learning rate after Validation loss plateaus.')
     training.add_argument('--patience', type=int, default=5,
                           help="Number of epochs to wait before reducing LR for plateau scheduler.")
+    training.add_argument('--lr_threshold', type=float, default=0.0001,
+                          help="Threshold for considering improvements during training/lr scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
     training.add_argument('--eval_train', action='store_true',
@@ -451,7 +453,8 @@ def main():
         scheduler = None
     else:
         # Construct an LR scheduler with patience = 5 and a factor of 1/10
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience, verbose=True)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience,
+                                                               verbose=True, threshold=args.lr_threshold)
 
     # Prepare log and checkpoint files
     args.chkpt_path = "../data/checkpoints/" + args.name
