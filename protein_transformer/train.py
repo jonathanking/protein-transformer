@@ -130,7 +130,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     return metrics
 
 
-def train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer):
+def train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer, scheduler):
     """
     Model training control loop.
     """
@@ -160,10 +160,14 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
             break
         checkpoint_model(args, optimizer, model, metrics, epoch_i)
 
+        # Update LR
+        if scheduler:
+            scheduler.step(metrics["valid"][f"epoch-{args.loss}"])
+
     # Test Epoch
     if not args.train_only:
         start = time.time()
-        metrics = eval_epoch(model, test_data, device, args, metrics, mode="test")
+        metrics = eval_epoch(model, test_data, device, args, metrics, mode="test", pool=drmsd_worker_pool)
         print_end_of_epoch_status("test", (start, metrics))
         log_batch(log_writer, metrics, START_TIME, mode="test", end_of_epoch=True)
 
@@ -336,8 +340,8 @@ def main():
                         help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based root mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combinaation of RMSE and ln-DRMSD.")
     training.add_argument('--train_only', action='store_true',
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
-    training.add_argument('--lr_scheduling', action='store_true',
-                        help='Use learning rate scheduling as described in original paper.')
+    training.add_argument('--lr_scheduling', type=str, choices=['noam', 'plateau'], default='plateau',
+                        help='noam: Use learning rate scheduling as described in Transformer paper, plateau: Decrease learning rate after Validation loss plateaus.')
     training.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
     training.add_argument('--eval_train', action='store_true',
@@ -421,14 +425,21 @@ def main():
     device = torch.device('cuda' if args.cuda else 'cpu')
     model = make_model(args, device).to(device)
 
+    # Prepare optimizer
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
                                betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
     elif args.optimizer == "sgd":
         optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()),
                               lr=args.learning_rate)
-    if args.lr_scheduling:
+
+    # Prepare scheduler
+    if args.lr_scheduling == "noam":
         optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps)
+        scheduler = None
+    else:
+        # Construct an LR scheduler with patience = 5 and a factor of 1/10
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, verbose=True)
 
     # Prepare log and checkpoint files
     args.chkpt_path = "../data/checkpoints/" + args.name
@@ -466,7 +477,7 @@ def main():
 
     # Begin training
     train(model, metrics, training_data, validation_data, test_data, optimizer,
-          device, args, log_writer)
+          device, args, log_writer, scheduler)
     log_f.close()
 
 
