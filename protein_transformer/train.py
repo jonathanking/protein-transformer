@@ -354,7 +354,7 @@ def main():
                              "faster if using teacher forcing.")
     training.add_argument("--repeat_train", type=int, default=1,
                         help="Duplicate the training set X times. Useful for training on small datasets.")
-    training.add_argument("-s", "--seed", type=float, default=11_731,
+    training.add_argument("-s", "--seed", type=int, default=11_731,
                           help="The random number generator seed for numpy "
                                "and torch.")
     training.add_argument("--combined_drmsd_weight", type=float, default=0.5,
