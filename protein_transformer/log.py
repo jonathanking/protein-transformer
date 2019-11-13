@@ -25,7 +25,7 @@ def print_train_batch_status(args, items):
         loss = train_comb_loss
     else:
         loss = metrics["train"]["batch-ln-drmsd"]
-    lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling else ""
+    lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling == "noam" else ""
     speed_avg = np.mean(metrics["train"]["speeds"])
 
     if args.cluster:
@@ -157,7 +157,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
                              tracking_loss=loss, batch_level=True)
 
     do_log_str = not step or step % args.log_structure_step == 0
-    do_log_lr  = args.lr_scheduling and (not step or args.log_wandb_step % step == 0)
+    do_log_lr  = args.lr_scheduling == "noam" and (not step or args.log_wandb_step % step == 0)
 
     if not step or step % args.log_wandb_step == 0:
         wandb.log({"Train Batch RMSE": np.sqrt(m_loss.item()),
@@ -165,7 +165,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
                    "Train Batch ln-DRMSD": ln_d_loss,
                    "Train Batch Combined Loss": c_loss,
                    "Train Batch Speed": metrics["train"]["speed"]}, commit=not do_log_lr and not do_log_str)
-    if args.lr_scheduling:
+    if args.lr_scheduling == "noam":
         metrics["history-lr"].append(optimizer.cur_lr)
         if not step or step % args.log_wandb_step  == 0:
             wandb.log({"Learning Rate": optimizer.cur_lr}, commit=not do_log_str)
@@ -284,7 +284,7 @@ def init_metrics(args):
                "last_chkpt_time": time.time(),
                "n_batches": 0
                }
-    if not args.lr_scheduling:
+    if args.lr_scheduling != "noam":
         metrics["history-lr"] = [0]
     return metrics
 
