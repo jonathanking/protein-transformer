@@ -153,16 +153,18 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
             print_end_of_epoch_status("valid", (start, metrics))
             log_batch(log_writer, metrics, START_TIME, mode="valid", end_of_epoch=True)
 
+        # Update LR
+        if scheduler:
+            scheduler.step(metrics["valid"][f"epoch-{args.loss}"])
+
         # Checkpointing
         try:
             metrics = update_loss_trackers(args, epoch_i, metrics)
         except EarlyStoppingCondition:
             break
-        checkpoint_model(args, optimizer, model, metrics, epoch_i)
+        checkpoint_model(args, optimizer, model, metrics, epoch_i, scheduler)
 
-        # Update LR
-        if scheduler:
-            scheduler.step(metrics["valid"][f"epoch-{args.loss}"])
+
 
     # Test Epoch
     if not args.train_only:
@@ -172,7 +174,7 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
         log_batch(log_writer, metrics, START_TIME, mode="test", end_of_epoch=True)
 
 
-def checkpoint_model(args, optimizer, model, metrics, epoch_i):
+def checkpoint_model(args, optimizer, model, metrics, epoch_i, scheduler):
     """
     Records model state according to a checkpointing policy. Defaults to best
     validation set performance. Returns True iff model was saved.
@@ -197,6 +199,7 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
         'settings': args,
         'epoch': epoch_i,
         'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
         'loss': cur_loss,
         'metrics': metrics,
         'elapsed_time': time.time() - START_TIME}
@@ -212,7 +215,7 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i):
     return True
 
 
-def load_model(model, optimizer, args):
+def load_model(model, optimizer, scheduler, args):
     """
     Given a model, its optimizer, and the program's arguments, resumes model
     training if the user has not specified otherwise. Assumes model was saved
@@ -242,11 +245,15 @@ def load_model(model, optimizer, args):
     if not args.restart_opt:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
+    # Reload the scheduler's state_dict
+    if scheduler:
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
     START_EPOCH = checkpoint['epoch'] + 1
     START_TIME -= checkpoint['elapsed_time']
     print(f"[Info] Resuming model training from end of Epoch {checkpoint['epoch']}. Previous validation loss"
           f" = {checkpoint['loss']:.4f}.")
-    return model, optimizer, True, checkpoint['metrics']
+    return model, optimizer, scheduler, True, checkpoint['metrics']
 
 
 def make_model(args, device):
@@ -449,7 +456,7 @@ def main():
     args.log_file = "../data/logs/" + args.name + '.train'
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
-    model, optimizer, resumed, metrics = load_model(model, optimizer, args)
+    model, optimizer, scheduler, resumed, metrics = load_model(model, optimizer, scheduler, args)
     if resumed:
         log_f = open(args.log_file, 'a', buffering=args.buffering_mode)
     else:
