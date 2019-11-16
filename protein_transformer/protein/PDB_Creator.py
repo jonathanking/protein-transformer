@@ -1,7 +1,7 @@
 import os
 
 import numpy as np
-import pymol
+#import pymol
 import torch
 from prody import calcTransformation
 

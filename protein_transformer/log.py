@@ -234,6 +234,7 @@ def log_structure(args, pred_coords, gold_item, src_seq):
     Logs a 3D structure prediction to wandb.
     # TODO save PDB files with numbers in addition to just GLTF files
     """
+    return
     gold_item_non_batch_pad = (gold_item != VOCAB.pad_id).any(dim=-1)
     gold_item = gold_item[gold_item_non_batch_pad]
     creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
