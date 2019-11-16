@@ -235,7 +235,7 @@ def load_model(model, optimizer, scheduler, args):
     if os.path.exists(chkpt_file_name) and not args.restart:
         print(f"[Info] Attempting to load model from {chkpt_file_name}.")
     else:
-        return model, optimizer, False, init_metrics(args)
+        return model, optimizer, scheduler, False, init_metrics(args)
     checkpoint = torch.load(chkpt_file_name)
     try:
         model.load_state_dict(checkpoint['model_state_dict'])
