@@ -174,7 +174,7 @@ def pairwise_internal_dist(x):
     x1, x2 = x, x
     assert len(x1.shape) == 2, "Pairwise internal distance method is not " \
                                "implemented for batches."
-    x1_norm = x1.pow(2).sum(dim=-1, keepdim=True)
+    x1_norm = x1.pow(2).sum(dim=-1, keepdim=True)  # TODO: experiment with alternative to pow, remove duplicated norm
     x2_norm = x2.pow(2).sum(dim=-1, keepdim=True)
     res = torch.addmm(x2_norm.transpose(-2, -1), x1, x2.transpose(-2, -1), alpha=-2).add_(x1_norm)
     res = res.clamp_min_(1e-30).sqrt_()
