@@ -103,7 +103,7 @@ def update_loss_trackers(args, epoch_i, metrics):
     loss_to_compare = metrics[mode][f"epoch-{loss_str}"]
     losses_to_compare = metrics[mode][f"epoch-history-{loss_str}"]
 
-    if loss_to_compare < metrics["best_valid_loss_so_far"]:
+    if metrics["best_valid_loss_so_far"] - loss_to_compare > args.early_stopping_threshold:
         metrics["best_valid_loss_so_far"] = loss_to_compare
         metrics["epoch_last_improved"] = epoch_i
     elif args.early_stopping and epoch_i - metrics["epoch_last_improved"] > args.early_stopping:

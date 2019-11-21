@@ -341,7 +341,7 @@ def main():
     training.add_argument("-lr", "--learning_rate", type=float, default=1e-4)
     training.add_argument('-e', '--epochs', type=int, default=10)
     training.add_argument("-b", '--batch_size', type=int, default=8)
-    training.add_argument('-es', '--early_stopping', type=int, default=10,
+    training.add_argument('-es', '--early_stopping', type=int, default=20,
                         help="Stops if training hasn't improved in X epochs")
     training.add_argument('-nws', '--n_warmup_steps', type=int, default=10_000,
                         help="Number of warmup training steps when using lr-scheduling as proposed in the original"
@@ -353,9 +353,9 @@ def main():
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
     training.add_argument('--lr_scheduling', type=str, choices=['noam', 'plateau'], default='plateau',
                         help='noam: Use learning rate scheduling as described in Transformer paper, plateau: Decrease learning rate after Validation loss plateaus.')
-    training.add_argument('--patience', type=int, default=5,
+    training.add_argument('--patience', type=int, default=10,
                           help="Number of epochs to wait before reducing LR for plateau scheduler.")
-    training.add_argument('--lr_threshold', type=float, default=0.0001,
+    training.add_argument('--early_stopping_threshold', type=float, default=0.0001,
                           help="Threshold for considering improvements during training/lr scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
@@ -455,7 +455,7 @@ def main():
     else:
         # Construct an LR scheduler with patience = 5 and a factor of 1/10
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience,
-                                                               verbose=True, threshold=args.lr_threshold)
+                                                               verbose=True, threshold=args.early_stopping_threshold)
 
     # Prepare log and checkpoint files
     args.chkpt_path = "../data/checkpoints/" + args.name
