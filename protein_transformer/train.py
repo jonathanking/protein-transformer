@@ -357,6 +357,10 @@ def main():
                           help="Number of epochs to wait before reducing LR for plateau scheduler.")
     training.add_argument('--early_stopping_threshold', type=float, default=0.0001,
                           help="Threshold for considering improvements during training/lr scheduling.")
+    training.add_argument('-esm', '--early_stopping_metric',
+                          choices=[f"{mode}-{metric}" for metric in ["mse", "drmsd", "ln-drmsd", "combined"]
+                                   for mode in ["train", "test", "valid"]], default="train-mse",
+                          help="Metric observed for early stopping and LR scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
     training.add_argument('--eval_train', action='store_true',
@@ -426,6 +430,7 @@ def main():
     args.cuda = not args.no_cuda
     assert "_" not in args.name, "Please do not use a '_' in your model name. Conflicts with structure files."
     args.buffering_mode = 1
+    args.es_mode, args.es_metric = args.early_stopping_metric.split("-")
     LOGFILEHEADER = prepare_log_header(args)
     seed_rngs(args)
     torch.set_num_threads(1)

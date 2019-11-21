@@ -94,14 +94,9 @@ def update_loss_trackers(args, epoch_i, metrics):
     """
     Updates the current loss to compare according to an early stopping policy.
     """
-    if args.train_only:
-        mode = "train"
-    else:
-        mode = "valid"
-    loss_str = args.loss
 
-    loss_to_compare = metrics[mode][f"epoch-{loss_str}"]
-    losses_to_compare = metrics[mode][f"epoch-history-{loss_str}"]
+    loss_to_compare = metrics[args.es_mode][f"epoch-{args.es_metric}"]
+    losses_to_compare = metrics[args.es_mode][f"epoch-history-{args.es_metric}"]
 
     if metrics["best_valid_loss_so_far"] - loss_to_compare > args.early_stopping_threshold:
         metrics["best_valid_loss_so_far"] = loss_to_compare
