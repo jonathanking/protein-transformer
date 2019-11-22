@@ -34,6 +34,10 @@ def test_drmsd_zero():
 ### DRMSD Helper Tests ###
 
 def compute_intra_array_distances(x):
+    """
+    Given an array of coordinates, compute, in order, the differences between
+    those coordinates. 
+    """
     deltas = []
     for i in range(x.shape[0]):
         for j in range(i+1, x.shape[0]):
@@ -64,17 +68,41 @@ def lazy_drmsd(a, b):
     total_delta_delta /= n
     return np.sqrt(total_delta_delta)
 
-
-def test_drmsd_equals_lazy_drmsd():
-    
-    x = np.asarray([[0,0,0], [3, 5, 2], [2, 9, 3]])
-    y = np.asarray([[0,0,0], [9, 3, 1], [4, 7, 8]])    
+@pytest.mark.parametrize("x, y",[
+    (
+        np.asarray([[0,0,0], [3, 5, 2], [2, 9, 3]]), 
+        np.asarray([[0,0,0], [9, 3, 1], [4, 7, 8]])
+        ),
+    (
+        np.random.random((50,3))*10,
+        np.random.random((50,3))*10
+        )  
+])
+def test_drmsd_equals_lazy_drmsd(x, y):
     x, y = torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
 
     assert pytest.approx(drmsd(x, y).item()) == lazy_drmsd(x, y)
 
 def test_pairwise_internal_dist():
-    pass
+    a = np.asarray([[0,0,0],[0,0,1],[0,1,0],[0,1,1]])
+    a = torch.tensor(a, dtype=torch.float32)
+    distances = np.asarray([1, 1, np.sqrt(2), np.sqrt(2), 1, 1])
+
+    pwd_result = pairwise_internal_dist(a)[0].numpy()
+    print(pwd_result)
+    print(pwd_result.shape)
+    assert pytest.approx(pairwise_internal_dist(a)[0].numpy()) == distances
+
+def test_pairwise_internal_dist2():
+    a = np.asarray([[0], [1], [2]])
+    a = torch.tensor(a, dtype=torch.float32)
+    distances = np.asarray([1, 2, 1])
+
+    pwd_result = pairwise_internal_dist(a)[0].numpy()
+    print(pwd_result)
+    print(pwd_result.shape)
+    assert pytest.approx(pwd_result.sum()) == distances.sum()
+
 
 def test_mse_over_angles():
     pass
