@@ -88,7 +88,7 @@ def init_backbone(angles, device):
     points (which are arbitrary) and returns a TensorArray of the size
     required to hold all the coordinates.
     """
-    a1 = torch.tensor([0.00001, 0, 0], device=device)
+    a1 = torch.tensor([0.001, 0, 0], device=device)
     a2 = a1 + torch.tensor([BONDLENS["n-ca"], 0, 0], device=device)
     a3x = torch.cos(np.pi - angles[0, 3]) * BONDLENS["ca-c"]
     a3y = torch.sin(np.pi - angles[0, 3]) * BONDLENS['ca-c']
