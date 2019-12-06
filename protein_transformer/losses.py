@@ -164,6 +164,33 @@ def mse_over_angles(pred, true):
     return torch.nn.functional.mse_loss(pred[ang_non_zero][ang_non_nans], true[ang_non_zero][ang_non_nans])
 
 
+def mse_over_angles_numpy(pred, true):
+    """ Numpy version of mse_over_angles.
+
+    Given a predicted angle tensor and a true angle tensor (batch-padded with
+    zeros, and missing-item-padded with nans), this function first removes
+    batch then item padding before using torch's built-in MSE loss function.
+
+    Args:
+        pred true (np.ndarray): 4-dimensional tensors
+
+    Returns:
+        MSE loss between true and pred.
+
+    Examples:
+        >>> a, b = np.random.rand(8,30,24), np.random.rand(8,30,24)
+        >>> at, bt = torch.tensor(a), torch.tensor(b)
+        >>> mse_over_angles(at, bt) - mse_over_angles_numpy(at, bt) < 1e-6
+        True
+
+    """
+
+    ang_non_zero = (true != 0).any(axis=2)
+    tgt_ang_non_zero = true[ang_non_zero]
+    ang_non_nans = np.isfinite(tgt_ang_non_zero)
+    return np.mean((pred[ang_non_zero][ang_non_nans] - true[ang_non_zero][ang_non_nans])**2)
+
+
 def pairwise_internal_dist(x):
     """
     An implementation of cdist (pairwise distances between sets of vectors)
