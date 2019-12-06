@@ -57,7 +57,7 @@ def collate_fn(insts, coords=False, sequences=False, max_seq_len=None):
 class ProteinVocabulary(object):
     """
     Represents the 'vocabulary' of amino acids for encoding a protein sequence.
-    Includes pad, sos, sos, and unknown characters as well as the 20 standard
+    Includes pad, sos, eos, and unknown characters as well as the 20 standard
     amino acids.
     """
     def __init__(self):
