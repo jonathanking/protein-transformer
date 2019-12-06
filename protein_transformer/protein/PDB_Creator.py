@@ -129,7 +129,7 @@ class PDB_Creator(object):
         residue_lines = []
         for atom_name, atom_coord in zip(atom_names, coords):
             # TODO: what to do in the PDB file if atom is missing?
-            if atom_name is "PAD" or np.isnan(atom_coord).sum() > 0:
+            if atom_name is "PAD" or np.isnan(atom_coord).sum() > 0 or atom_coord.sum() == 0:
                 continue
             # if np.isnan(atom_coord).sum() > 0:
             #     residue_lines.append(self.get_line_for_atom(res_name, atom_name, atom_coord,
@@ -138,12 +138,13 @@ class PDB_Creator(object):
             #     continue
             residue_lines.append(self._get_line_for_atom(res_name, atom_name, atom_coord))
             self.atom_nbr += 1
-        try:
-            oxy_coords = self._get_oxy_coords(coords[1], coords[2], next_n)
-            residue_lines.append(self._get_line_for_atom(res_name, "O", oxy_coords))
-            self.atom_nbr += 1
-        except ValueError:
-            pass
+        if len(residue_lines) > 0:
+            try:
+                oxy_coords = self._get_oxy_coords(coords[1], coords[2], next_n)
+                residue_lines.append(self._get_line_for_atom(res_name, "O", oxy_coords))
+                self.atom_nbr += 1
+            except ValueError:
+                pass
         return residue_lines
 
     def _get_lines_for_protein(self):
