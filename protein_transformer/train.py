@@ -155,8 +155,7 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
 
         # Update LR
         if scheduler:
-            mode = "train" if args.train_only else "valid"
-            scheduler.step(metrics[mode][f"epoch-{args.loss}"])
+            scheduler.step(metrics[args.es_mode][f"epoch-{args.es_metric}"])
 
         # Checkpointing
         try:
