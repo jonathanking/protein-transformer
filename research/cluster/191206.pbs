@@ -19,7 +19,7 @@ conda activate pytorch-build
 ############################
 ##     Array Job Exec.    ##
 ############################
-cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch-build/bin/$(sed -n "${PBS_ARRAYID}p" research/cluster/191206.txt)"
+cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch-build/bin/$(sed -n "${PBS_ARRAYID}p" ../research/cluster/191206.txt)"
 echo $cmd
 eval $cmd
 
