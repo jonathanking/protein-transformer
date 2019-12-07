@@ -1,5 +1,6 @@
 python train.py ../data/proteinnet/casp12_191101_30.pt 2048dropout-tracktrain -dm 2048 -m enc-only -l mse --log_structure_step 250 -b 16 -lr 0.0001 -e 500 --eval_train --dropout 0.1 -esm train-mse
 python train.py ../data/proteinnet/casp12_191101_30.pt 2048nodropout-tracktrain -dm 2048 -m enc-only -l mse --log_structure_step 250 -b 16 -lr 0.0001 -e 500 --eval_train --dropout 0 -esm train-mse
-python train.py ../data/proteinnet/casp12_191101_30.pt 1024dropout-tracktrain-encdec -dm 1024 -m enc-dec -l mse --log_structure_step 250 -b 8 -lr 0.0001 -e 500 --eval_train --dropout 0.1 -esm train-mse
-python train.py ../data/proteinnet/casp12_191101_30.pt 1024nodropout-tracktrain-encdec -dm 1024 -m enc-dec -l mse --log_structure_step 250 -b 8 -lr 0.0001 -e 500 --eval_train --dropout 0 -esm train-mse
-
+python train.py ../data/proteinnet/casp12_191101_30.pt 4096dropout-tracktrain -dm 4096 -m enc-only -l mse --log_structure_step 250 -b 4 -lr 0.0001 -e 500 --eval_train --dropout 0.1 -esm train-mse
+python train.py ../data/proteinnet/casp12_191101_30.pt 4096nodropout-tracktrain -dm 4096 -m enc-only -l mse --log_structure_step 250 -b 4 -lr 0.0001 -e 500 --eval_train --dropout 0 -esm train-mse
+python train.py ../data/proteinnet/casp12_191101_30.pt 1024layers12dropout-tracktrain -dm 1024 -nl 12 -m enc-only -l mse --log_structure_step 250 -b 4 -lr 0.0001 -e 500 --eval_train --dropout 0.1 -esm train-mse
+python train.py ../data/proteinnet/casp12_191101_30.pt 1024layers12nodropout-tracktrain -dm 1024 -nl 12 -m enc-only -l mse --log_structure_step 250 -b 4 -lr 0.0001 -e 500 --eval_train --dropout 0 -esm train-mse
