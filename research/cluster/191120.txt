@@ -1,3 +1,6 @@
 python train.py ../data/proteinnet/casp12_191101_30.pt fullval2048 -dm 2048 -m enc-only -l mse -esm train-mse --log_structure_step 500 -b 16 -lr 0.0001 -e 1000 --eval_train
 python train.py ../data/proteinnet/casp12_191101_30.pt fullval2048nodo -dm 2048 -m enc-only -l mse -esm train-mse --log_structure_step 500 -b 16 -lr 0.0001 -e 1000 --eval_train --dropout 0
 python train.py ../data/proteinnet/casp12_191101_30.pt fullval20seed0 -dm 2048 -m enc-only -l mse -esm train-mse --log_structure_step 500 -b 16 -lr 0.0001 -e 1000 --eval_train --seed 0
+python train.py ../data/proteinnet/casp12_191101_30.pt fullval1024 -dm 1024 -m enc-only -l mse -esm train-mse --log_structure_step 500 -b 22 -lr 0.0001 -e 1000 --eval_train
+python train.py ../data/proteinnet/casp12_191101_30.pt fullval1024nodo -dm 1024 -m enc-only -l mse -esm train-mse --log_structure_step 500 -b 22 -lr 0.0001 -e 1000 --eval_train --dropout 0
+python train.py ../data/proteinnet/casp12_191101_30.pt fullval2048hid1024 -dm 2048 -dih 1024 -m enc-only -l mse -esm train-mse --log_structure_step 500 -b 18 -lr 0.0001 -e 1000 --eval_train
