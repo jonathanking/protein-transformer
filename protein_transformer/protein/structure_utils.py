@@ -23,9 +23,9 @@ def get_backbone_from_full_coords(crds, invert=False):
     if invert:
         mask = np.invert(mask)
     if len(crds.shape) == 2:
-        return crds[np.tile(mask, crds.shape[0]), :]
+        return crds[np.tile(mask, crds.shape[0]//NUM_PREDICTED_COORDS), :]
     else:
-        return crds[:,np.tile(mask, crds.shape[1]), :]
+        return crds[:,np.tile(mask, crds.shape[1]//NUM_PREDICTED_COORDS), :]
 
 
 def get_sidechain_from_full_coords(crds):
