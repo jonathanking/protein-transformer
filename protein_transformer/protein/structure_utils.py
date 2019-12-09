@@ -12,6 +12,30 @@ from .Sidechains import NUM_PREDICTED_ANGLES, SC_DATA, NUM_PREDICTED_COORDS
 
 GLOBAL_PAD_CHAR = np.nan
 
+def get_backbone_from_full_coords(crds, invert=False):
+    """
+    #TODO Implement corresponding function for angles
+    Given a coordinate tensor that may or may not have a batch dimension,
+    this function returns the same coordinate tensor but excludes all the
+    sidechain coordinates.
+    """
+    mask = np.array([1, 1, 1] + [0] * (NUM_PREDICTED_COORDS - 3), dtype=np.bool)
+    if invert:
+        mask = np.invert(mask)
+    if len(crds.shape) == 2:
+        return crds[:,mask]
+    else:
+        return crds[:,:,mask]
+
+
+def get_sidechain_from_full_coords(crds):
+    """
+    Given a coordinate tensor that may or may not have a batch dimension,
+    this function returns the same coordinate tensor but excludes all the
+    backbone coordinates.
+    """
+    return get_backbone_from_full_coords(crds, invert=True)
+
 
 def parse_astral_summary_file(path):
     """
