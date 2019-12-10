@@ -6,6 +6,7 @@ data/**/*.pdb
 data/**/prev/**
 **/*.pdb
 **/*.cif*
+**/*.pkl
 *.pt
 
 # Local notekeeping and research
