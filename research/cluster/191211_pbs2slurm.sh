@@ -15,6 +15,7 @@
 export PATH=/usr/local/bin:$PATH
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-9.0/lib64/
 #eval "$(cat ~/bin/conda_init.sh)"
+module load anaconda/3
 source /opt/anaconda3/etc/profile.d/conda.sh
 conda activate pytorch-build
 
