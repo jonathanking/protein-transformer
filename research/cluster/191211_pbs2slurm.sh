@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=pt-sweep
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=4
+#SBATCH --gpus=1
+#SBATCH --cpus-per-gpu=4
 #SBATCH --mem=10g
 #SBATCH --time=28-00:00:00
 #SBATCH --partition=dept_gpu
