@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=10g
-#SBATCH --time=28:00:00:00
+#SBATCH --time=28-00:00:00
 #SBATCH --partition=dept_gpu
 
 
@@ -20,7 +20,7 @@ conda activate pytorch-build
 ############################
 ##     Array Job Exec.    ##
 ############################
-cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch-build/bin/$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../research/cluster/191206.txt)"
+cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch-build/bin/$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../research/cluster/191211_test.txt)"
 echo $cmd
 eval $cmd
 
