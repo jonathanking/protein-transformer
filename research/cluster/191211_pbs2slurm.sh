@@ -12,7 +12,8 @@
 ##       Environment      ##
 ############################
 cd $SLURM_SUBMIT_DIR
-module load anaconda/3
+export PATH=/usr/local/bin:$PATH
+export PATH=/opt/anaconda3/bin:$PATH
 export LD_LIBRARY_PATH=LD_LIBRARY_PATH:/usr/local/cuda-9.0/lib64/
 conda activate pytorch-build
 
