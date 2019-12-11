@@ -6,7 +6,7 @@
 #SBATCH --mem=10g
 #SBATCH --time=28-00:00:00
 #SBATCH --partition=dept_gpu
-#SBATH --output="research/cluster/slurm/slurm-%A_%a.out"
+#SBATCH --output="research/cluster/slurm/slurm-%A_%a.out"
 
 
 ############################
