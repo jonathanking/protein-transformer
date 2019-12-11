@@ -20,7 +20,7 @@ conda activate pytorch-build
 ############################
 ##     Array Job Exec.    ##
 ############################
-cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch-build/bin/$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../research/cluster/191211_test.txt)"
+cmd="$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../research/cluster/191211_test.txt)"
 echo $cmd
 eval $cmd
 
