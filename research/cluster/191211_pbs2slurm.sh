@@ -10,29 +10,12 @@
 
 
 ############################
-##       Conda Setup      ##
-############################
-#__conda_setup="$('/net/mahler/opt/anaconda3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
-#if [ $? -eq 0 ]; then
-#   eval "$__conda_setup"
-#else
-#    if [ -f "/net/mahler/opt/anaconda3/etc/profile.d/conda.sh" ]; then
-#        . "/net/mahler/opt/anaconda3/etc/profile.d/conda.sh"
-#    else
-#        export PATH="/net/mahler/opt/anaconda3/bin:$PATH"
-#    fi
-#fi
-#unset __conda_setup
-eval "$(cat ~/bin/conda_init.sh)"
-
-
-############################
 ##       Environment      ##
 ############################
 export PATH=/usr/local/bin:$PATH
 export LD_LIBRARY_PATH=LD_LIBRARY_PATH:/usr/local/cuda-9.0/lib64/
+eval "$(cat ~/bin/conda_init.sh)"
 conda activate pytorch-build
-which python
 
 
 ############################
