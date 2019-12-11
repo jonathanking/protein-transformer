@@ -6,6 +6,7 @@
 #SBATCH --mem=10g
 #SBATCH --time=28-00:00:00
 #SBATCH --partition=dept_gpu
+#SBATH --output="research/cluster/slurm/slurm-%A_%a.out"
 
 
 ############################
@@ -16,6 +17,7 @@ export PATH=/usr/local/bin:$PATH
 export PATH=/opt/anaconda3/bin:$PATH
 export LD_LIBRARY_PATH=LD_LIBRARY_PATH:/usr/local/cuda-9.0/lib64/
 source activate pytorch-build
+echo "$(which python)"
 
 ############################
 ##     Array Job Exec.    ##
