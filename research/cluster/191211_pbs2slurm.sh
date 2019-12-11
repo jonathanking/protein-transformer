@@ -14,13 +14,14 @@
 cd $SLURM_SUBMIT_DIR
 export PATH=/usr/local/bin:$PATH
 export PATH=/opt/anaconda3/bin:$PATH
+conda init bash
 export LD_LIBRARY_PATH=LD_LIBRARY_PATH:/usr/local/cuda-9.0/lib64/
 conda activate pytorch-build
 
 ############################
 ##     Array Job Exec.    ##
 ############################
-cmd="$(sed -n "${SLURM_ARRAY_TASK_ID}p" ../research/cluster/191211_test.txt)"
+cmd="$(sed -n "${SLURM_ARRAY_TASK_ID}p" research/cluster/191211_test.txt)"
 echo $cmd
 eval $cmd
 
