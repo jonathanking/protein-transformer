@@ -15,6 +15,7 @@
 cd $SLURM_SUBMIT_DIR
 export PATH=/usr/local/bin:$PATH
 export PATH=/opt/anaconda3/bin:$PATH
+module load anaconda/3
 export LD_LIBRARY_PATH=LD_LIBRARY_PATH:/usr/local/cuda-9.0/lib64/
 conda activate pytorch-build
 echo "$(which python)"
