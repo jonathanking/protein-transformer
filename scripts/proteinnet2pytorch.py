@@ -284,7 +284,7 @@ def save_data_dict(data):
     Saves a Python dictionary containing all training data to disk via Pickle or PyTorch.
     """
     if not args.out_file:
-        args.out_file = "/home/hth6/Downloads/protein-transformer/data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pt"
+        args.out_file = "data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pt"
     torch.save(data, args.out_file)
     print(f"Data saved to {args.out_file}.")
 
@@ -393,7 +393,7 @@ if __name__ == "__main__":
                     "atom protein structure prediction.")
     parser.add_argument('input_dir', type=str, help='Path to ProteinNet raw records directory.')
     parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.tch file)')
-    parser.add_argument("--pdb_dir", default="/home/hth6/Downloads/pdb/", type=str,
+    parser.add_argument("--pdb_dir", default="~/pdb/", type=str,
                         help="Path for ProDy-downloaded PDB files.")
     parser.add_argument('--training_set', type=int, default=100, help='Which thinning of the training set to parse. '
                                                                       '{30,50,70,90,95,100}. Default 100.')
@@ -402,7 +402,7 @@ if __name__ == "__main__":
     VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
     TRAIN_FILE = f"training_{args.training_set}.pt"
     PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT = None, None, None
-    ASTRAL_FILE = "data/fullDict.txt" # combined previous versions of dir.des.scope.2.xx-stable.txt into one big dict
+    ASTRAL_FILE = "data/proteinnet/dir.des.scope.2.07-stable.txt"#"data/fullDict.txt" # combined previous versions of dir.des.scope.2.xx-stable.txt into one big dict
     ASTRAL_ID_MAPPING = parse_astral_summary_file(ASTRAL_FILE)
     SUFFIX = str(datetime.datetime.today().strftime("%y%m%d")) + f"_{args.training_set}"
     match = re.search(r"casp\d+", args.input_dir, re.IGNORECASE)
