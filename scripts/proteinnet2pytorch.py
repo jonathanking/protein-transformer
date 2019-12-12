@@ -72,19 +72,22 @@ def get_chain_from_trainid(proteinnet_id):
 
     # Continue loading the chain, given the PDB ID
     try:
-        chain = pr.parseCIF(pdbid, chain=chid) # changed pr.parsePDB to pr.parseCIF, removed heirarchal view
-    except AttributeError:
-        PARSING_ERROR_ATTRIBUTE.append(proteinnet_id)
-        return None
-    except pr.proteins.pdbfile.PDBParseError:
-        PARSING_ERROR.append(proteinnet_id)
-        return None
-    except OSError:
-        PARSING_ERROR_OSERROR.append(proteinnet_id)
-        return None
-    except Exception as e:
-        UNKNOWN_EXCEPTIONS.append(str(e) + " " + proteinnet_id)
-        return None
+        chain = pr.parsePDB(pdbid, chain=chid)
+    except:
+        try:
+            chain = pr.parseCIF(pdbid, chain=chid) # changed pr.parsePDB to pr.parseCIF, removed heirarchal view
+        except AttributeError:
+            PARSING_ERROR_ATTRIBUTE.append(proteinnet_id)
+            return None
+        except pr.proteins.pdbfile.PDBParseError:
+            PARSING_ERROR.append(proteinnet_id)
+            return None
+        except OSError:
+            PARSING_ERROR_OSERROR.append(proteinnet_id)
+            return None
+        except Exception as e:
+            UNKNOWN_EXCEPTIONS.append(str(e) + " " + proteinnet_id)
+            return None
 
     if chain is None:
         print(proteinnet_id)
@@ -393,7 +396,7 @@ if __name__ == "__main__":
                     "atom protein structure prediction.")
     parser.add_argument('input_dir', type=str, help='Path to ProteinNet raw records directory.')
     parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.tch file)')
-    parser.add_argument("--pdb_dir", default="~/pdb/", type=str,
+    parser.add_argument("--pdb_dir", default=os.path.expanduser("~/pdb/"), type=str,
                         help="Path for ProDy-downloaded PDB files.")
     parser.add_argument('--training_set', type=int, default=100, help='Which thinning of the training set to parse. '
                                                                       '{30,50,70,90,95,100}. Default 100.')
@@ -402,7 +405,7 @@ if __name__ == "__main__":
     VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
     TRAIN_FILE = f"training_{args.training_set}.pt"
     PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT = None, None, None
-    ASTRAL_FILE = "data/proteinnet/dir.des.scope.2.07-stable.txt"#"data/fullDict.txt" # combined previous versions of dir.des.scope.2.xx-stable.txt into one big dict
+    ASTRAL_FILE = "data/proteinnet/astral_pdb_map.txt"#"data/fullDict.txt" # combined previous versions of dir.des.scope.2.xx-stable.txt into one big dict
     ASTRAL_ID_MAPPING = parse_astral_summary_file(ASTRAL_FILE)
     SUFFIX = str(datetime.datetime.today().strftime("%y%m%d")) + f"_{args.training_set}"
     match = re.search(r"casp\d+", args.input_dir, re.IGNORECASE)
