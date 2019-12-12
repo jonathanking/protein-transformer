@@ -226,8 +226,8 @@ def validate_data_dict(data):
                                        for k in items_recorded])]), f"{subset} lengths don't match."
 
     for split in VALID_SPLITS:
-        valid_len = len(data["valid"][split]["seq"])
-        assert all([l == valid_len for l in map(len, [data["valid"][split][k] for k in ["ang", "ids", "crd"]])]), \
+        valid_len = len(data[f"valid-{split}"]["seq"])
+        assert all([l == valid_len for l in map(len, [data[f"valid-{split}"][k] for k in ["ang", "ids", "crd"]])]), \
             "Valid lengths don't match."
 
 
@@ -242,7 +242,6 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
                       "ang": angle_list_to_sin_cos(train_ang),
                       "ids": train_ids,
                       "crd": train_crd},
-            "valid": {split: dict() for split in VALID_SPLITS},
             "test": {"seq": test_seq,
                      "ang": angle_list_to_sin_cos(test_ang),
                      "ids": test_ids,
@@ -254,10 +253,11 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
             "date": {datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")}}
     max_val_len = 0
     for split, (seq_val, ang_val, crd_val, ids_val) in all_validation_data.items():
-        data["valid"][split]["seq"] = seq_val
-        data["valid"][split]["ang"] = angle_list_to_sin_cos(ang_val)
-        data["valid"][split]["crd"] = crd_val
-        data["valid"][split]["ids"] = ids_val
+        data[f"valid-{split}"] = {}
+        data[f"valid-{split}"]["seq"] = seq_val
+        data[f"valid-{split}"]["ang"] = angle_list_to_sin_cos(ang_val)
+        data[f"valid-{split}"]["crd"] = crd_val
+        data[f"valid-{split}"]["ids"] = ids_val
         max_split_len = max(data["settings"]["max_len"], max(map(len, seq_val)))
         max_val_len = max_split_len if max_split_len > max_val_len else max_val_len
     data["settings"]["max_len"] = max(list(map(len, train_seq + test_seq)) + [max_val_len])

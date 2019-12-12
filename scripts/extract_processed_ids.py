@@ -24,7 +24,10 @@ def extract_ids(d, ids_subset):
         if ang is None:
             continue
         if target_subset == "all":
-            for subset in [new_d["train"], new_d["test"]] + [new_d["valid"][split] for split in VALID_SPLITS]:
+            for title in ["train", "test"] + [f"valid-{split}" for split in VALID_SPLITS]:
+                if "valid" in title:
+                    new_d[title] = {"ang": [], "ids": [], "crd": [], "seq": []}
+                subset = new_d[title]
                 subset["ang"].append(ang)
                 subset["ids"].append(ids)
                 subset["crd"].append(crd)

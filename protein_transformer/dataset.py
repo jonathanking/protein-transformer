@@ -188,9 +188,9 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
 
     valid_loader = torch.utils.data.DataLoader(
         ProteinDataset(
-            seqs=data['valid'][70]['seq'],
-            crds=data['valid'][70]['crd'],
-            angs=data['valid'][70]['ang'],
+            seqs=data['valid-70']['seq'],
+            crds=data['valid-70']['crd'],
+            angs=data['valid-70']['ang'],
             add_sos_eos=args.add_sos_eos,
             sort_by_length=sort_data_by_len,
             reverse_sort=reverse_sort),
