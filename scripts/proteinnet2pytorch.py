@@ -297,7 +297,7 @@ def main():
         os.path.join(args.input_dir, "torch", TRAIN_FILE)), torch.load(
         os.path.join(args.input_dir, "torch", "validation.pt")), torch.load(
         os.path.join(args.input_dir, "torch", "testing.pt"))
-
+    print(len(train_pdb_ids), len(valid_ids), len(test_casp_ids))
     # Download and preprocess all data from PDB IDs
     lim = None
     train_results = []
@@ -349,42 +349,42 @@ def print_failure_summary():
     print(f"{len(NO_PBD_FILE)} ProteinNet IDs failed because no PDB file exists and they probably have .CIF instead.")
 
 
-    with open('newErrors/MISSING_ASTRAL_IDS.txt', 'w') as f:
+    with open('errors/MISSING_ASTRAL_IDS.txt', 'w') as f:
         f.write('\n'.join(MISSING_ASTRAL_IDS))
-    with open('newErrors/FAILED_ASTRAL_IDS.txt', 'w') as f:
+    with open('errors/FAILED_ASTRAL_IDS.txt', 'w') as f:
         f.write('\n'.join(FAILED_ASTRAL_IDS))
-    with open('newErrors/MULTIPLE_CONTIG_ERRORS.txt', 'w') as f:
+    with open('errors/MULTIPLE_CONTIG_ERRORS.txt', 'w') as f:
         f.write('\n'.join(MULTIPLE_CONTIG_ERRORS))
-    with open('newErrors/SEQUENCE_ERRORS.txt', 'w') as f:
+    with open('errors/SEQUENCE_ERRORS.txt', 'w') as f:
         f.write('\n'.join(SEQUENCE_ERRORS))
-    with open('newErrors/NSAA_ERRORS.txt', 'w') as f:
+    with open('errors/NSAA_ERRORS.txt', 'w') as f:
         f.write('\n'.join(NSAA_ERRORS))
-    with open('newErrors/SHORT_ERRORS.txt', 'w') as f:
+    with open('errors/SHORT_ERRORS.txt', 'w') as f:
         f.write('\n'.join(SHORT_ERRORS))
     #Total number of parsing errors, may not be needed
-    with open('newErrors/PARSING_ERRORS.txt', 'w') as f:
+    with open('errors/PARSING_ERRORS.txt', 'w') as f:
         f.write('\n'.join(PARSING_ERRORS))
     #Added to split up the three category of parsing errors, this one handles attribute errors
-    with open('newErrors/PARSING_ERROR_ATTRIBUTE.txt', 'w') as f:
+    with open('errors/PARSING_ERROR_ATTRIBUTE.txt', 'w') as f:
         f.write('\n'.join(PARSING_ERROR_ATTRIBUTE))
     #Added to handle 'regular' parsing errors
-    with open('newErrors/PARSING_ERROR.txt', 'w') as f:
+    with open('errors/PARSING_ERROR.txt', 'w') as f:
         f.write('\n'.join(PARSING_ERROR))
     #Added to handle OS related parsing errors
-    with open('newErrors/PARSING_ERROR_OSERROR.txt', 'w') as f:
+    with open('errors/PARSING_ERROR_OSERROR.txt', 'w') as f:
         f.write('\n'.join(PARSING_ERROR_OSERROR))
 
     #Added for cases where pr.parseCIF returned unknown exception in function get_chain_from_trainid(proteinnet_id)
-    with open('newErrors/UNKNOWN_EXCEPTION.txt', 'w') as f:
+    with open('errors/UNKNOWN_EXCEPTION.txt', 'w') as f:
         f.write('\n'.join(UNKNOWN_EXCEPTIONS))
     #Added for cases where measure_phi_psi_omega or measure_bond_angles fail due to missing atom information
-    with open('newErrors/MISSING_ATOMS_ERRORS.txt', 'w') as f:
+    with open('errors/MISSING_ATOMS_ERRORS.txt', 'w') as f:
         f.write('\n'.join(MISSING_ATOMS_ERROR))
     #Added when chain variable returned 'none' in function get_chain_from_trainid(proteinnet_id)
-    with open('newErrors/NONE_CHAINS.txt', 'w') as f:
+    with open('errors/NONE_CHAINS.txt', 'w') as f:
         f.write('\n'.join(NONE_CHAINS))
     #Added to handle when no PDB file existed for entry
-    with open('newErrors/NO_PDB_FILE.txt', 'w') as f:
+    with open('errors/NO_PDB_FILE.txt', 'w') as f:
         f.write('\n'.join(NO_PBD_FILE))
 
 if __name__ == "__main__":
