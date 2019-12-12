@@ -237,6 +237,10 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
     data as a Python dictionary, which is then saved to disk using torch.save.
     See commit  d1935a0869720f85c00824f3aecbbfc6b947711c for a method that saves all relevant information.
     """
+    # Sort data
+    train_ang, train_seq, train_crd, train_ids = sort_data(train_ang, train_seq, train_crd, train_ids)
+    test_ang, test_seq, test_crd, test_ids = sort_data(test_ang, test_seq, test_crd, test_ids)
+
     # Create a dictionary data structure, using the sin/cos transformed angles
     data = {"train": {"seq": train_seq,
                       "ang": angle_list_to_sin_cos(train_ang),
@@ -254,6 +258,7 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
             "date": {datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")}}
     max_val_len = 0
     for split, (seq_val, ang_val, crd_val, ids_val) in all_validation_data.items():
+        ang_val, seq_val, crd_val, ids_val = sort_data(ang_val, seq_val, crd_val, ids_val)
         data["valid"][split]["seq"] = seq_val
         data["valid"][split]["ang"] = angle_list_to_sin_cos(ang_val)
         data["valid"][split]["crd"] = crd_val
@@ -264,6 +269,21 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
 
     validate_data_dict(data)
     return data
+
+
+def sort_data(angs, seqs, crds, ids):
+    """
+    Sorts inputs by length, with longest first.
+    """
+    sorted_len_indices = [a[0] for a in sorted(enumerate(angs),
+                                               key=lambda x:x[1].shape[0],
+                                               reverse=True)]
+    seqs = [seqs[i] for i in sorted_len_indices]
+    crds = [crds[i] for i in sorted_len_indices]
+    angs = [angs[i] for i in sorted_len_indices]
+    ids = [ids[i] for i in sorted_len_indices]
+
+    return angs, seqs, crds, ids
 
 
 def group_validation_set(vset_ids):
