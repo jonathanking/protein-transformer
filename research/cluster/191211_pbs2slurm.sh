@@ -12,6 +12,7 @@
 ############################
 ##       Environment      ##
 ############################
+source /opt/anaconda3/etc/profile.d/conda.sh
 conda activate pytorch-build
 
 
