@@ -413,7 +413,7 @@ def main():
     saving_args.add_argument('--log_wandb_step', type=int, default=1,
                              help="Frequency of logging to wandb during training.")
     saving_args.add_argument('--no_cuda', action='store_true')
-    saving_args.add_argument('--cluster', action='store_true',
+    saving_args.add_argument('-c', '--cluster', action='store_true',
                              help="Set of parameters to facilitate training on a remote" +
                                   " cluster. Limited I/O, etc.")
     saving_args.add_argument('--restart', action='store_true', help="Does not resume training.")
@@ -478,7 +478,9 @@ def main():
     os.makedirs(structure_path, exist_ok=True)
 
     # Prepare Weights and Biases logging
-    wandb.init(project="protein-transformer", entity="koes-group")
+    wandb_dir = "/src/jok120/wandb" if args.cluster else None
+    os.makedirs(wandb_dir, exist_ok=True)
+    wandb.init(project="protein-transformer", entity="koes-group", dir=wandb_dir)
     wandb.watch(model, "all")
     wandb.config.update(args)
     if type(data["date"]) == set:
