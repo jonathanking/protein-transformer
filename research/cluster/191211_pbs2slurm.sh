@@ -12,7 +12,7 @@
 ############################
 ##       Environment      ##
 ############################
-source /opt/anaconda3/etc/profile.d/conda.sh
+eval "$(conda shell.bash hook)"
 conda activate pytorch-build
 
 
