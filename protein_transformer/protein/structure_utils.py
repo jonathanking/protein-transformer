@@ -7,7 +7,7 @@ import prody as pr
 
 from protein_transformer.protein.structure_exceptions import \
     NonStandardAminoAcidError, IncompleteStructureError, SequenceError, \
-    ContigMultipleMatchingError, ShortStructureError
+    ContigMultipleMatchingError, ShortStructureError, MissingAtomsError
 from .Sidechains import NUM_PREDICTED_ANGLES, SC_DATA, NUM_PREDICTED_COORDS
 
 GLOBAL_PAD_CHAR = np.nan
@@ -49,7 +49,8 @@ def parse_astral_summary_file(path):
         line_items = line.split()
         if line_items[3] == "-":
             continue
-        d[line_items[3]] = (line_items[4], line_items[5])
+        if line_items[3] not in d.keys():
+            d[line_items[3]] = (line_items[4], line_items[5])
     return d
 
 
@@ -61,7 +62,7 @@ def get_chain_from_astral_id(astral_id, d):
     pdbid, chain = d[astral_id]
     assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
     chain, resnums = chain.split(":")
-    a = pr.parsePDB(pdbid, chain=chain)
+    a = pr.parsePDB(pdbid, chain=chain) # TODO maybe change this to CIF?
     if resnums != "":
         if resnums[0] == "-":
             # Ranges with negative numbers must be escaped with ` character
@@ -75,6 +76,7 @@ def get_header_seq_from_astral_id(astral_id, d):
     """
     Attempts to return the sequence associated with a given ASTRAL ID.
     Requires the ASTRAL->PDB/chain mapping dictionary.
+    # TODO might not want to do this anymore, maybe using wrong file/IDs
     """
     pdbid, chain = d[astral_id]
     assert "," not in chain, f"Issue parsing {astral_id} with chain {chain} and pdbid {pdbid}."
@@ -396,7 +398,7 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
 
     # Mask info
     current_contig = ""
-    contigs = []
+    contigs = []  # TODO get rid of contigs, replace with absolutely true seq...Must find ABSOLUTELY TRUE SEQ
 
     for res_id, res in enumerate(all_residues):
         if not res.stdaa:
@@ -440,6 +442,7 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
         print(f"Coords shape {coords_np.shape} does not match len(seq)*13 = "
               f"{len(true_seq) * NUM_PREDICTED_COORDS},\nOBS: {observed_sequence}\nTRU: {true_seq}\n{chain}")
         raise SequenceError
+    # TODO return true sequence and mask here, should have same string length
     return dihedrals_np, coords_np, true_seq
 
 
@@ -472,8 +475,9 @@ def get_bond_angles(res, next_res):
     """
     # First residue angles
     n1, ca1, c1 = tuple(res.select(f"name {a}") for a in ["N", "CA", "C"])
+
     if n1 and ca1 and c1:
-        ncac = pr.calcAngle(n1, ca1, c1, radian=True)[0]
+        ncac = safecalcAngle(n1, ca1, c1, radian=True)
     else:
         ncac = GLOBAL_PAD_CHAR
 
@@ -482,14 +486,27 @@ def get_bond_angles(res, next_res):
         return ncac, GLOBAL_PAD_CHAR, GLOBAL_PAD_CHAR
     n2, ca2 = (next_res.select(f"name {a}") for a in ["N", "CA"])
     if ca1 and c1 and n2:
-        cacn = pr.calcAngle(ca1, c1, n2, radian=True)[0]
+        cacn = safecalcAngle(ca1, c1, n2, radian=True)
     else:
         cacn = GLOBAL_PAD_CHAR
     if c1 and n2 and ca2:
-        cnca = pr.calcAngle(c1, n2, ca2, radian=True)[0]
+        cnca = safecalcAngle(c1, n2, ca2, radian=True)
     else:
         cnca = GLOBAL_PAD_CHAR
     return ncac, cacn, cnca
+
+
+def safecalcAngle(a, b, c, radian):
+    """
+    Calculates the angle between 3 coordinates. If any of them are missing, the
+    function raises a MissingAtomsError.
+    """
+    try:
+        angle = pr.calcAngle(a, b, c, radian=radian)[0]
+    except ValueError:
+        raise MissingAtomsError
+    return angle
+
 
 
 def measure_bond_angles(residue, res_idx, all_res):

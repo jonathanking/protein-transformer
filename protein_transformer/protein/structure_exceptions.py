@@ -1,7 +1,3 @@
-""" Exceptions that may be raised when generating structures or parsing raw
-data. """
-
-
 class IncompleteStructureError(Exception):
     """An exception to raise when a structure is incomplete."""
     def __init__(self, message):
@@ -13,7 +9,7 @@ class NonStandardAminoAcidError(Exception):
     def __init__(self, *args):
         super().__init__(*args)
 
-
+#TODO The one instance where this was called in stucture_utils.py was commented out. May not be needed.
 class MissingBackboneAtomsError(Exception):
     """An exception to raise when a protein backbone is incomplete."""
     def __init__(self, message):
@@ -34,5 +30,11 @@ class ContigMultipleMatchingError(Exception):
 
 class ShortStructureError(Exception):
     """An exception to raise when a sequence too short to be meaningful."""
+    def __init__(self, *args):
+        super().__init__(*args)
+
+
+class MissingAtomsError(Exception):
+    """An exception to raise when a residue is missing atoms and bond angles can't be calculated."""
     def __init__(self, *args):
         super().__init__(*args)
