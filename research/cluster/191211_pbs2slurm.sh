@@ -12,9 +12,6 @@
 ############################
 ##       Environment      ##
 ############################
-#eval "$(cat ~/bin/conda_init.sh)"
-module load anaconda/3
-source /opt/anaconda3/etc/profile.d/conda.sh
 conda activate pytorch-build
 
 
