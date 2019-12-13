@@ -162,9 +162,8 @@ def work(pdbid_chain):
     GLOBAL_PAD_CHARs where there was missing data.
     """
     true_seq = get_proteinnet_seq_from_id(pdbid_chain) # TODO replace this function that returns chain from file w/ seq
-    try:
-        chain = get_chain_from_proteinnetid(pdbid_chain)  # Returns ProDy chain object
-    except NoneStructureError:
+    chain = get_chain_from_proteinnetid(pdbid_chain)  # Returns ProDy chain object
+    if not chain:
         NONE_STRUCTURE_ERRORS.append(pdbid_chain)
         return None
     try:
