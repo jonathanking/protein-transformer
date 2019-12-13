@@ -25,7 +25,10 @@ from protein_transformer.protein.structure_utils import angle_list_to_sin_cos, s
     no_nans_infs_allzeros, parse_astral_summary_file, \
     get_chain_from_astral_id, get_header_seq_from_astral_id, GLOBAL_PAD_CHAR
 import proteinnet_parsing
-from protein_transformer.protein.structure_exceptions import IncompleteStructureError, NonStandardAminoAcidError, SequenceError, ContigMultipleMatchingError, ShortStructureError, MissingAtomsError
+from protein_transformer.protein.structure_exceptions import \
+    IncompleteStructureError, NonStandardAminoAcidError, SequenceError, \
+    ContigMultipleMatchingError, ShortStructureError, MissingAtomsError,\
+    NoneStructureError
 
 
 
@@ -43,6 +46,7 @@ PARSING_ERROR = m.list()
 PARSING_ERROR_OSERROR = m.list()
 UNKNOWN_EXCEPTIONS = m.list()
 MISSING_ATOMS_ERROR = m.list()
+NONE_STRUCTURE_ERRORS = m.list()
 NONE_CHAINS = m.list()
 NO_PBD_FILE = m.list()
 
@@ -158,8 +162,10 @@ def work(pdbid_chain):
     GLOBAL_PAD_CHARs where there was missing data.
     """
     true_seq = get_proteinnet_seq_from_id(pdbid_chain) # TODO replace this function that returns chain from file w/ seq
-    chain = get_chain_from_proteinnetid(pdbid_chain)  # Returns ProDy chain object
-    if chain is None:
+    try:
+        chain = get_chain_from_proteinnetid(pdbid_chain)  # Returns ProDy chain object
+    except NoneStructureError:
+        NONE_STRUCTURE_ERRORS.append(pdbid_chain)
         return None
     try:
         dihedrals_coords_sequence = get_seq_and_masked_coords_and_angles(chain, true_seq)
@@ -350,6 +356,7 @@ def print_failure_summary():
     print(f"{len(MISSING_ATOMS_ERROR)} ProteinNet IDs failed because residues were missing N, CA1, or C atoms.")
     print(f"{len(NONE_CHAINS)} ProteinNet IDs failed because no chain existed.")
     print(f"{len(NO_PBD_FILE)} ProteinNet IDs failed because no PDB file exists and they probably have .CIF instead.")
+    print(f"{len(NONE_STRUCTURE_ERRORS)} ProteinNet IDs failed because chain become `None`.")
 
 
     with open('errors/MISSING_ASTRAL_IDS.txt', 'w') as f:
@@ -389,6 +396,8 @@ def print_failure_summary():
     #Added to handle when no PDB file existed for entry
     with open('errors/NO_PDB_FILE.txt', 'w') as f:
         f.write('\n'.join(NO_PBD_FILE))
+    with open('errors/NONE_STRUCTURE_ERRORS.txt', 'w') as f:
+        f.write('\n'.join(NONE_STRUCTURE_ERRORS))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

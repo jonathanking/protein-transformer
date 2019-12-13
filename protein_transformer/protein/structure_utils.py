@@ -7,7 +7,8 @@ import prody as pr
 
 from protein_transformer.protein.structure_exceptions import \
     NonStandardAminoAcidError, IncompleteStructureError, SequenceError, \
-    ContigMultipleMatchingError, ShortStructureError, MissingAtomsError
+    ContigMultipleMatchingError, ShortStructureError, MissingAtomsError, \
+    NoneStructureError
 from .Sidechains import NUM_PREDICTED_ANGLES, SC_DATA, NUM_PREDICTED_COORDS
 
 GLOBAL_PAD_CHAR = np.nan
@@ -383,7 +384,9 @@ def get_seq_and_masked_coords_and_angles(chain, true_seq):
     i.e. [[phi, psi, omega, ncac, cacn, cnca, chi1, chi2,...chi12],[...] ...]
     """
     chain = chain.select("protein and not hetero")
-    if chain is None or chain.nonstdaa:
+    if chain is None:
+        raise NoneStructureError
+    if chain.nonstdaa:
         raise NonStandardAminoAcidError
     chain = chain.copy()
 

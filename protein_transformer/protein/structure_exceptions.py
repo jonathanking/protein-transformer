@@ -38,3 +38,9 @@ class MissingAtomsError(Exception):
     """An exception to raise when a residue is missing atoms and bond angles can't be calculated."""
     def __init__(self, *args):
         super().__init__(*args)
+
+
+class NoneStructureError(Exception):
+    """An exception to raise when a parsed structure becomes None."""
+    def __init__(self, *args):
+        super().__init__(*args)
