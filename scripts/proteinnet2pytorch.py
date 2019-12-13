@@ -171,6 +171,9 @@ def work(pdbid_chain):
     except NonStandardAminoAcidError:
         NSAA_ERRORS.append(pdbid_chain)
         return None
+    except NoneStructureError:
+        NONE_STRUCTURE_ERRORS.append(pdbid_chain)
+        return None
     except ContigMultipleMatchingError:
         MULTIPLE_CONTIG_ERRORS.append(pdbid_chain)
         return None
