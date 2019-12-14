@@ -209,9 +209,8 @@ def unpack_processed_results(results):
             # PDB failed to download
             continue
         ang, coords, seq, i = r
-        oh = seq_to_onehot(seq)
-        if no_nans_infs_allzeros(oh) and no_nans_infs_allzeros(ang) and no_nans_infs_allzeros(coords):
-            all_ohs.append(oh)
+        if  no_nans_infs_allzeros(ang) and no_nans_infs_allzeros(coords):
+            all_ohs.append(seq)
             all_angs.append(ang)
             all_crds.append(coords)
             all_ids.append(i)
