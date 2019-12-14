@@ -9,6 +9,7 @@ import wandb
 from .dataset import VOCAB
 from .protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 from .protein.Structure import generate_coords
+from .protein.structure_utils import get_backbone_from_full_coords
 
 LNDRMSD_STARTING_VAL = 11
 MSE_STARTING_VAL = 0.45
@@ -47,7 +48,7 @@ def remove_sos_eos_from_input(input_seq):
     return input_seq[start_idx : end_idx]
 
 
-def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True):
+def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, backbone_only=False):
     """
     A version of drmsd loss meant to be used in parallel. Operates on a tuple
     of predicted angles, coordinates, and sequence. Works for 1 protein at a
@@ -64,6 +65,9 @@ def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True):
 
     # Compute coordinates
     pred_crd = angles_to_coords(pred_ang, input_seq)
+    if backbone_only:
+        pred_crd = get_backbone_from_full_coords(pred_crd)
+        true_crd = get_backbone_from_full_coords(true_crd)
 
     # Remove coordinate-level masking for missing atoms
     true_crd_non_nan = torch.isnan(true_crd).eq(0)
@@ -108,7 +112,7 @@ def parallel_coords_only(ang, seq):
 
 
 def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("cpu"), return_rmsd=False,
-                        do_backward=False, retain_graph=False, pool=None):
+                        do_backward=False, retain_graph=False, pool=None, backbone_only=False):
     """
     Calculate DRMSD loss by first generating predicted coordinates from
     angles. Then, predicted coordinates are compared with the true coordinate
@@ -119,10 +123,10 @@ def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("c
 
     # Compute drmsd in parallel over the batch
     if pool is not None:
-        results = pool(delayed(drmsd_work)(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward)
+        results = pool(delayed(drmsd_work)(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward, backbone_only)
                           for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
     else:
-        results = (drmsd_work(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward=do_backward)
+        results = (drmsd_work(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward, backbone_only)
                               for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
 
 

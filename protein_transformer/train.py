@@ -83,7 +83,7 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None):
         m_loss.backward()
 
     elif args.loss == "drmsd":
-        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False, pool=pool)
+        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False, pool=pool, backbone_only=args.backbone_loss)
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
         loss = d_loss
 
@@ -385,6 +385,8 @@ def main():
     training.add_argument("--sort_training_data", type=str, choices=["True", "reverse", "False"], default="False",
                           help="Sort training data by length. True (default) implies ascending order. "
                                "Data should be already sorted in descending order.")
+    training.add_argument('--backbone_loss', action='store_true',
+                          help="While training, only evaluate loss on the backbone.")
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
