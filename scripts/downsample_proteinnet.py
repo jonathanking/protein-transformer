@@ -13,7 +13,7 @@ def down_sample_data(d, n=96):
     This downsizing can be used to make smaller datasets for debugging.
     """
     new_subsets = []
-    for subset in [d["train"], d["test"]] + [d["valid"][split] for split in VALID_SPLITS]:
+    for subset in [d["train"], d["test"]] + [d[f"valid-{split}"] for split in VALID_SPLITS]:
         num_items = len(subset["seq"])
         num_ids = n if num_items > n else num_items
         ids = np.random.choice(np.arange(0, num_items), size=num_ids, replace=False)
@@ -24,8 +24,10 @@ def down_sample_data(d, n=96):
 
         new_subsets.append(new_subset_dict)
     new_d = {"train": new_subsets[0],
-             "test": new_subsets[1],
-             "valid": {split: new_subsets[2 + i] for (i, split) in enumerate(VALID_SPLITS)}}
+             "test": new_subsets[1]}
+    for (i, split) in enumerate(VALID_SPLITS):
+        new_d[f"valid-{split}"] = new_subsets[2 + i]
+
     other_items = {k: v for k, v in d.items() if k not in ["train", "test", "valid"]}
     new_d.update(other_items)
     return new_d
