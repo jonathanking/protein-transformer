@@ -11,15 +11,12 @@
 ##       Environment      ##
 ############################
 cd $PBS_O_WORKDIR
-export PATH=/usr/local/bin:$PATH
-export PATH=/opt/anaconda3/bin:$PATH
-export LD_LIBRARY_PATH=LD_LIBRARY_PATH:/usr/local/cuda-9.0/lib64/
-conda activate pytorch-build
+conda activate pytorch_conda
 
 ############################
 ##     Array Job Exec.    ##
 ############################
-cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch-build/bin/$(sed -n "${PBS_ARRAYID}p" ../research/cluster/191214.txt)"
+cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch_conda/bin/$(sed -n "${PBS_ARRAYID}p" ../research/cluster/191214.txt)"
 echo $cmd
 eval $cmd
 
