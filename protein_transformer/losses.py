@@ -4,6 +4,7 @@ import numpy as np
 import prody as pr
 import torch
 from joblib import Parallel, delayed
+import wandb
 
 from .dataset import VOCAB
 from .protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
@@ -17,9 +18,9 @@ def combine_drmsd_mse(d, mse, w=.5):
     Returns a combination of drmsd and mse loss that first normalizes their
     zscales, and then computes w * drmsd + (1 - w) * mse.
     """
-    d_norm, m_norm = 0.01, 0.3
     d = w * (d / LNDRMSD_STARTING_VAL)
     mse = (1 - w) * (mse / MSE_STARTING_VAL)
+    wandb.log({"MSE Weight": mse, "DRMSD Weight": d}, commit=False)
     return d + mse
 
 
