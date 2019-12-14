@@ -478,7 +478,7 @@ def main():
     os.makedirs(structure_path, exist_ok=True)
 
     # Prepare Weights and Biases logging
-    wandb_dir = "/src/jok120/wandb" if args.cluster else None
+    wandb_dir = "/scr/jok120/wandb" if args.cluster else None
     os.makedirs(wandb_dir, exist_ok=True)
     wandb.init(project="protein-transformer", entity="koes-group", dir=wandb_dir)
     wandb.watch(model, "all")
