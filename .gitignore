@@ -19,6 +19,7 @@ research/analysis/**/*.svg
 research/analysis/**/*.pse
 research/notebooks/**/figs/*.pdf
 scripts/proteinnet_failed_ids/**
+errors/
 
 # Model files
 data/checkpoints/**
