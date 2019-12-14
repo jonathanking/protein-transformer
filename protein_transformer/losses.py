@@ -175,13 +175,6 @@ def mse_over_angles_numpy(pred, true):
 
     Returns:
         MSE loss between true and pred.
-
-    Examples:
-        >>> a, b = np.random.rand(8,30,24), np.random.rand(8,30,24)
-        >>> at, bt = torch.tensor(a), torch.tensor(b)
-        >>> mse_over_angles(at, bt) - mse_over_angles_numpy(at, bt) < 1e-6
-        True
-
     """
 
     ang_non_zero = (true != 0).any(axis=2)

@@ -14,6 +14,13 @@ def test_mse_loss():
     assert mse_over_angles(a, b) == 0
 
 
+def test_mse_loss2():
+    a = np.zeros((8,10,24))
+    b = a - .1
+    assert mse_over_angles_numpy(a, b) == approx(0.01)
+
+
+
 def test_pairwise_internal_dist():
     a = np.asarray([[0,0,0],
                     [0,1,0],
