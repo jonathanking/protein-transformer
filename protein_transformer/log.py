@@ -28,20 +28,15 @@ def print_train_batch_status(args, items):
     lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling == "noam" else ""
     speed_avg = np.mean(metrics["train"]["speeds"])
 
-    if args.cluster:
-        print('Loss = {0:.6f}{1}, res/s={speed:.0f}'.format(
-            float(loss),
-            lr_string,
-            speed=speed_avg))
-    else:
-        pbar.set_description('\r  - (Train) drmsd={drmsd:.2f}, lndrmsd={lnd:0.7f}, rmse={rmse:.4f},'
-                             ' c={comb:.2f}{lr}, res/s={speed:.0f}'.format(
-            drmsd=float(train_drmsd_loss),
-            lr=lr_string,
-            rmse=np.sqrt(float(train_mse_loss)),
-            comb=float(train_comb_loss),
-            lnd=metrics["train"]["batch-ln-drmsd"],
-            speed=speed_avg))
+
+    pbar.set_description('\r  - (Train) drmsd={drmsd:.2f}, lndrmsd={lnd:0.7f}, rmse={rmse:.4f},'
+                         ' c={comb:.2f}{lr}, res/s={speed:.0f}'.format(
+        drmsd=float(train_drmsd_loss),
+        lr=lr_string,
+        rmse=np.sqrt(float(train_mse_loss)),
+        comb=float(train_comb_loss),
+        lnd=metrics["train"]["batch-ln-drmsd"],
+        speed=speed_avg))
 
 
 def print_eval_batch_status(args, items):
@@ -50,12 +45,11 @@ def print_eval_batch_status(args, items):
     Will only be seen if using a progress bar. Otherwise, there is no information logged.
     """
     pbar, d_loss, mode, m_loss, c_loss = items
-    if not args.cluster:
-        pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
-            float(d_loss),
-            mode,
-            np.sqrt(float(m_loss)),
-            float(c_loss)))
+    pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
+        float(d_loss),
+        mode,
+        np.sqrt(float(m_loss)),
+        float(c_loss)))
 
 
 def print_end_of_epoch_status(mode, items):

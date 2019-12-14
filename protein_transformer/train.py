@@ -36,7 +36,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     """
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
-    batch_iter = tqdm(training_data, leave=False, unit="batch", dynamic_ncols=True) if not args.cluster else training_data
+    batch_iter = tqdm(training_data, leave=False, unit="batch", dynamic_ncols=True)
 
     for step, batch in enumerate(batch_iter):
         optimizer.zero_grad()
@@ -103,8 +103,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     """
     model.eval()
     metrics = reset_metrics_for_epoch(metrics, mode)
-    batch_iter = tqdm(validation_data, mininterval=.5, leave=False, unit="batch", dynamic_ncols=True) \
-        if not args.cluster else validation_data
+    batch_iter = tqdm(validation_data, mininterval=.5, leave=False, unit="batch", dynamic_ncols=True)
 
     if args.loss == "mse" and mode == "train":
         d_loss, ln_d_loss, r_loss = torch.tensor(0.), torch.tensor(0.), torch.tensor(0.)
