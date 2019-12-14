@@ -11,16 +11,16 @@ from .protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 from .protein.Structure import generate_coords
 from .protein.structure_utils import get_backbone_from_full_coords
 
-LNDRMSD_STARTING_VAL = 11
-MSE_STARTING_VAL = 0.45
+LNDRMSD_TARGET_VAL = 0.02
+MSE_TARGET_VAL = 0.01
 
 def combine_drmsd_mse(d, mse, w=.5):
     """
     Returns a combination of drmsd and mse loss that first normalizes their
     zscales, and then computes w * drmsd + (1 - w) * mse.
     """
-    d = w * (d / LNDRMSD_STARTING_VAL)
-    mse = (1 - w) * (mse / MSE_STARTING_VAL)
+    d = w * (d / LNDRMSD_TARGET_VAL)
+    mse = (1 - w) * (mse / MSE_TARGET_VAL)
     wandb.log({"MSE Weight": mse, "DRMSD Weight": d}, commit=False)
     return d + mse
 
