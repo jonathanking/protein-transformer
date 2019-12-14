@@ -346,7 +346,9 @@ def main():
                              "Transformer paper.")
     training.add_argument('-cg', '--clip', type=float, default=1, help="Gradient clipping value.")
     training.add_argument('-l', '--loss', choices=["mse", "drmsd", "ln-drmsd", "combined"], default="combined",
-                        help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based root mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combinaation of RMSE and ln-DRMSD.")
+                        help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based root "
+                             "mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combinaation of "
+                             "RMSE and ln-DRMSD.")
     training.add_argument('--train_only', action='store_true',
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
     training.add_argument('--lr_scheduling', type=str, choices=['noam', 'plateau'], default='plateau',
