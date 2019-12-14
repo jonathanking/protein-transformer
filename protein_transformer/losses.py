@@ -176,11 +176,7 @@ def mse_over_angles_numpy(pred, true):
     Returns:
         MSE loss between true and pred.
     """
-
-    ang_non_zero = (true != 0).any(axis=2)
-    tgt_ang_non_zero = true[ang_non_zero]
-    ang_non_nans = np.isfinite(tgt_ang_non_zero)
-    return np.mean((pred[ang_non_zero][ang_non_nans] - true[ang_non_zero][ang_non_nans])**2)
+    return mse_over_angles(torch.tensor(pred), torch.tensor(true)).numpy()
 
 
 def pairwise_internal_dist(x):
