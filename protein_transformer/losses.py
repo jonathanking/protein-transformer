@@ -3,7 +3,6 @@
 import numpy as np
 import prody as pr
 import torch
-import torch.multiprocessing as multiprocessing
 from joblib import Parallel, delayed
 
 from .dataset import VOCAB
@@ -192,30 +191,38 @@ def mse_over_angles_numpy(pred, true):
 
 
 def pairwise_internal_dist(x):
-    """
+    """ Returns all pairwise distances between points in a coordinate tensor.
+
     An implementation of cdist (pairwise distances between sets of vectors)
     from user jacobrgardner on github. Not implemented for batches.
-
     https://github.com/pytorch/pytorch/issues/15253
+
+    Args:
+        x (torch.Tensor): coordinate tensor with shape (L x 3)
+
+    Returns:
+        res (torch.Tensor): a distance tensor comparing all (L x L) pairs of
+                            points
     """
     x1, x2 = x, x
     assert len(x1.shape) == 2, "Pairwise internal distance method is not " \
                                "implemented for batches."
     x1_norm = x1.pow(2).sum(dim=-1, keepdim=True)  # TODO: experiment with alternative to pow, remove duplicated norm
-    x2_norm = x1_norm
-    res = torch.addmm(x2_norm.transpose(-2, -1), x1, x2.transpose(-2, -1), alpha=-2).add_(x1_norm)
+    res = torch.addmm(x1_norm.transpose(-2, -1), x1, x2.transpose(-2, -1), alpha=-2).add_(x1_norm)
     res = res.clamp_min_(1e-30).sqrt_()
     return res
 
 
-def drmsd(a, b):
+def drmsd(a, b, truncate_dist_matrix=True):
     """ Returns distance root-mean-squared-deviation between tensors a and b.
 
     Given 2 coordinate tensors, returns the dRMSD between them. Both
     tensors must be the exact same shape.
 
     Args:
-        a, b (torch.Tensor): coordinate tensor with shape (L x 3)
+        a, b (torch.Tensor): coordinate tensor with shape (L x 3).
+        truncate_dist_matrix (bool): If False, only count each interatomic
+            distance once.
 
     Returns:
         res (torch.Tensor): DRMSD between a and b.
@@ -224,13 +231,11 @@ def drmsd(a, b):
     a_ = pairwise_internal_dist(a)
     b_ = pairwise_internal_dist(b)
 
-    num_elems = a_.shape[0]
-    num_elems = num_elems * (num_elems - 1)
-
-    sq_diff = (a_ - b_) ** 2
-    summed = sq_diff.sum()
-    mean = summed / num_elems
-    res = mean.sqrt()
+    if truncate_dist_matrix:
+        i = torch.triu_indices(a_.shape[0], a_.shape[1], offset=1)
+        res = torch.norm(a_[i[0], i[1]] - b_[i[0], i[1]])
+    else:
+        res = torch.norm(a_ - b_)
 
     return res
 
