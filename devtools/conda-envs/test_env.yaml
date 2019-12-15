@@ -13,6 +13,7 @@ dependencies:
   - cpuonly
   - scipy
   - joblib
+  - wandb
 
 
     # Testing
