@@ -13,7 +13,6 @@ dependencies:
   - cpuonly
   - scipy
   - joblib
-  - wandb
 
 
     # Testing
@@ -26,4 +25,5 @@ dependencies:
   #  - codecov
   - pip :
       - ProDy
+      - wandb
 
