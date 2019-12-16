@@ -230,9 +230,13 @@ def drmsd(a, b, truncate_dist_matrix=True):
 
     if truncate_dist_matrix:
         i = torch.triu_indices(a_.shape[0], a_.shape[1], offset=1)
-        res = torch.norm(a_[i[0], i[1]] - b_[i[0], i[1]])
+        mse = torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float())
+        res = torch.sqrt(mse)
     else:
-        res = torch.norm(a_ - b_)
+        # TODO remove this option for distance matrix norm
+        mse = torch.nn.functional.mse_loss(a_.float(),
+                                           b_.float())
+        res = torch.sqrt(mse)
 
     return res
 

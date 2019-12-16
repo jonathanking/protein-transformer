@@ -118,7 +118,8 @@ def test_drmsd_value_symmetric_distances(a, b):
             b_dists.append(np.linalg.norm(c1 - c2))
     a_dists, b_dists = np.asarray(a_dists), np.asarray(b_dists)
 
-    expected_drmsd = np.linalg.norm(a_dists - b_dists)
+    mse = ((a_dists - b_dists) ** 2).mean()
+    expected_drmsd = np.sqrt(mse)
 
     assert drmsd(torch.tensor(a), torch.tensor(b), truncate_dist_matrix=False).item() == approx(expected_drmsd)
 
@@ -172,8 +173,8 @@ def test_drmsd_value_nonsymmetric_distances(a, b):
                 b_dists.append(np.linalg.norm(c1 - c2))
 
     a_dists, b_dists = np.asarray(a_dists), np.asarray(b_dists)
-
-    expected_drmsd = np.linalg.norm(a_dists - b_dists)
+    mse = ((a_dists - b_dists)**2).mean()
+    expected_drmsd = np.sqrt(mse)
 
     assert drmsd(torch.tensor(a), torch.tensor(b),
                  truncate_dist_matrix=True).item() == approx(expected_drmsd)
