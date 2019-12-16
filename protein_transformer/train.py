@@ -129,10 +129,11 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     return metrics
 
 
-def train(model, metrics, training_data, validation_data, test_data, optimizer, device, args, log_writer, scheduler):
+def train(model, metrics, training_data, validation_datasets, test_data, optimizer, device, args, log_writer, scheduler):
     """
     Model training control loop.
     """
+
     drmsd_worker_pool = Parallel(min(torch.multiprocessing.cpu_count(), args.batch_size))
     for epoch_i in range(START_EPOCH, args.epochs):
         print(f'[ Epoch {epoch_i} ]')
@@ -147,10 +148,11 @@ def train(model, metrics, training_data, validation_data, test_data, optimizer, 
 
         # Valid epoch
         if not args.train_only:
-            start = time.time()
-            metrics = eval_epoch(model, validation_data, device, args, metrics, pool=drmsd_worker_pool)
-            print_end_of_epoch_status("valid", (start, metrics))
-            log_batch(log_writer, metrics, START_TIME, mode="valid", end_of_epoch=True)
+            for split, validation_data in validation_datasets.items():
+                start = time.time()
+                metrics = eval_epoch(model, validation_data, device, args, metrics, pool=drmsd_worker_pool, mode=f"valid-{split}")
+                print_end_of_epoch_status(f"valid-{split}", (start, metrics))
+                log_batch(log_writer, metrics, START_TIME, mode=f"valid-{split}", end_of_epoch=True)
 
         # Update LR
         if scheduler:
@@ -209,7 +211,7 @@ def checkpoint_model(args, optimizer, model, metrics, epoch_i, scheduler):
     torch.save(checkpoint, chkpt_file_name)
     wandb.save(chkpt_file_name)
     if not args.train_only:
-        wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid"]["speed-history"])
+        wandb.run.summary["avg_evaluation_speed"] = np.mean(metrics["valid-70"]["speed-history"])
     wandb.run.summary["avg_training_speed"] = np.mean(metrics["train"]["speed-history"])
     metrics["last_chkpt_time"] = time.time()
     print('\r    - [Info] The checkpoint file has been updated.')
@@ -359,7 +361,7 @@ def main():
                           help="Threshold for considering improvements during training/lr scheduling.")
     training.add_argument('-esm', '--early_stopping_metric',
                           choices=[f"{mode}-{metric}" for metric in ["mse", "drmsd", "ln-drmsd", "combined"]
-                                   for mode in ["train", "test", "valid"]], default="train-mse",
+                                   for mode in ["train", "test"] + [f"valid-{split}" for split in VALID_SPLITS]], default="train-mse",
                           help="Metric observed for early stopping and LR scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
@@ -442,7 +444,7 @@ def main():
     args.add_sos_eos = args.model == "enc-dec"
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
-    training_data, validation_data, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
+    training_data, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
@@ -503,7 +505,7 @@ def main():
     del data
 
     # Begin training
-    train(model, metrics, training_data, validation_data, test_data, optimizer,
+    train(model, metrics, training_data, validation_datasets, test_data, optimizer,
           device, args, log_writer, scheduler)
     log_f.close()
 

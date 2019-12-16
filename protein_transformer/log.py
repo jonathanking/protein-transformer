@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import wandb
 
-from .dataset import VOCAB
+from .dataset import VOCAB, VALID_SPLITS
 from .protein.PDB_Creator import PDB_Creator
 from .losses import angles_to_coords, inverse_trig_transform
 
@@ -244,10 +244,6 @@ def init_metrics(args):
                          "epoch-history-combined": [],
                          "epoch-history-ln-drmsd": [],
                          "epoch-history-mse": []},
-               "valid": {"epoch-history-drmsd": [],
-                         "epoch-history-combined": [],
-                         "epoch-history-ln-drmsd": [],
-                         "epoch-history-mse": []},
                "test":  {"epoch-history-drmsd": [],
                          "epoch-history-combined": [],
                          "epoch-history-ln-drmsd": [],
@@ -258,6 +254,13 @@ def init_metrics(args):
                "last_chkpt_time": time.time(),
                "n_batches": 0
                }
+    v_metrics = {}
+    for split in VALID_SPLITS:
+        v_metrics[f"valid-{split}"] = {"epoch-history-drmsd": [],
+                                       "epoch-history-combined": [],
+                                       "epoch-history-ln-drmsd": [],
+                                       "epoch-history-mse": []}
+    metrics.update(v_metrics)
     if args.lr_scheduling != "noam":
         metrics["history-lr"] = [0]
     return metrics

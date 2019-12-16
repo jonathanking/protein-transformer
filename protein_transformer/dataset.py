@@ -3,6 +3,7 @@ import torch
 import torch.utils.data
 
 from .protein.Sidechains import NUM_PREDICTED_COORDS
+VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
 
 
 def make_paired_collate_fn_with_max_len(max_seq_len):
@@ -186,18 +187,21 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
         collate_fn=collate,
         shuffle=not sort_data_by_len)
 
-    valid_loader = torch.utils.data.DataLoader(
-        ProteinDataset(
-            seqs=data['valid-70']['seq'],
-            crds=data['valid-70']['crd'],
-            angs=data['valid-70']['ang'],
-            add_sos_eos=args.add_sos_eos,
-            sort_by_length=sort_data_by_len,
-            reverse_sort=reverse_sort),
-        num_workers=num_workers,
-        batch_size=args.batch_size,
-        collate_fn=collate,
-        worker_init_fn=_init_fn)
+    valid_loaders = {}
+    for split in VALID_SPLITS:
+        valid_loader = torch.utils.data.DataLoader(
+            ProteinDataset(
+                seqs=data[f'valid-{split}']['seq'],
+                crds=data[f'valid-{split}']['crd'],
+                angs=data[f'valid-{split}']['ang'],
+                add_sos_eos=args.add_sos_eos,
+                sort_by_length=sort_data_by_len,
+                reverse_sort=reverse_sort),
+            num_workers=num_workers,
+            batch_size=args.batch_size,
+            collate_fn=collate,
+            worker_init_fn=_init_fn)
+        valid_loaders[split] = valid_loader
 
     test_loader = torch.utils.data.DataLoader(
         ProteinDataset(
@@ -212,6 +216,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
         collate_fn=collate,
         worker_init_fn=_init_fn)
 
-    return train_loader, valid_loader, test_loader
+    return train_loader, valid_loaders, test_loader
 
 VOCAB = ProteinVocabulary()
+# TODO remove creation of VOCAB by default
