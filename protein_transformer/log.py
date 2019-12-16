@@ -210,7 +210,7 @@ def do_eval_epoch_logging(metrics, mode):
     """
     metrics = update_metrics_end_of_epoch(metrics, mode)
 
-    do_commit = mode != "train"
+    do_commit = mode == f"valid-{VALID_SPLITS[-1]}" or mode == "test"
     wandb.log({f"{mode.title()} Epoch RMSE": np.sqrt(metrics[mode]["epoch-mse"]),
                f"{mode.title()} Epoch RMSD": metrics[mode]["epoch-rmsd"],
                f"{mode.title()} Epoch DRMSD": metrics[mode]["epoch-drmsd"],
