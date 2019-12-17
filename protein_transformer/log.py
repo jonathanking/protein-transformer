@@ -252,10 +252,8 @@ def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metr
     t_creator.save_pdb(f"../data/logs/structures/{args.name}_true.pdb", title="true")
     t_creator.save_gltfs(f"../data/logs/structures/{args.name}_true.pdb",
                          f"../data/logs/structures/{args.name}_pred.pdb",
-                         make_pse=True, upload_pse=True, structure_idx=metrics["structure_idx"])
+                         make_pse=True, upload_pse=True)
     wandb.log({"structure_comparison": wandb.Object3D(f"../data/logs/structures/{args.name}_true_pred.gltf")}, commit=commit)
-
-    metrics["structure_idx"] += 1
 
 
 def init_metrics(args):
@@ -274,8 +272,7 @@ def init_metrics(args):
                "epoch_last_improved": -1,
                "best_valid_loss_so_far": np.inf,
                "last_chkpt_time": time.time(),
-               "n_batches": 0,
-               "structure_idx": 0
+               "n_batches": 0
                }
     v_metrics = {}
     for split in VALID_SPLITS:
