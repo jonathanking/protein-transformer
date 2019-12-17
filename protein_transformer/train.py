@@ -37,7 +37,6 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
     batch_iter = tqdm(training_data, leave=False, unit="batch", dynamic_ncols=True)
-    n_batches = len(batch_iter)
 
     for step, batch in enumerate(batch_iter):
         optimizer.zero_grad()
@@ -56,7 +55,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
 
         # Record performance metrics
         metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
-                               log_writer, batch_iter, START_TIME, pred, tgt_crds[-1], step, commit=step != n_batches-1)
+                               log_writer, batch_iter, START_TIME, pred, tgt_crds[-1], step)
 
     metrics = update_metrics_end_of_epoch(metrics, "train")
 

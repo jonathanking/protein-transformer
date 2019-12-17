@@ -126,7 +126,7 @@ def log_batch(log_writer, metrics, start_time,  mode="valid", end_of_epoch=False
 
 
 def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer, pbar,
-                           start_time, pred_angs, tgt_coords, step, commit=True):
+                           start_time, pred_angs, tgt_coords, step):
     """
     Performs all necessary logging at the end of a batch in the training epoch.
     Updates custom metrics dictionary and wandb logs. Prints status of training.
@@ -153,11 +153,11 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
                    "Train Batch DRMSD": d_loss,
                    "Train Batch ln-DRMSD": ln_d_loss,
                    "Train Batch Combined Loss": c_loss,
-                   "Train Batch Speed": metrics["train"]["speed"]}, commit=not do_log_lr and not do_log_str and commit)
+                   "Train Batch Speed": metrics["train"]["speed"]}, commit=not do_log_lr and not do_log_str)
     if args.lr_scheduling == "noam":
         metrics["history-lr"].append(optimizer.cur_lr)
         if not step or step % args.log_wandb_step  == 0:
-            wandb.log({"Learning Rate": optimizer.cur_lr}, commit=not do_log_str and commit)
+            wandb.log({"Learning Rate": optimizer.cur_lr}, commit=not do_log_str)
 
     log_batch(log_writer, metrics, start_time, mode="train", end_of_epoch=False)
     print_train_batch_status(args, (pbar, metrics, src_seq))
@@ -171,7 +171,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
         with torch.no_grad():
             pred_coords = angles_to_coords(inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                                            remove_batch_padding=True)
-        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], metrics, commit=commit)
+        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], metrics, commit=True)
     return metrics
 
 
@@ -217,7 +217,7 @@ def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
             pred_coords = angles_to_coords(
                 inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                 remove_batch_padding=True)
-        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], metrics, commit=True)
+        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], metrics, commit=False)
     return metrics
 
 
@@ -228,12 +228,11 @@ def do_eval_epoch_logging(metrics, mode):
     """
     metrics = update_metrics_end_of_epoch(metrics, mode)
 
-    do_commit = mode == f"valid-{VALID_SPLITS[-1]}" or mode == "test"
     wandb.log({f"{mode.title()} Epoch RMSE": np.sqrt(metrics[mode]["epoch-mse"]),
                f"{mode.title()} Epoch RMSD": metrics[mode]["epoch-rmsd"],
                f"{mode.title()} Epoch DRMSD": metrics[mode]["epoch-drmsd"],
                f"{mode.title()} Epoch ln-DRMSD": metrics[mode]["epoch-ln-drmsd"],
-               f"{mode.title()} Epoch Combined Loss": metrics[mode]["epoch-combined"]}, commit=do_commit)
+               f"{mode.title()} Epoch Combined Loss": metrics[mode]["epoch-combined"]}, commit=False)
 
 
 def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metrics, commit):
