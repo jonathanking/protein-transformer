@@ -11,7 +11,7 @@ from .protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 from .protein.Structure import generate_coords
 from .protein.structure_utils import get_backbone_from_full_coords
 
-LNDRMSD_TARGET_VAL = 5
+LNDRMSD_TARGET_VAL = 0.02
 MSE_TARGET_VAL = 0.01
 
 def combine_drmsd_mse(d, mse, w=.5, log=True):
