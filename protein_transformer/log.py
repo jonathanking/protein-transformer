@@ -171,8 +171,26 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
         with torch.no_grad():
             pred_coords = angles_to_coords(inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                                            remove_batch_padding=True)
-        log_structure(args, pred_coords, tgt_coords, src_seq[-1])
+        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], metrics)
     return metrics
+
+
+def log_angle_distributions(args, pred_ang, src_seq):
+    """ Logs a histogram of predicted angles to wandb. """
+    # Remove batch-level masking
+    batch_mask = src_seq.ne(VOCAB.pad_id)
+    pred_ang = pred_ang[batch_mask]
+    inv_ang = inverse_trig_transform(pred_ang.view(1, pred_ang.shape[0], -1)).cpu().detach().numpy()
+    pred_ang = pred_ang.cpu().detach().numpy()
+
+    wandb.log({"Predicted Angles (sin cos)": wandb.Histogram(np_histogram=np.histogram(pred_ang)),
+               "Predicted Angles (radians)": wandb.Histogram(np_histogram=np.histogram(inv_ang))}, commit=False)
+
+    for sincos_idx in range(pred_ang.shape[-1]):
+        wandb.log({f"Predicted Angles (sin cos) - {sincos_idx:02}": wandb.Histogram(np_histogram=np.histogram(pred_ang[:,sincos_idx]))}, commit=False)
+
+    for rad_idx in range(inv_ang.shape[-1]):
+        wandb.log({f"Predicted Angles (radians) - {rad_idx:02}": wandb.Histogram(np_histogram=np.histogram(inv_ang[0,:,rad_idx]))}, commit=False)
 
 
 def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq,  args,  pbar,
@@ -199,7 +217,7 @@ def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
             pred_coords = angles_to_coords(
                 inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                 remove_batch_padding=True)
-        log_structure(args, pred_coords, tgt_coords, src_seq[-1])
+        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], metrics)
     return metrics
 
 
@@ -218,11 +236,13 @@ def do_eval_epoch_logging(metrics, mode):
                f"{mode.title()} Epoch Combined Loss": metrics[mode]["epoch-combined"]}, commit=do_commit)
 
 
-def log_structure(args, pred_coords, gold_item, src_seq):
+def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metrics):
     """
     Logs a 3D structure prediction to wandb.
     # TODO save PDB files with numbers in addition to just GLTF files
     """
+    log_angle_distributions(args, pred_ang, src_seq)
+
     gold_item_non_batch_pad = (gold_item != VOCAB.pad_id).any(dim=-1)
     gold_item = gold_item[gold_item_non_batch_pad]
     creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
@@ -231,9 +251,13 @@ def log_structure(args, pred_coords, gold_item, src_seq):
     gold_item[torch.isnan(gold_item)] = 0
     t_creator = PDB_Creator(gold_item.cpu().detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
     t_creator.save_pdb(f"../data/logs/structures/{args.name}_true.pdb", title="true")
-    t_creator.save_gltfs(f"../data/logs/structures/{args.name}_true.pdb", f"../data/logs/structures/{args.name}_pred.pdb")
+    t_creator.save_gltfs(f"../data/logs/structures/{args.name}_true.pdb",
+                         f"../data/logs/structures/{args.name}_pred.pdb",
+                         make_pse=True, upload_pse=True, structure_idx=metrics["structure_idx"])
     wandb.log({"structure_comparison": wandb.Object3D(f"../data/logs/structures/{args.name}_true_pred.gltf")}, commit=False)
     wandb.log({"structure_prediction": wandb.Object3D(f"../data/logs/structures/{args.name}_pred.gltf")}, commit=True)
+
+    metrics["structure_idx"] += 1
 
 
 def init_metrics(args):
@@ -252,7 +276,8 @@ def init_metrics(args):
                "epoch_last_improved": -1,
                "best_valid_loss_so_far": np.inf,
                "last_chkpt_time": time.time(),
-               "n_batches": 0
+               "n_batches": 0,
+               "structure_idx": 0
                }
     v_metrics = {}
     for split in VALID_SPLITS:
