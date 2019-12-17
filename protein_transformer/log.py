@@ -187,10 +187,12 @@ def log_angle_distributions(args, pred_ang, src_seq):
                "Predicted Angles (radians)": wandb.Histogram(np_histogram=np.histogram(inv_ang))}, commit=False)
 
     for sincos_idx in range(pred_ang.shape[-1]):
-        wandb.log({f"Predicted Angles (sin cos) - {sincos_idx:02}": wandb.Histogram(np_histogram=np.histogram(pred_ang[:,sincos_idx]))}, commit=False)
+        wandb.log({f"Predicted Angles (sin cos) - {sincos_idx:02}":
+                       wandb.Histogram(np_histogram=np.histogram(pred_ang[:,sincos_idx]))}, commit=False)
 
     for rad_idx in range(inv_ang.shape[-1]):
-        wandb.log({f"Predicted Angles (radians) - {rad_idx:02}": wandb.Histogram(np_histogram=np.histogram(inv_ang[0,:,rad_idx]))}, commit=False)
+        wandb.log({f"Predicted Angles (radians) - {rad_idx:02}":
+                       wandb.Histogram(np_histogram=np.histogram(inv_ang[0,:,rad_idx]))}, commit=False)
 
 
 def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq,  args,  pbar,
@@ -238,7 +240,6 @@ def do_eval_epoch_logging(metrics, mode):
 def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metrics, commit):
     """
     Logs a 3D structure prediction to wandb.
-    # TODO save PDB files with numbers in addition to just GLTF files
     """
     log_angle_distributions(args, pred_ang, src_seq)
 
@@ -252,7 +253,8 @@ def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metr
     t_creator.save_gltfs(f"{wandb.run.dir}/structures/{args.name}_true.pdb",
                          f"{wandb.run.dir}/structures/{args.name}_pred.pdb",
                          make_pse=True)
-    wandb.log({"structure_comparison": wandb.Object3D(f"{wandb.run.dir}/structures/{args.name}_true_pred.gltf")}, commit=commit)
+    wandb.log({"structure_comparison": wandb.Object3D(f"{wandb.run.dir}/structures/{args.name}_true_pred.gltf")},
+              commit=commit)
 
 
 def init_metrics(args):
