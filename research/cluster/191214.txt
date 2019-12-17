@@ -1,4 +1,5 @@
 python train.py ../data/proteinnet/casp12_191101_100.pt 1024layers12dropout-tracktrain-fulldata -dm 1024 -nl 12 -m enc-only -l mse --log_structure_step 250 -b 4 -lr 0.0001 -e 500 --eval_train --dropout 0.1 -esm train-mse -c
 python train.py ../data/proteinnet/casp12_191101_100.pt 2048dropout-tracktrain-fulldata -dm 2048 -m enc-only -l mse --log_structure_step 250 -b 16 -lr 0.0001 -e 500 --eval_train --dropout 0.1 -esm train-mse -c
 python train.py ../data/proteinnet/casp12_191214_100.pt 2048dropout-trackmse-combinedrev -dm 2048 -m enc-only -l combined --log_structure_step 25 -b 16 -lr 0.0001 -e 500 --eval_train --dropout 0.1 -esm train-combined
+python train.py ../data/proteinnet/casp12_191214_100.pt 1024dropout-drmsdrev -dm 1024 -m enc-only -l drmsd --log_structure_step 250 -b 16 -lr 0.001 -e 500 --eval_train --dropout 0.1 -esm train-drmsd
 
