@@ -261,7 +261,7 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
                          "pad_char": GLOBAL_PAD_CHAR},
             "description": {f"ProteinNet {CASP_VERSION.upper()}"},
             # To parse date later, use datetime.datetime.strptime(date, "%I:%M%p on %B %d, %Y")
-            "date": {datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")}}
+            "date": datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")}
     max_val_len = 0
     for split, (seq_val, ang_val, crd_val, ids_val) in all_validation_data.items():
         ang_val, seq_val, crd_val, ids_val = sort_data(ang_val, seq_val, crd_val, ids_val)
