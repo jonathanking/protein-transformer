@@ -72,7 +72,8 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None):
     m_loss = mse_over_angles(pred, tgt_ang)
 
     if args.loss == "ln-drmsd":
-        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False, pool=pool)
+        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False,
+                                                pool=pool, backbone_only=args.backbone_loss)
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
         loss = ln_d_loss
 
@@ -83,13 +84,15 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None):
         m_loss.backward()
 
     elif args.loss == "drmsd":
-        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False, pool=pool, backbone_only=args.backbone_loss)
+        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False,
+                                                pool=pool, backbone_only=args.backbone_loss)
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
         loss = d_loss
 
     else:
         # Combined loss
-        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=True, pool=pool)
+        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=True, pool=pool,
+                                                backbone_only=args.backbone_loss)
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
         loss = c_loss
         c_loss.backward()
