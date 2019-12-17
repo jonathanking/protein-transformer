@@ -245,14 +245,14 @@ def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metr
     gold_item_non_batch_pad = (gold_item != VOCAB.pad_id).any(dim=-1)
     gold_item = gold_item[gold_item_non_batch_pad]
     creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    creator.save_pdb(f"../data/logs/structures/{args.name}_pred.pdb", title="pred")
+    creator.save_pdb(f"{wandb.run.dir}/structures/{args.name}_pred.pdb", title="pred")
     gold_item[torch.isnan(gold_item)] = 0
     t_creator = PDB_Creator(gold_item.cpu().detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    t_creator.save_pdb(f"../data/logs/structures/{args.name}_true.pdb", title="true")
-    t_creator.save_gltfs(f"../data/logs/structures/{args.name}_true.pdb",
-                         f"../data/logs/structures/{args.name}_pred.pdb",
-                         make_pse=True, upload_pse=True)
-    wandb.log({"structure_comparison": wandb.Object3D(f"../data/logs/structures/{args.name}_true_pred.gltf")}, commit=commit)
+    t_creator.save_pdb(f"{wandb.run.dir}/structures/{args.name}_true.pdb", title="true")
+    t_creator.save_gltfs(f"{wandb.run.dir}/structures/{args.name}_true.pdb",
+                         f"{wandb.run.dir}/structures/{args.name}_pred.pdb",
+                         make_pse=True)
+    wandb.log({"structure_comparison": wandb.Object3D(f"{wandb.run.dir}/structures/{args.name}_true_pred.gltf")}, commit=commit)
 
 
 def init_metrics(args):

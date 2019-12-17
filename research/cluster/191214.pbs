@@ -20,8 +20,8 @@ cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch_conda/bin/$(sed -n "${PBS_
 echo $cmd
 eval $cmd
 
-
-############################
-##          Exit          ##
-############################
+#############################
+## Copy log files and exit ##
+#############################
+rsync -avzh /scr/jok120/wandb/ /net/pulsar/home/koes/jok120/protein-transformer/protein_transformer/wandb
 exit 0

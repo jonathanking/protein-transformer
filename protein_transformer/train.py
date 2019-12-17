@@ -470,22 +470,6 @@ def main():
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience,
                                                                verbose=True, threshold=args.early_stopping_threshold)
 
-    # Prepare log and checkpoint files
-    args.chkpt_path = "../data/checkpoints/" + args.name
-    os.makedirs("../data/checkpoints", exist_ok=True)
-    args.log_file = "../data/logs/" + args.name + '.train'
-    print('[Info] Training performance will be written to file: {}'.format(args.log_file))
-    os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
-    model, optimizer, scheduler, resumed, metrics = load_model(model, optimizer, scheduler, args)
-    if resumed:
-        log_f = open(args.log_file, 'a', buffering=args.buffering_mode)
-    else:
-        log_f = open(args.log_file, 'w', buffering=args.buffering_mode)
-        log_f.write(LOGFILEHEADER)
-    log_writer = csv.writer(log_f)
-    structure_path = "../data/logs/structures/"
-    os.makedirs(structure_path, exist_ok=True)
-
     # Prepare Weights and Biases logging
     wandb_dir = "/scr/jok120/wandb" if args.cluster else None
     if wandb_dir:
@@ -498,11 +482,30 @@ def main():
     else:
         wandb.config.update({"data_creation_date": data["date"]})
     n_params = sum(p.numel() for p in model.parameters())
-    n_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    n_trainable_params = sum(
+        p.numel() for p in model.parameters() if p.requires_grad)
     wandb.config.update({"n_params": n_params,
                          "n_trainable_params": n_trainable_params,
                          "max_seq_len": MAX_SEQ_LEN})
     wandb.run.summary["stopped_training_early"] = False
+    os.makedirs(f"{wandb.run.dir}/structures", exist_ok=True)
+
+    # Prepare log and checkpoint files
+    args.chkpt_path = f"{wandb.run.dir}/checkpoints/" + args.name
+    os.makedirs(f"{wandb.run.dir}/checkpoints/", exist_ok=True)
+    args.log_file = f"{wandb.run.dir}/" + args.name + '.train'
+    print('[Info] Training performance will be written to file: {}'.format(args.log_file))
+    os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
+    model, optimizer, scheduler, resumed, metrics = load_model(model, optimizer, scheduler, args)
+    if resumed:
+        log_f = open(args.log_file, 'a', buffering=args.buffering_mode)
+    else:
+        log_f = open(args.log_file, 'w', buffering=args.buffering_mode)
+        log_f.write(LOGFILEHEADER)
+    log_writer = csv.writer(log_f)
+
+
+
 
     print(args, "\n")
     del data
