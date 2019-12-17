@@ -278,6 +278,22 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
     return data
 
 
+def add_proteinnetID_to_idx_mapping(data):
+    """
+    Given an already processes ProteinNet data dictionary, this function adds
+    a mapping from ProteinNet ID to the subset and index number where that
+    protein can be looked up in the current dictionary. Useful if you'd like
+    to quickly extract a certain protein.
+    """
+    d = {}
+    for subset in ["train", "test"] + [f"valid-{split}" for split in VALID_SPLITS]:
+        for idx, pnid in enumerate(data[subset]["ids"]):
+            d[pnid] = {"subset": subset, "idx": idx}
+
+    data["pnids"] = d
+    return data
+
+
 def sort_data(angs, seqs, crds, ids):
     """
     Sorts inputs by length, with longest first.
@@ -358,6 +374,7 @@ def main():
     # Split into train, test and validation sets. Report sizes.
     data = create_data_dict(train_ohs, test_ohs, train_angs, test_angs, train_strs, test_strs, train_ids, test_ids,
                             valid_result_meta)
+    data = add_proteinnetID_to_idx_mapping(data)
     save_data_dict(data)
 
 
