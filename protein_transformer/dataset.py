@@ -4,23 +4,22 @@ import torch.utils.data
 
 from .protein.Sidechains import NUM_PREDICTED_COORDS
 VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
+MAX_SEQ_LEN = 500
 
 
-def make_paired_collate_fn_with_max_len(max_seq_len):
+def paired_collate_fn(insts):
+    """
+    This function creates mini-batches (3-tuples) of sequence, angle and
+    coordinate Tensors. insts is a list of tuples, each containing one src
+    seq, and target angles and coordindates.
+    """
+    sequences, angles, coords = list(zip(*insts))
+    sequences = collate_fn(sequences, sequences=True, max_seq_len=MAX_SEQ_LEN)
+    angles = collate_fn(angles, max_seq_len=MAX_SEQ_LEN)
+    coords = collate_fn(coords, coords=True, max_seq_len=MAX_SEQ_LEN)
+    return sequences, angles, coords
 
-    def paired_collate_fn(insts):
-        """
-        This function creates mini-batches (3-tuples) of sequence, angle and
-        coordinate Tensors. insts is a list of tuples, each containing one src
-        seq, and target angles and coordindates.
-        """
-        sequences, angles, coords = list(zip(*insts))
-        sequences = collate_fn(sequences, sequences=True, max_seq_len=max_seq_len)
-        angles = collate_fn(angles, max_seq_len=max_seq_len)
-        coords = collate_fn(coords, coords=True, max_seq_len=max_seq_len)
-        return sequences, angles, coords
 
-    return paired_collate_fn
 
 
 def collate_fn(insts, coords=False, sequences=False, max_seq_len=None):
@@ -166,7 +165,6 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
     each. There are multiple validation sets in ProteinNet. Currently, this
     method only returns set '70'.
     """
-    collate = make_paired_collate_fn_with_max_len(max_seq_len)
     sort_data_by_len = args.sort_training_data in ["True", "reverse"]
     reverse_sort = args.sort_training_data == "reverse"
 
@@ -184,7 +182,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
             reverse_sort=reverse_sort),
         num_workers=num_workers,
         batch_size=args.batch_size,
-        collate_fn=collate,
+        collate_fn=paired_collate_fn,
         shuffle=not sort_data_by_len)
 
     valid_loaders = {}
@@ -199,7 +197,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
                 reverse_sort=reverse_sort),
             num_workers=num_workers,
             batch_size=args.batch_size,
-            collate_fn=collate,
+            collate_fn=paired_collate_fn,
             worker_init_fn=_init_fn)
         valid_loaders[split] = valid_loader
 
@@ -213,7 +211,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
             reverse_sort=reverse_sort),
         num_workers=num_workers,
         batch_size=args.batch_size,
-        collate_fn=collate,
+        collate_fn=paired_collate_fn,
         worker_init_fn=_init_fn)
 
     return train_loader, valid_loaders, test_loader

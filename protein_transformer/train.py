@@ -17,7 +17,7 @@ from tqdm import tqdm
 import wandb
 from joblib import Parallel
 
-from protein_transformer.dataset import prepare_dataloaders
+from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
 from protein_transformer.log import *
 from protein_transformer.losses import compute_batch_drmsd, \
     mse_over_angles, \
@@ -325,8 +325,7 @@ def main():
     global START_EPOCH
     global START_TIME
     global MISSING_COORD_FILLER
-    global MAX_SEQ_LEN
-    MAX_SEQ_LEN = 500
+
     START_EPOCH = 0
     START_TIME = time.time()
     MISSING_COORD_FILLER = 0
