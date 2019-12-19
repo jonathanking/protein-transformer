@@ -137,7 +137,7 @@ def train(model, metrics, training_data, validation_datasets, test_data, optimiz
     Model training control loop.
     """
 
-    drmsd_worker_pool = Parallel(min(torch.multiprocessing.cpu_count(), args.batch_size))
+    drmsd_worker_pool = Parallel(min(torch.multiprocessing.cpu_count(), args.batch_size)) if not args.sequential_drmsd_loss else None
     for epoch_i in range(START_EPOCH, args.epochs):
         print(f'[ Epoch {epoch_i} ]')
 
@@ -391,6 +391,8 @@ def main():
                                "Data should be already sorted in descending order.")
     training.add_argument('--backbone_loss', action='store_true',
                           help="While training, only evaluate loss on the backbone.")
+    training.add_argument('--sequential_drmsd_loss', action="store_true",
+                          help="Compute DRMSD loss without batch-level parallelization.")
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
