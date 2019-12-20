@@ -61,6 +61,10 @@ BONDLENS = {'cc-cv': 1.375,
             '3c-cx': 1.526,
             '3c-oh': 1.4218,  # measured from PyMOL's build feature for THR
             'cx-2c-proline': 1.5361,  # measured from PyMOL for PRO
+            'n-ca': 1.442,
+            'ca-c': 1.498,
+            'c-n': 1.379,
+            'CZ-NH2': 1
             }
 
 BONDANGS = {'c8-cx-n ': 109.7,
@@ -353,3 +357,17 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
         return sc_pts, aa_code, predicted
 
     return sc_pts
+
+BUILD_FNS = {"ARG": build_arg}
+
+def build(res_builder):
+    return BUILD_FNS[res_builder.name](res_builder)
+
+def build_arg(rb):
+    pass
+
+def build_ala(rb):
+    pass
+
+
+

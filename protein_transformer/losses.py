@@ -103,7 +103,7 @@ def angles_to_coords(angles, seq, remove_batch_padding=False):
     pred_ang = pred_ang[:input_seq.shape[0]]
 
     # Generate coordinates
-    return generate_coords(pred_ang, pred_ang.shape[0], input_seq, torch.device("cpu"))
+    return generate_coords(pred_ang, input_seq, torch.device("cpu"))
 
 
 def parallel_coords_only(ang, seq):

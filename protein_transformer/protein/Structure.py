@@ -3,13 +3,11 @@ import torch
 
 from .Sidechains import BONDLENS, extend_sidechain
 
-BONDLENS = {"n-ca": 1.442, "ca-c": 1.498, "c-n": 1.379,
-            "CZ-NH2": 1,
-            }
 
 
-def generate_coords(angles, pad_loc, input_seq, device):
-    """
+def generate_coords(angles, input_seq, device):
+    """ Returns a protein's coordinates generated from its angles and sequence.
+
     Given a tensor of angles (L x NUM_PREDICTED_ANGLES), produces the entire
     set of cartesian coordinates using the NeRF method, (L x A` x 3),
     where A` is the number of atoms generated (depends on amino acid sequence).
@@ -20,7 +18,7 @@ def generate_coords(angles, pad_loc, input_seq, device):
     sc_arr = init_sidechain(angles, [next_bb_pts[0], bb_arr[2], bb_arr[1], bb_arr[0]], input_seq)
     total_arr = bb_arr + sc_arr + (10 - len(sc_arr)) * [torch.zeros(3, device=device)]
 
-    for i in range(1, pad_loc):
+    for i in range(1, angles.shape[0]):
         bb_pts = extend_backbone(i, angles, bb_arr, device)
         bb_arr += bb_pts
 
