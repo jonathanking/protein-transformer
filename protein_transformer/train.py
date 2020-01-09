@@ -467,7 +467,7 @@ def main():
     model = make_model(args, device).to(device)
 
     # Prepare optimizer
-    wd = 10e-3 if args.weight_decay else None
+    wd = 10e-3 if args.weight_decay else 0
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
                                betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate, weight_decay=wd)
