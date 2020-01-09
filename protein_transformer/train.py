@@ -489,6 +489,7 @@ def main():
                          "n_trainable_params": n_trainable_params,
                          "max_seq_len": MAX_SEQ_LEN})
     wandb.run.summary["stopped_training_early"] = False
+    args.structure_dir = f"{wandb.run.dir}/structures" if args.cluster else f"../data/logs/structures"
     os.makedirs(f"{wandb.run.dir}/structures", exist_ok=True)
 
     # Prepare log and checkpoint files
