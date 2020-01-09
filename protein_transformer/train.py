@@ -276,7 +276,18 @@ def make_model(args, device):
                                        max_seq_len=MAX_SEQ_LEN,
                                        dropout=args.dropout,
                                        vocab=VOCAB,
-                                       angle_mean_path=args.angle_mean_path)
+                                       angle_mean_path=args.angle_mean_path,
+                                       use_tanh_out=True)
+    elif args.model == "enc-only-linear-out":
+        model = EncoderOnlyTransformer(nlayers=args.n_layers,
+                                       nhead=args.n_head,
+                                       dmodel=args.d_model,
+                                       dff=args.d_inner_hid,
+                                       max_seq_len=MAX_SEQ_LEN,
+                                       dropout=args.dropout,
+                                       vocab=VOCAB,
+                                       angle_mean_path=args.angle_mean_path,
+                                       use_tanh_out=False)
     elif args.model == "enc-dec":
         model = Transformer(dm=args.d_model,
                             dff=args.d_inner_hid,
@@ -396,8 +407,8 @@ def main():
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
-    model_args.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only"], default="enc-only",
-                        help="Model architecture type. Encoder only or encoder/decoder model.")
+    model_args.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only", "enc-only-linear-out"],
+                        default="enc-only", help="Model architecture type. Encoder only or encoder/decoder model.")
     model_args.add_argument('-dm', '--d_model', type=int, default=512,
                         help="Dimension of each sequence item in the model. Each layer uses the same dimension for "
                              "simplicity.")
@@ -414,6 +425,7 @@ def main():
                              "model. May not train as well as pre-layer normalization.")
     model_args.add_argument("--angle_mean_path", type=str, default="./protein/casp12_190927_100_angle_means.npy",
                         help="Path to vector of means for every predicted angle. Used to initialize model output.")
+    model_args.add_argument("--weight_decay", action="store_true", help="Applies weight decay to model weights.")
 
 
     # Saving args
@@ -455,12 +467,13 @@ def main():
     model = make_model(args, device).to(device)
 
     # Prepare optimizer
+    wd = 10e-3 if args.weight_decay else None
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                               betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
+                               betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate, weight_decay=wd)
     elif args.optimizer == "sgd":
         optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()),
-                              lr=args.learning_rate)
+                              lr=args.learning_rate, weight_decay=wd)
 
     # Prepare scheduler
     if args.lr_scheduling == "noam":
