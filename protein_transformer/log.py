@@ -253,8 +253,7 @@ def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metr
     t_creator.save_gltfs(f"{args.structure_dir}/{args.name}_true.pdb",
                          f"{args.structure_dir}/{args.name}_pred.pdb",
                          make_pse=True)
-    wandb.log({"structure_comparison": wandb.Object3D(f"{args.structure_dir}/{args.name}_true_pred.gltf")},
-              commit=commit)
+    wandb.log({"structure_comparison": wandb.Object3D(f"../data/logs/structures/{args.name}_true_pred.gltf")}, commit=commit)
 
 
 def init_metrics(args):

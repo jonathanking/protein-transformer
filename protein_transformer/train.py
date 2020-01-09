@@ -398,7 +398,7 @@ def main():
     training.add_argument("--combined_drmsd_weight", type=float, default=0.5,
                                 help="When combining losses, use weight w for loss = w * drmsd + (1-w) * mse.")
     training.add_argument("--sort_training_data", type=str, choices=["True", "reverse", "False"], default="False",
-                          help="Sort training data by length. True (default) implies ascending order. "
+                          help="Sort training data by length. True implies ascending order. "
                                "Data should be already sorted in descending order.")
     training.add_argument('--backbone_loss', action='store_true',
                           help="While training, only evaluate loss on the backbone.")
