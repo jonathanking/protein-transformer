@@ -1,5 +1,5 @@
 from protein_transformer.losses import inverse_trig_transform
-from protein_transformer.protein.structure_utils import angles_to_coords
+from protein_transformer.losses import angles_to_coords
 
 class ModelPrediction(object):
     """ Represents a prediction from a model, can be transformed as needed. """
@@ -29,10 +29,5 @@ class ModelPrediction(object):
             self.data = angles_to_coords(self.data)
             self.modality = "coords"
             return self.data
-
-            return self.data
-        el
-        else:
-            raise NotImplementedError
 
 

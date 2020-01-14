@@ -1,7 +1,9 @@
 import torch
+import numpy as np
 
 from protein_transformer.dataset import VOCAB, NUM_PREDICTED_COORDS
-from protein_transformer.Sidechains import SC_DATA, BONDLENS
+from protein_transformer.protein.Sidechains import SC_DATA, BONDLENS
+from protein_transformer.protein.Structure import nerf
 
 class StructureBuilder(object):
     """ 
@@ -20,13 +22,13 @@ class StructureBuilder(object):
         # TODO: think about this, update. Ficticious residue?
         a1 = torch.tensor([0.001, 0, 0], device=self.device)
         a2 = a1 + torch.tensor([BONDLENS["n-ca"], 0, 0], device=self.device)
-        a3x = torch.cos(np.pi - angles[0, 3]) * BONDLENS["ca-c"]
-        a3y = torch.sin(np.pi - angles[0, 3]) * BONDLENS['ca-c']
+        a3x = torch.cos(np.pi - self.ang[0, 3]) * BONDLENS["ca-c"]
+        a3y = torch.sin(np.pi - self.ang[0, 3]) * BONDLENS['ca-c']
         a3 = a2 + torch.tensor([a3x, a3y, 0], device=self.device)
         self.bb = [a1, a2, a3]
 
     def iter_residues(self):
-        for resname, angles in zip(seq, ang):
+        for resname, angles in zip(self.seq, self.ang):
             yield ResidueBuilder(resname, angles, self.prev_bb, self.prev_ang) 
 
     def build(self):
@@ -45,7 +47,7 @@ class StructureBuilder(object):
 
 class ResidueBuilder(object):
 
-    def __init__(self, name, angles prev_bb, prev_ang)
+    def __init__(self, name, angles, prev_bb, prev_ang):
         assert len(name) == 3 and type(name) == str, "use 3 letter AA code, or change data structure"
         self.name = name
         self.ang = angles
@@ -90,8 +92,9 @@ class ResidueBuilder(object):
 
 
     def build_sc(self):
-        self.sc = Sidechains.build(self)
+        # self.sc = Sidechains.build(self)
+        pass
 
     def stack_coords(self):
         self.coords = self.bb + self.sc + (NUM_PREDICTED_COORDS - \
-            len(self.bb) - len(self.sc)) * [torch.zeros(3, device=device)]
+            len(self.bb) - len(self.sc)) * [torch.zeros(3)]
