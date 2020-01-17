@@ -158,6 +158,78 @@ class ProteinDataset(torch.utils.data.Dataset):
         return self._seqs[idx]
 
 
+class BinnedProteinDataset(torch.utils.data.IterableDataset):
+    """
+    This dataset can hold lists of sequences, angles, and coordinates for
+    each protein.
+    """
+    def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True,
+                 sort_by_length=True, reverse_sort=True):
+
+        assert seqs is not None
+        assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
+        self.vocab = ProteinVocabulary()
+        self._seqs = [VOCAB.aa_seq2indices(s, add_sos_eos) for s in seqs]
+        self._angs = angs
+        self._crds = crds
+
+        if sort_by_length:
+            sorted_len_indices = [a[0] for a in sorted(enumerate(angs),
+                                                       key=lambda x:x[1].shape[0],
+                                                       reverse=reverse_sort)]
+            new_seqs = [self._seqs[i] for i in sorted_len_indices]
+            self._seqs = new_seqs
+            new_angs = [self._angs[i] for i in sorted_len_indices]
+            self._angs = new_angs
+            new_crds = [self._crds[i] for i in sorted_len_indices]
+            self._crds = new_crds
+
+        self.lens = sorted(list(map(len, self._seqs)), reverse=reverse_sort)
+        self.lens = [l if l < MAX_SEQ_LEN else MAX_SEQ_LEN for l in self.lens]
+        self.hist_counts, self.hist_bins = np.histogram(self.lens, bins="auto")
+        self.bin_probs = self.hist_counts / self.hist_counts.sum()
+        self.bin_map = {}
+
+        for i, s in enumerate(self._seqs):
+            for j, bin in enumerate(self.hist_bins):
+                if len(s) > bin:
+                    continue
+                try:
+                    self.bin_map[j].append(i)
+                except:
+                    self.bin_map[j] = [i]
+
+    @property
+    def n_insts(self):
+        """ Property for dataset size """
+        return len(self._seqs)
+
+    def __len__(self):
+        return self.n_insts
+
+
+    def __getitem__(self, idx):
+        if self._angs is not None:
+            return self._seqs[idx], self._angs[idx], self._crds[idx]
+        return self._seqs[idx]
+
+
+class SimilarLengthBatchSampler(torch.utils.data.Sampler):
+
+    def __init__(self, data_source, batch_size):
+        self.data_source = data_source
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return len(self.data_source)
+
+    def __iter__(self):
+        bin = np.random.choice(range(len(self.data_source.bins)), p=self.data_source.bin_probs)
+        return np.random.choice(self.data_source.bin_map[bin], size=self.batch_size)
+
+
+
+
 def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
     """
     Using the pre-processed data, stored in a nested Python dictionary, this
@@ -173,7 +245,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
 
     # TODO: load and evaluate multiple validation sets
     train_loader = torch.utils.data.DataLoader(
-        ProteinDataset(
+        BinnedProteinDataset(
             seqs=data['train']['seq']*args.repeat_train,
             crds=data['train']['crd']*args.repeat_train,
             angs=data['train']['ang']*args.repeat_train,
@@ -183,7 +255,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
         num_workers=num_workers,
         batch_size=args.batch_size,
         collate_fn=paired_collate_fn,
-        shuffle=not sort_data_by_len)
+        shuffle=not sort_data_by_len,
+        sampler=SimilarLengthBatchSampler)
 
     valid_loaders = {}
     for split in VALID_SPLITS:
