@@ -190,6 +190,8 @@ class BinnedProteinDataset(torch.utils.data.IterableDataset):
         self.bin_probs = self.hist_counts / self.hist_counts.sum()
         self.bin_map = {}
 
+        increasing = len(self._seqs[0]) - len(self._seqs[1]) <= 0
+
         for i, s in enumerate(self._seqs):
             for j, bin in enumerate(self.hist_bins):
                 if len(s) > bin:
@@ -244,19 +246,20 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
         np.random.seed(int(args.seed))
 
     # TODO: load and evaluate multiple validation sets
-    train_loader = torch.utils.data.DataLoader(
-        BinnedProteinDataset(
+    train_dataset = BinnedProteinDataset(
             seqs=data['train']['seq']*args.repeat_train,
             crds=data['train']['crd']*args.repeat_train,
             angs=data['train']['ang']*args.repeat_train,
             add_sos_eos=args.add_sos_eos,
             sort_by_length=sort_data_by_len,
-            reverse_sort=reverse_sort),
-        num_workers=num_workers,
-        batch_size=args.batch_size,
-        collate_fn=paired_collate_fn,
-        shuffle=not sort_data_by_len,
-        sampler=SimilarLengthBatchSampler)
+            reverse_sort=reverse_sort)
+    train_loader = torch.utils.data.DataLoader(
+                    train_dataset,
+                    num_workers=num_workers,
+                    batch_size=args.batch_size,
+                    collate_fn=paired_collate_fn,
+                    shuffle=not sort_data_by_len,
+                    batch_sampler=SimilarLengthBatchSampler(train_dataset, args.batch_size))
 
     valid_loaders = {}
     for split in VALID_SPLITS:
