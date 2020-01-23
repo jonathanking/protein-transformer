@@ -233,7 +233,8 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
 
     def __iter__(self):
         def batch_generator():
-            while True:
+            i = 0
+            while i < len(self):
                 bin = np.random.choice(range(len(self.data_source.hist_bins)), p=self.data_source.bin_probs)
                 if self.dynamic_batch:
                     this_batch_size = int(self.dynamic_batch / self.data_source.hist_bins[bin])
@@ -241,6 +242,7 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
                     this_batch_size = self.batch_size
                 wandb.log({"batch_size": this_batch_size}, commit=False)
                 yield np.random.choice(self.data_source.bin_map[bin], size=this_batch_size)
+                i += 1
         return batch_generator()
 
 
