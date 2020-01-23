@@ -132,7 +132,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     return metrics
 
 
-def train(model, metrics, training_data, validation_datasets, test_data, optimizer, device, args, log_writer, scheduler):
+def train(model, metrics, training_data, train_eval_loader, validation_datasets, test_data, optimizer, device, args, log_writer, scheduler):
     """
     Model training control loop.
     """
@@ -145,7 +145,7 @@ def train(model, metrics, training_data, validation_datasets, test_data, optimiz
         start = time.time()
         metrics = train_epoch(model, training_data, optimizer, device, args, log_writer, metrics, pool=drmsd_worker_pool)
         if args.eval_train:
-           metrics = eval_epoch(model, training_data, device, args, metrics, mode="train", pool=drmsd_worker_pool)
+           metrics = eval_epoch(model, train_eval_loader, device, args, metrics, mode="train", pool=drmsd_worker_pool)
         print_end_of_epoch_status("train", (start, metrics))
         log_batch(log_writer, metrics, START_TIME, mode="train", end_of_epoch=True)
 
@@ -462,7 +462,7 @@ def main():
     args.add_sos_eos = args.model == "enc-dec"
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
-    training_data, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
+    training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
@@ -528,7 +528,7 @@ def main():
     del data
 
     # Begin training
-    train(model, metrics, training_data, validation_datasets, test_data, optimizer,
+    train(model, metrics, training_data, training_eval_loader, validation_datasets, test_data, optimizer,
           device, args, log_writer, scheduler)
     log_f.close()
 

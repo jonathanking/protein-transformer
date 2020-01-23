@@ -161,8 +161,6 @@ class BinnedProteinDataset(torch.utils.data.Dataset):
     each protein.
 
     Assumes protein data is sorted from shortest to longest (ascending).
-    # TODO cache computed bin results to avoid computing on every training run
-    # TODO when evaluating a training set, do not use the Binned version
     """
     def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True):
 
@@ -251,8 +249,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
     """
     Using the pre-processed data, stored in a nested Python dictionary, this
     function returns train, validation, and test set dataloaders with 2 workers
-    each. There are multiple validation sets in ProteinNet. Currently, this
-    method only returns set '70'.
+    each. Note that there are multiple validation sets in ProteinNet.
     """
     if args.batching_order in ["descending", "ascending"]:
         raise NotImplementedError("Descending and ascending order have not been reimplemented.")
@@ -269,7 +266,13 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
                     train_dataset,
                     num_workers=num_workers,
                     collate_fn=paired_collate_fn,
-                    batch_sampler=SimilarLengthBatchSampler(train_dataset, args.batch_size, args.batch_size * MAX_SEQ_LEN))
+                    batch_sampler=SimilarLengthBatchSampler(train_dataset,
+                                                            args.batch_size,
+                                                            dynamic_batch=args.batch_size * MAX_SEQ_LEN))
+    train_eval_loader = torch.utils.data.DataLoader(
+                        train_dataset,
+                        collate_fn=paired_collate_fn,
+                        batch_size=args.batch_size)
 
     valid_loaders = {}
     for split in VALID_SPLITS:
@@ -296,7 +299,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
         collate_fn=paired_collate_fn,
         worker_init_fn=_init_fn)
 
-    return train_loader, valid_loaders, test_loader
+    return train_loader, train_eval_loader, valid_loaders, test_loader
 
 VOCAB = ProteinVocabulary()
 # TODO remove creation of VOCAB by default
