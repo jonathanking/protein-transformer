@@ -296,11 +296,11 @@ def add_proteinnetID_to_idx_mapping(data):
 
 def sort_data(angs, seqs, crds, ids):
     """
-    Sorts inputs by length, with longest first.
+    Sorts inputs by length, with shortest first.
     """
     sorted_len_indices = [a[0] for a in sorted(enumerate(angs),
                                                key=lambda x:x[1].shape[0],
-                                               reverse=True)]
+                                               reverse=False)]
     seqs = [seqs[i] for i in sorted_len_indices]
     crds = [crds[i] for i in sorted_len_indices]
     angs = [angs[i] for i in sorted_len_indices]
@@ -348,15 +348,15 @@ def main():
     lim = None
     train_results = []
     with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
-        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim])))
+        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim]), dynamic_ncols=True))
     valid_result_meta = {}
     for split, vids in group_validation_set(valid_ids).items():
         valid_result_meta[split] = []
-        for vid in tqdm.tqdm(vids):
+        for vid in tqdm.tqdm(vids, dynamic_ncols=True):
             valid_result_meta[split].append(work(vid))
 
     test_results = []
-    for tid in tqdm.tqdm(test_casp_ids):
+    for tid in tqdm.tqdm(test_casp_ids, dynamic_ncols=True):
         test_results.append(work(tid))
 
     print("Structures processed.")

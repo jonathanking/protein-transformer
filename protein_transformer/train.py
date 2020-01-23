@@ -397,9 +397,11 @@ def main():
                                "and torch.")
     training.add_argument("--combined_drmsd_weight", type=float, default=0.5,
                                 help="When combining losses, use weight w for loss = w * drmsd + (1-w) * mse.")
-    training.add_argument("--sort_training_data", type=str, choices=["True", "reverse", "False"], default="False",
-                          help="Sort training data by length. True implies ascending order. "
-                               "Data should be already sorted in descending order.")
+    training.add_argument("--batching_order", type=str, choices=["descending", "ascending", "binned-random"],
+                          default="binned-random", help="Method for constructuing minibatches of proteins w.r.t. "
+                                                        "sequence length. Batches can be provided in descending/"
+                                                        "ascending order, or 'binned-random' which keeps the sequences"
+                                                        "in a batch similar, while randomizing the bins/batches.")
     training.add_argument('--backbone_loss', action='store_true',
                           help="While training, only evaluate loss on the backbone.")
     training.add_argument('--sequential_drmsd_loss', action="store_true",
