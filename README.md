@@ -183,7 +183,7 @@ Saving Args:
 
 ## Notes on Training Data
 
-The training data is based on Mohammed AlQuraishi's [ProteinNet](https://github.com/aqlaboratory/proteinnet). Preprocessed data can be downloaded [here](https://pitt.box.com/s/1jc66xcs4ddfi9o2ik8ozozcswen43fh). 
+The training data is based on Mohammed AlQuraishi's [ProteinNet](https://github.com/aqlaboratory/proteinnet). Preprocessed  data from the CASP12 competition that has been modified to work with this project can be downloaded [here (13GB)](https://pitt.box.com/s/tmcav6x5am54lqbe11d96ceqgd7q42hw) and [here (~3GB, a 30% thinning of the previous dataset)](https://pitt.box.com/s/xjigkqj4i02dx74ults12x3adu04utam). 
 
 My data uses the same train/test/validation sets as ProteinNet. While, like ProteinNet, it includes protein sequences and coordinates, I have modified it to include information about the entire protein structure (both backbone and sidechain atoms). Thus, each protein in the dataset includes information for sequence, interior torsional/bond angles, and coordinates. It does not include multiple sequence alignments or secondary structure annotation.
 
@@ -204,7 +204,7 @@ data = {"train": {"seq": [seq1, seq2, ...],
 
 ### Copyright
 
-Copyright (c) 2019, Jonathan King
+Copyright (c) 2020, Jonathan King
 
 
 #### Acknowledgements
