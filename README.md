@@ -25,6 +25,7 @@ will be free to import any classes or subroutines into your own training script 
 * Pytorch
 * numpy
 * tqdm
+* [wandb](https://docs.wandb.com)
 
 ## How to run
 
