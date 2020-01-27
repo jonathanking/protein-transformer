@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import wandb
 
-from .dataset import VOCAB, VALID_SPLITS
+from .dataset import VOCAB, VALID_SPLITS, paired_collate_fn
 from .protein.PDB_Creator import PDB_Creator
 from .losses import angles_to_coords, inverse_trig_transform
 
@@ -126,7 +126,7 @@ def log_batch(log_writer, metrics, start_time,  mode="valid", end_of_epoch=False
 
 
 def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer, pbar,
-                           start_time, pred_angs, tgt_coords, step):
+                           start_time, pred_angs, tgt_coords, step, validation_datasets, model, device):
     """
     Performs all necessary logging at the end of a batch in the training epoch.
     Updates custom metrics dictionary and wandb logs. Prints status of training.
@@ -166,6 +166,20 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     if np.isnan(loss.item()):
         print("A nan loss has occurred. Exiting training.")
         sys.exit(1)
+
+    # Log the 16th structure of each validation set
+    if args.log_val_struct_step != 0 and step % args.log_val_struct_step == 0:
+        with torch.no_grad():
+            for split, validation_dataset in validation_datasets.items():
+                val_idx = 16
+                val_src_seq, val_tgt_ang, val_tgt_crds = validation_dataset.dataset[val_idx : val_idx + 1]
+                val_src_seq, val_tgt_ang, val_tgt_crds = map(lambda x: x.to(device),
+                                                             paired_collate_fn(zip(val_src_seq, val_tgt_ang, val_tgt_crds)))
+                val_pred_angs = model(val_src_seq, val_tgt_ang)
+                pred_coords = angles_to_coords(inverse_trig_transform(val_pred_angs)[0].cpu(), val_src_seq[0].cpu(),
+                    remove_batch_padding=True)
+                log_structure_and_angs(args, val_pred_angs[0], pred_coords, val_tgt_crds[0], val_src_seq[0], metrics,
+                                       commit=False, log_angs=False, model_suffix=f"V{split}")
 
     if do_log_str:
         with torch.no_grad():
@@ -237,24 +251,30 @@ def do_eval_epoch_logging(metrics, mode):
                f"{mode.title()} Epoch Combined Loss": metrics[mode]["epoch-combined"]}, commit=False)
 
 
-def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metrics, commit):
+def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metrics, commit, log_angs=True, model_suffix=""):
     """
     Logs a 3D structure prediction to wandb.
     """
-    log_angle_distributions(args, pred_ang, src_seq)
+    if model_suffix != "":
+        log_title = model_suffix + "_structure_comparison"
+        model_suffix = "-" + model_suffix
+    else:
+        log_title = "structure_comparison"
+    if log_angs:
+        log_angle_distributions(args, pred_ang, src_seq)
 
     gold_item_non_batch_pad = (gold_item != VOCAB.pad_id).any(dim=-1)
     gold_item = gold_item[gold_item_non_batch_pad]
     creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    creator.save_pdb(f"{wandb.run.dir}/structures/{args.name}_pred.pdb", title="pred")
+    creator.save_pdb(f"{args.structure_dir}/{args.name}{model_suffix}_pred.pdb",title="pred")
     gold_item[torch.isnan(gold_item)] = 0
     t_creator = PDB_Creator(gold_item.cpu().detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    t_creator.save_pdb(f"{wandb.run.dir}/structures/{args.name}_true.pdb", title="true")
-    t_creator.save_gltfs(f"{wandb.run.dir}/structures/{args.name}_true.pdb",
-                         f"{wandb.run.dir}/structures/{args.name}_pred.pdb",
+    t_creator.save_pdb(f"{args.structure_dir}/{args.name}{model_suffix}_true.pdb", title="true")
+    t_creator.save_gltfs(f"{args.structure_dir}/{args.name}{model_suffix}_true.pdb",
+                         f"{args.structure_dir}/{args.name}{model_suffix}_pred.pdb",
                          make_pse=True)
-    wandb.log({"structure_comparison": wandb.Object3D(f"{wandb.run.dir}/structures/{args.name}_true_pred.gltf")},
-              commit=commit)
+
+    wandb.log({log_title: wandb.Object3D(f"../data/logs/structures/{args.name}{model_suffix}_true_pred.gltf")}, commit=commit)
 
 
 def init_metrics(args):

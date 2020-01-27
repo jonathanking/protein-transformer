@@ -221,8 +221,9 @@ class PDB_Creator(object):
         pymol.cmd.color("marine", "true")
         pymol.cmd.color("oxygen", "pred")
         rmsd, _, _, _, _, _, _ = pymol.cmd.align("true", "pred", quiet=True)
-        pymol.cmd.save(os.path.join(os.path.dirname(path1),
-                                   os.path.basename(path1).split("_")[0] + "_true_pred.gltf"),quiet=True)
+        pymol.cmd.save(os.path.join("../data/logs/structures/",
+                                    os.path.basename(path1).split("_")[
+                                        0] + "_true_pred.gltf"), quiet=True)
 
         # Align and save PSE
         if make_pse:

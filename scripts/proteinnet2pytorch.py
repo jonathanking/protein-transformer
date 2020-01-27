@@ -20,6 +20,8 @@ import prody as pr
 import torch
 import tqdm
 
+from protein_transformer.dataset import MAX_SEQ_LEN
+
 sys.path.append(".")
 from protein_transformer.protein.structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
     no_nans_infs_allzeros, parse_astral_summary_file, \
@@ -274,8 +276,45 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
         max_val_len = max_split_len if max_split_len > max_val_len else max_val_len
     data["settings"]["max_len"] = max(list(map(len, train_seq + test_seq)) + [max_val_len])
 
+    data["settings"]["bin-data"] = bin_sequence_data(train_seq, maxlen=MAX_SEQ_LEN)
     validate_data_dict(data)
     return data
+
+
+def bin_sequence_data(seqs, maxlen):
+    """
+    Given a list of sequences and a maximum training length, this function
+    bins the sequences by their lengths (using numpy's 'auto' parameter),
+    and then records the histogram information, as well as some statistics.
+    This information is returned as a dictionary.
+
+    This function allows the user to avoid computing this information at the
+    start of each training run.
+    """
+    lens = list(map(lambda x: len(x) if len(x) <= maxlen else maxlen, seqs))
+    hist_counts, hist_bins = np.histogram(lens, bins="auto")
+    hist_bins = hist_bins[1:]  # make each bin define the rightmost value in each bin, ie '( , ]'.
+    bin_probs = hist_counts / hist_counts.sum()
+    bin_map = {}
+
+    # Compute a mapping from bin number to index in dataset
+    seq_i = 0
+    bin_j = 0
+    while seq_i < len(seqs):
+        if lens[seq_i] <= hist_bins[bin_j]:
+            try:
+                bin_map[bin_j].append(seq_i)
+            except KeyError:
+                bin_map[bin_j] = [seq_i]
+            seq_i += 1
+        else:
+            bin_j += 1
+
+    return {"hist_counts" : hist_counts,
+            "hist_bins": hist_bins,
+            "bin_probs" : bin_probs,
+            "bin_map": bin_map,
+            "bin_max_len": maxlen}
 
 
 def add_proteinnetID_to_idx_mapping(data):
@@ -296,11 +335,11 @@ def add_proteinnetID_to_idx_mapping(data):
 
 def sort_data(angs, seqs, crds, ids):
     """
-    Sorts inputs by length, with longest first.
+    Sorts inputs by length, with shortest first.
     """
     sorted_len_indices = [a[0] for a in sorted(enumerate(angs),
                                                key=lambda x:x[1].shape[0],
-                                               reverse=True)]
+                                               reverse=False)]
     seqs = [seqs[i] for i in sorted_len_indices]
     crds = [crds[i] for i in sorted_len_indices]
     angs = [angs[i] for i in sorted_len_indices]
@@ -348,15 +387,15 @@ def main():
     lim = None
     train_results = []
     with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
-        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim])))
+        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim]), dynamic_ncols=True))
     valid_result_meta = {}
     for split, vids in group_validation_set(valid_ids).items():
         valid_result_meta[split] = []
-        for vid in tqdm.tqdm(vids):
+        for vid in tqdm.tqdm(vids, dynamic_ncols=True):
             valid_result_meta[split].append(work(vid))
 
     test_results = []
-    for tid in tqdm.tqdm(test_casp_ids):
+    for tid in tqdm.tqdm(test_casp_ids, dynamic_ncols=True):
         test_results.append(work(tid))
 
     print("Structures processed.")

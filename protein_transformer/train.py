@@ -30,7 +30,7 @@ from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
 
 
 
-def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics, pool=None):
+def train_epoch(model, training_data, validation_datasets, optimizer, device, args, log_writer, metrics, pool=None):
     """
     One complete training epoch.
     """
@@ -55,7 +55,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
 
         # Record performance metrics
         metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
-                               log_writer, batch_iter, START_TIME, pred, tgt_crds[-1], step)
+                               log_writer, batch_iter, START_TIME, pred, tgt_crds[-1], step, validation_datasets, model, device)
 
     metrics = update_metrics_end_of_epoch(metrics, "train")
 
@@ -132,7 +132,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     return metrics
 
 
-def train(model, metrics, training_data, validation_datasets, test_data, optimizer, device, args, log_writer, scheduler):
+def train(model, metrics, training_data, train_eval_loader, validation_datasets, test_data, optimizer, device, args, log_writer, scheduler):
     """
     Model training control loop.
     """
@@ -143,9 +143,9 @@ def train(model, metrics, training_data, validation_datasets, test_data, optimiz
 
         # Train epoch
         start = time.time()
-        metrics = train_epoch(model, training_data, optimizer, device, args, log_writer, metrics, pool=drmsd_worker_pool)
+        metrics = train_epoch(model, training_data, validation_datasets, optimizer, device, args, log_writer, metrics, pool=drmsd_worker_pool)
         if args.eval_train:
-           metrics = eval_epoch(model, training_data, device, args, metrics, mode="train", pool=drmsd_worker_pool)
+           metrics = eval_epoch(model, train_eval_loader, device, args, metrics, mode="train", pool=drmsd_worker_pool)
         print_end_of_epoch_status("train", (start, metrics))
         log_batch(log_writer, metrics, START_TIME, mode="train", end_of_epoch=True)
 
@@ -276,7 +276,18 @@ def make_model(args, device):
                                        max_seq_len=MAX_SEQ_LEN,
                                        dropout=args.dropout,
                                        vocab=VOCAB,
-                                       angle_mean_path=args.angle_mean_path)
+                                       angle_mean_path=args.angle_mean_path,
+                                       use_tanh_out=True)
+    elif args.model == "enc-only-linear-out":
+        model = EncoderOnlyTransformer(nlayers=args.n_layers,
+                                       nhead=args.n_head,
+                                       dmodel=args.d_model,
+                                       dff=args.d_inner_hid,
+                                       max_seq_len=MAX_SEQ_LEN,
+                                       dropout=args.dropout,
+                                       vocab=VOCAB,
+                                       angle_mean_path=args.angle_mean_path,
+                                       use_tanh_out=False)
     elif args.model == "enc-dec":
         model = Transformer(dm=args.d_model,
                             dff=args.d_inner_hid,
@@ -386,9 +397,11 @@ def main():
                                "and torch.")
     training.add_argument("--combined_drmsd_weight", type=float, default=0.5,
                                 help="When combining losses, use weight w for loss = w * drmsd + (1-w) * mse.")
-    training.add_argument("--sort_training_data", type=str, choices=["True", "reverse", "False"], default="False",
-                          help="Sort training data by length. True (default) implies ascending order. "
-                               "Data should be already sorted in descending order.")
+    training.add_argument("--batching_order", type=str, choices=["descending", "ascending", "binned-random"],
+                          default="binned-random", help="Method for constructuing minibatches of proteins w.r.t. "
+                                                        "sequence length. Batches can be provided in descending/"
+                                                        "ascending order, or 'binned-random' which keeps the sequences"
+                                                        "in a batch similar, while randomizing the bins/batches.")
     training.add_argument('--backbone_loss', action='store_true',
                           help="While training, only evaluate loss on the backbone.")
     training.add_argument('--sequential_drmsd_loss', action="store_true",
@@ -396,8 +409,8 @@ def main():
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
-    model_args.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only"], default="enc-only",
-                        help="Model architecture type. Encoder only or encoder/decoder model.")
+    model_args.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only", "enc-only-linear-out"],
+                        default="enc-only", help="Model architecture type. Encoder only or encoder/decoder model.")
     model_args.add_argument('-dm', '--d_model', type=int, default=512,
                         help="Dimension of each sequence item in the model. Each layer uses the same dimension for "
                              "simplicity.")
@@ -414,12 +427,15 @@ def main():
                              "model. May not train as well as pre-layer normalization.")
     model_args.add_argument("--angle_mean_path", type=str, default="./protein/casp12_190927_100_angle_means.npy",
                         help="Path to vector of means for every predicted angle. Used to initialize model output.")
+    model_args.add_argument("--weight_decay", action="store_true", help="Applies weight decay to model weights.")
 
 
     # Saving args
     saving_args = parser.add_argument_group("Saving Args")
     saving_args.add_argument('--log_structure_step', type=int, default=10,
                              help="Frequency of logging structure data during training.")
+    saving_args.add_argument('--log_val_struct_step', '-lvs', type=int, default=50,
+                             help="During training, make predictions on 1 structure from every validation set.")
     saving_args.add_argument('--log_wandb_step', type=int, default=1,
                              help="Frequency of logging to wandb during training.")
     saving_args.add_argument('--no_cuda', action='store_true')
@@ -448,19 +464,20 @@ def main():
     args.add_sos_eos = args.model == "enc-dec"
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
-    training_data, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
+    training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
     model = make_model(args, device).to(device)
 
     # Prepare optimizer
+    wd = 10e-3 if args.weight_decay else 0
     if args.optimizer == "adam":
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                               betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate)
+                               betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate, weight_decay=wd)
     elif args.optimizer == "sgd":
         optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()),
-                              lr=args.learning_rate)
+                              lr=args.learning_rate, weight_decay=wd)
 
     # Prepare scheduler
     if args.lr_scheduling == "noam":
@@ -489,6 +506,7 @@ def main():
                          "n_trainable_params": n_trainable_params,
                          "max_seq_len": MAX_SEQ_LEN})
     wandb.run.summary["stopped_training_early"] = False
+    args.structure_dir = f"{wandb.run.dir}/structures"
     os.makedirs(f"{wandb.run.dir}/structures", exist_ok=True)
 
     # Prepare log and checkpoint files
@@ -512,7 +530,7 @@ def main():
     del data
 
     # Begin training
-    train(model, metrics, training_data, validation_datasets, test_data, optimizer,
+    train(model, metrics, training_data, training_eval_loader, validation_datasets, test_data, optimizer,
           device, args, log_writer, scheduler)
     log_f.close()
 
