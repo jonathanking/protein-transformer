@@ -57,6 +57,7 @@ usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
                 [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT]
                 [--postnorm] [--angle_mean_path ANGLE_MEAN_PATH]
                 [--weight_decay] [--log_structure_step LOG_STRUCTURE_STEP]
+                [--log_val_struct_step LOG_VAL_STRUCT_STEP]
                 [--log_wandb_step LOG_WANDB_STEP] [--no_cuda] [-c] [--restart]
                 [--restart_opt]
                 [--checkpoint_time_interval CHECKPOINT_TIME_INTERVAL]
@@ -165,6 +166,9 @@ Model Args:
 Saving Args:
   --log_structure_step LOG_STRUCTURE_STEP
                         Frequency of logging structure data during training.
+  --log_val_struct_step LOG_VAL_STRUCT_STEP, -lvs LOG_VAL_STRUCT_STEP
+                        During training, make predictions on 1 structure from
+                        every validation set.
   --log_wandb_step LOG_WANDB_STEP
                         Frequency of logging to wandb during training.
   --no_cuda
