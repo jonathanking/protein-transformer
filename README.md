@@ -14,6 +14,10 @@ If you'd like to look around, all code specific to this package can be found und
  is responsible for manipulating and generating protein structure and sequence data. Many other research documents are
   currently included in `research/`, but are not needed to run the script.
   
+ Thanks to integration with Weights and Biases, you can easily monitor the status of your model training on the Weights and Biases dashboard like so:
+ 
+ ![Weights and Biases Dashboard](/data/development/imgs/wandb_dashboard_ex.png)
+  
 ## Installation
 
 To run this code, it's recommended to first perform a developmental install of the package with pip in your current 
