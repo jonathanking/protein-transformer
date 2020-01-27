@@ -30,7 +30,7 @@ from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
 
 
 
-def train_epoch(model, training_data, optimizer, device, args, log_writer, metrics, pool=None):
+def train_epoch(model, training_data, validation_datasets, optimizer, device, args, log_writer, metrics, pool=None):
     """
     One complete training epoch.
     """
@@ -55,7 +55,7 @@ def train_epoch(model, training_data, optimizer, device, args, log_writer, metri
 
         # Record performance metrics
         metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
-                               log_writer, batch_iter, START_TIME, pred, tgt_crds[-1], step)
+                               log_writer, batch_iter, START_TIME, pred, tgt_crds[-1], step, validation_datasets, model, device)
 
     metrics = update_metrics_end_of_epoch(metrics, "train")
 
@@ -143,7 +143,7 @@ def train(model, metrics, training_data, train_eval_loader, validation_datasets,
 
         # Train epoch
         start = time.time()
-        metrics = train_epoch(model, training_data, optimizer, device, args, log_writer, metrics, pool=drmsd_worker_pool)
+        metrics = train_epoch(model, training_data, validation_datasets, optimizer, device, args, log_writer, metrics, pool=drmsd_worker_pool)
         if args.eval_train:
            metrics = eval_epoch(model, train_eval_loader, device, args, metrics, mode="train", pool=drmsd_worker_pool)
         print_end_of_epoch_status("train", (start, metrics))
@@ -434,6 +434,8 @@ def main():
     saving_args = parser.add_argument_group("Saving Args")
     saving_args.add_argument('--log_structure_step', type=int, default=10,
                              help="Frequency of logging structure data during training.")
+    saving_args.add_argument('--log_val_struct_step', '-lvs', type=int, default=50,
+                             help="During training, make predictions on 1 structure from every validation set.")
     saving_args.add_argument('--log_wandb_step', type=int, default=1,
                              help="Frequency of logging to wandb during training.")
     saving_args.add_argument('--no_cuda', action='store_true')
