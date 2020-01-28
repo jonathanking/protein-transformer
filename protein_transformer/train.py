@@ -41,8 +41,6 @@ def train_epoch(model, training_data, validation_datasets, optimizer, device, ar
     for step, batch in enumerate(batch_iter):
         optimizer.zero_grad()
         src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
-        if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
-            continue
         pred = model(src_seq, tgt_ang)
         loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool)
 
@@ -118,7 +116,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
 
             if not (args.loss == "mse" and mode == "train") and args.eval_train_drmsd:
                 d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True,
-                                                                do_backward=False, pool=pool)
+                                                            do_backward=False, pool=pool)
             m_loss = mse_over_angles(pred, tgt_ang)
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
 
@@ -390,7 +388,7 @@ def main():
                              "fastest when this is 1.")
     training.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
                         help="Fraction of the time to use teacher forcing on a per-timestep basis.")
-    training.add_argument("--skip_missing_res_train", type=bool, default=False,
+    training.add_argument("--skip_missing_res_train", type=bool, default=True,
                         help="When training, skip over batches that have missing residues. This can make training"
                              "faster if using teacher forcing.")
     training.add_argument("--repeat_train", type=int, default=1,

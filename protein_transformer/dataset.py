@@ -120,14 +120,19 @@ class ProteinDataset(torch.utils.data.Dataset):
     each protein.
     """
     def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True,
-                 sort_by_length=True, reverse_sort=True):
+                 sort_by_length=True, reverse_sort=True, skip_missing_residues=True):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
         self.vocab = ProteinVocabulary()
-        self._seqs = [VOCAB.aa_seq2indices(s, add_sos_eos) for s in seqs]
-        self._angs = angs
-        self._crds = crds
+        for i in range(len(seqs)):
+            if np.isnan(angs[i]).all(axis=-1).any() and skip_missing_residues:
+                continue
+            else:
+                self._seqs.append(VOCAB.aa_seq2indices(seqs[i], add_sos_eos))
+                self._angs.append(angs[i])
+                self._crds.append(crds[i])
+
 
         if sort_by_length:
             sorted_len_indices = [a[0] for a in sorted(enumerate(angs),
@@ -162,14 +167,20 @@ class BinnedProteinDataset(torch.utils.data.Dataset):
 
     Assumes protein data is sorted from shortest to longest (ascending).
     """
-    def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True):
+    def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True, skip_missing_residues=True):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
         self.vocab = ProteinVocabulary()
-        self._seqs = [VOCAB.aa_seq2indices(s, add_sos_eos) for s in seqs]
-        self._angs = angs
-        self._crds = crds
+        self._seqs, self._angs, self._crds = [], [], []
+        for i in range(len(seqs)):
+            if np.isnan(angs[i]).all(axis=-1).any() and skip_missing_residues:
+                continue
+            else:
+                self._seqs.append(VOCAB.aa_seq2indices(seqs[i], add_sos_eos))
+                self._angs.append(angs[i])
+                self._crds.append(crds[i])
+
 
         # Compute length-based histogram bins and probabilities
         self.lens = list(map(lambda x: len(x) if len(x) <= MAX_SEQ_LEN else MAX_SEQ_LEN, self._seqs))
@@ -261,7 +272,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
             seqs=data['train']['seq']*args.repeat_train,
             crds=data['train']['crd']*args.repeat_train,
             angs=data['train']['ang']*args.repeat_train,
-            add_sos_eos=args.add_sos_eos)
+            add_sos_eos=args.add_sos_eos, skip_missing_residues=args.skip_missing_res_train)
     train_loader = torch.utils.data.DataLoader(
                     train_dataset,
                     num_workers=num_workers,
@@ -281,7 +292,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
                 seqs=data[f'valid-{split}']['seq'],
                 crds=data[f'valid-{split}']['crd'],
                 angs=data[f'valid-{split}']['ang'],
-                add_sos_eos=args.add_sos_eos),
+                add_sos_eos=args.add_sos_eos,
+                skip_missing_residues=args.skip_missing_res_train),
             num_workers=num_workers,
             batch_size=args.batch_size,
             collate_fn=paired_collate_fn,
@@ -293,7 +305,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
             seqs=data['test']['seq'],
             crds=data['test']['crd'],
             angs=data['test']['ang'],
-            add_sos_eos=args.add_sos_eos),
+            add_sos_eos=args.add_sos_eos,
+            skip_missing_residues=args.skip_missing_res_train),
         num_workers=num_workers,
         batch_size=args.batch_size,
         collate_fn=paired_collate_fn,
