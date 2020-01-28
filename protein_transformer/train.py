@@ -108,7 +108,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     metrics = reset_metrics_for_epoch(metrics, mode)
     batch_iter = tqdm(validation_data, mininterval=.5, leave=False, unit="batch", dynamic_ncols=True)
 
-    if args.loss == "mse" and mode == "train":
+    if args.loss == "mse" and mode == "train" and not args.eval_train_drmsd:
         d_loss, ln_d_loss, r_loss = torch.tensor(0.), torch.tensor(0.), torch.tensor(0.)
 
     with torch.no_grad():
@@ -116,7 +116,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
             src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
             pred = model(src_seq, tgt_ang)
 
-            if not (args.loss == "mse" and mode == "train"):
+            if not (args.loss == "mse" and mode == "train") and args.eval_train_drmsd:
                 d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True,
                                                                 do_backward=False, pool=pool)
             m_loss = mse_over_angles(pred, tgt_ang)
@@ -346,8 +346,8 @@ def main():
 
     # Required args
     required = parser.add_argument_group("Required Args")
-    required.add_argument('data', help="Path to training data.")
-    required.add_argument("name", type=str, help="The model name.")
+    required.add_argument('--data', help="Path to training data.", default="../data/proteinnet/casp12_200123_30.pt")
+    required.add_argument("--name", type=str, help="The model name.", default="sweep")
 
     # Training parameters
     training = parser.add_argument_group("Training Args")
@@ -378,8 +378,11 @@ def main():
                           help="Metric observed for early stopping and LR scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
-    training.add_argument('--eval_train', action='store_true',
+    training.add_argument('--eval_train', type=bool, default=False,
                         help="Perform an evaluation of the entire training set after a training epoch.")
+    training.add_argument('--eval_train_drmsd', type=bool, default=True,
+                          help="Perform an evaluation of the entire training "
+                               "set after a training epoch.")
     training.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
                         help="Training optimizer.")
     training.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
@@ -387,7 +390,7 @@ def main():
                              "fastest when this is 1.")
     training.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
                         help="Fraction of the time to use teacher forcing on a per-timestep basis.")
-    training.add_argument("--skip_missing_res_train", action="store_true",
+    training.add_argument("--skip_missing_res_train", type=bool, default=False,
                         help="When training, skip over batches that have missing residues. This can make training"
                              "faster if using teacher forcing.")
     training.add_argument("--repeat_train", type=int, default=1,
@@ -427,7 +430,7 @@ def main():
                              "model. May not train as well as pre-layer normalization.")
     model_args.add_argument("--angle_mean_path", type=str, default="./protein/casp12_190927_100_angle_means.npy",
                         help="Path to vector of means for every predicted angle. Used to initialize model output.")
-    model_args.add_argument("--weight_decay", action="store_true", help="Applies weight decay to model weights.")
+    model_args.add_argument("--weight_decay", type=bool, default=True,  help="Applies weight decay to model weights.")
 
 
     # Saving args
@@ -439,7 +442,7 @@ def main():
     saving_args.add_argument('--log_wandb_step', type=int, default=1,
                              help="Frequency of logging to wandb during training.")
     saving_args.add_argument('--no_cuda', action='store_true')
-    saving_args.add_argument('-c', '--cluster', action='store_true',
+    saving_args.add_argument('-c', '--cluster', type=bool, default=False,
                              help="Set of parameters to facilitate training on a remote" +
                                   " cluster. Limited I/O, etc.")
     saving_args.add_argument('--restart', action='store_true', help="Does not resume training.")
@@ -489,12 +492,12 @@ def main():
                                                                verbose=True, threshold=args.early_stopping_threshold)
 
     # Prepare Weights and Biases logging
-    wandb_dir = "/scr/jok120/wandb" if args.cluster else None
+    wandb_dir = "/scr/jok120/wandb" if args.cluster and os.path.isdir("/scr") else None
     if wandb_dir:
         os.makedirs(wandb_dir, exist_ok=True)
     wandb.init(project="protein-transformer", entity="koes-group", dir=wandb_dir)
     wandb.watch(model, "all")
-    wandb.config.update(args)
+    wandb.config.update(args, allow_val_change=True)
     if type(data["date"]) == set:
         wandb.config.update({"data_creation_date": next(iter(data["date"]))})
     else:

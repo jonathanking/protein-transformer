@@ -27,19 +27,19 @@ parameters:
   dropout:
     values: [0]
   data:
-    values: ["../data/proteinnet/helix.pt"]
+    values: ["../data/proteinnet/casp12_200123_30.pt"]
   name:
     values: ["hp-search"]
-  repeat_train:
-    values: [500]
   epochs:
-    values: [500]
+    values: [5]
   patience:
-    values: [1, 2, 3, 5, 10]
+    values: [2]
   n_layers:
     min: 1
     max: 16
   n_head:
     values: [1, 2, 4, 8, 12, 16]
+  cluster:
+    values: []
 early_terminate:
   type: envelope

@@ -1,5 +1,5 @@
 import numpy as np
-#import pymol
+import pymol
 import torch
 import wandb
 from prody import calcTransformation
