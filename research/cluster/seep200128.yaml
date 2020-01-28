@@ -13,6 +13,9 @@ parameters:
   epochs:
     distribution: constant
     value: 500
+  log_val_struct_step:
+    distribution: constant
+    value: 500
   n_head:
     distribution: categorical
     values:
