@@ -1,0 +1,119 @@
+program: train.py
+method: bayes
+metric:
+  name: Train RMSD
+  goal: minimize
+parameters:
+  data:
+    distribution: constant
+    value: ../data/proteinnet/casp12_200123_30.pt
+  name:
+    distribution: constant
+    value: hp-sweep
+  epochs:
+    distribution: constant
+    value: 500
+  n_head:
+    distribution: categorical
+    values:
+      - 1
+      - 2
+      - 4
+      - 8
+      - 16
+    min: 1
+    max: 16
+  cluster:
+    distribution: constant
+    value: "True"
+  weight_decay:
+    distribution: constant
+    value: "True"
+  d_model:
+    distribution: categorical
+    values:
+      - 16
+      - 24
+      - 32
+      - 48
+      - 64
+      - 128
+      - 256
+      - 512
+      - 1024
+      - 2048
+      - 4096
+  n_layers:
+    distribution: int_uniform
+    min: 1
+    max: 12
+  optimizer:
+    distribution: categorical
+    values:
+      - adam
+      - sgd
+  batch_size:
+    distribution: categorical
+    values:
+      - 1
+      - 2
+      - 4
+      - 8
+      - 16
+      - 32
+      - 64
+      - 128
+      - 256
+      - 512
+  eval_train:
+    distribution: constant
+    value: "True"
+  d_inner_hid:
+    distribution: categorical
+    values:
+      - 32
+      - 64
+      - 256
+      - 512
+      - 1024
+      - 2048
+      - 4096
+  learning_rate:
+    distribution: categorical
+    values:
+      - 0.00001
+      - 0.0001
+      - 0.001
+      - 0.01
+      - 0.1
+  log_wandb_step:
+    distribution: constant
+    value: 1
+  n_warmup_steps:
+    distribution: categorial
+    values:
+      - 0
+      - 2000
+      - 5000
+      - 10000
+      - 20000
+  log_structure_step:
+    distribution: constant
+    value: 500
+  skip_missing_res_train:
+    distribution: constant
+    value: "True"
+  model:
+    distribution: categorical
+    values:
+      - enc-only-linear-out
+  loss:
+    distribution: categorical
+    values:
+      - drmsd
+      - mse
+      - combined
+early_terminate:
+  type: hyperband
+  eta: 3
+  min_iter: 2
