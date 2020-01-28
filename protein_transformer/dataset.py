@@ -136,7 +136,7 @@ class ProteinDataset(torch.utils.data.Dataset):
 
 
         if sort_by_length:
-            sorted_len_indices = [a[0] for a in sorted(enumerate(angs),
+            sorted_len_indices = [a[0] for a in sorted(enumerate(self._angs),
                                                        key=lambda x:x[1].shape[0],
                                                        reverse=reverse_sort)]
             new_seqs = [self._seqs[i] for i in sorted_len_indices]
