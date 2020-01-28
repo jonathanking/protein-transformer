@@ -90,7 +90,7 @@ parameters:
     distribution: constant
     value: 1
   n_warmup_steps:
-    distribution: categorial
+    distribution: categorical
     values:
       - 0
       - 2000
