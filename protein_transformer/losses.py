@@ -3,21 +3,25 @@
 import numpy as np
 import prody as pr
 import torch
-import torch.multiprocessing as multiprocessing
 from joblib import Parallel, delayed
+import wandb
 
 from .dataset import VOCAB
 from .protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
 from .protein.Structure import generate_coords
+from .protein.structure_utils import get_backbone_from_full_coords
 
-def combine_drmsd_mse(d, mse, w=.5):
+LNDRMSD_TARGET_VAL = 0.02
+MSE_TARGET_VAL = 0.01
+
+def combine_drmsd_mse(d, mse, w=.5, log=True):
     """
     Returns a combination of drmsd and mse loss that first normalizes their
     zscales, and then computes w * drmsd + (1 - w) * mse.
     """
-    d_norm, m_norm = 0.01, 0.3
-    d = w * (d / d_norm)
-    mse = (1 - w) * (mse / m_norm)
+    d = w * (d / LNDRMSD_TARGET_VAL)
+    mse = (1 - w) * (mse / MSE_TARGET_VAL)
+    if log: wandb.log({"MSE Weight": mse, "DRMSD Weight": d}, commit=False)
     return d + mse
 
 
@@ -44,7 +48,7 @@ def remove_sos_eos_from_input(input_seq):
     return input_seq[start_idx : end_idx]
 
 
-def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True):
+def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, backbone_only=False):
     """
     A version of drmsd loss meant to be used in parallel. Operates on a tuple
     of predicted angles, coordinates, and sequence. Works for 1 protein at a
@@ -61,6 +65,9 @@ def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True):
 
     # Compute coordinates
     pred_crd = angles_to_coords(pred_ang, input_seq)
+    if backbone_only:
+        pred_crd = get_backbone_from_full_coords(pred_crd)
+        true_crd = get_backbone_from_full_coords(true_crd)
 
     # Remove coordinate-level masking for missing atoms
     true_crd_non_nan = torch.isnan(true_crd).eq(0)
@@ -105,7 +112,7 @@ def parallel_coords_only(ang, seq):
 
 
 def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("cpu"), return_rmsd=False,
-                        do_backward=False, retain_graph=False, pool=None):
+                        do_backward=False, retain_graph=False, pool=None, backbone_only=False):
     """
     Calculate DRMSD loss by first generating predicted coordinates from
     angles. Then, predicted coordinates are compared with the true coordinate
@@ -116,10 +123,10 @@ def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("c
 
     # Compute drmsd in parallel over the batch
     if pool is not None:
-        results = pool(delayed(drmsd_work)(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward)
+        results = pool(delayed(drmsd_work)(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward, backbone_only)
                           for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
     else:
-        results = (drmsd_work(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward=do_backward)
+        results = (drmsd_work(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward, backbone_only)
                               for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
 
 
@@ -164,31 +171,55 @@ def mse_over_angles(pred, true):
     return torch.nn.functional.mse_loss(pred[ang_non_zero][ang_non_nans], true[ang_non_zero][ang_non_nans])
 
 
-def pairwise_internal_dist(x):
+def mse_over_angles_numpy(pred, true):
+    """ Numpy version of mse_over_angles.
+
+    Given a predicted angle tensor and a true angle tensor (batch-padded with
+    zeros, and missing-item-padded with nans), this function first removes
+    batch then item padding before using torch's built-in MSE loss function.
+
+    Args:
+        pred true (np.ndarray): 4-dimensional tensors
+
+    Returns:
+        MSE loss between true and pred.
     """
+    return mse_over_angles(torch.tensor(pred), torch.tensor(true)).numpy()
+
+
+def pairwise_internal_dist(x):
+    """ Returns all pairwise distances between points in a coordinate tensor.
+
     An implementation of cdist (pairwise distances between sets of vectors)
     from user jacobrgardner on github. Not implemented for batches.
-
     https://github.com/pytorch/pytorch/issues/15253
+
+    Args:
+        x (torch.Tensor): coordinate tensor with shape (L x 3)
+
+    Returns:
+        res (torch.Tensor): a distance tensor comparing all (L x L) pairs of
+                            points
     """
     x1, x2 = x, x
     assert len(x1.shape) == 2, "Pairwise internal distance method is not " \
                                "implemented for batches."
-    x1_norm = x1.pow(2).sum(dim=-1, keepdim=True)
-    x2_norm = x2.pow(2).sum(dim=-1, keepdim=True)
-    res = torch.addmm(x2_norm.transpose(-2, -1), x1, x2.transpose(-2, -1), alpha=-2).add_(x1_norm)
+    x1_norm = x1.pow(2).sum(dim=-1, keepdim=True)  # TODO: experiment with alternative to pow, remove duplicated norm
+    res = torch.addmm(x1_norm.transpose(-2, -1), x1, x2.transpose(-2, -1), alpha=-2).add_(x1_norm)
     res = res.clamp_min_(1e-30).sqrt_()
     return res
 
 
-def drmsd(a, b):
+def drmsd(a, b, truncate_dist_matrix=True):
     """ Returns distance root-mean-squared-deviation between tensors a and b.
 
     Given 2 coordinate tensors, returns the dRMSD between them. Both
     tensors must be the exact same shape.
 
     Args:
-        a, b (torch.Tensor): coordinate tensor with shape (L x 3)
+        a, b (torch.Tensor): coordinate tensor with shape (L x 3).
+        truncate_dist_matrix (bool): If False, only count each interatomic
+            distance once.
 
     Returns:
         res (torch.Tensor): DRMSD between a and b.
@@ -197,13 +228,15 @@ def drmsd(a, b):
     a_ = pairwise_internal_dist(a)
     b_ = pairwise_internal_dist(b)
 
-    num_elems = a_.shape[0]
-    num_elems = num_elems * (num_elems - 1)
-
-    sq_diff = (a_ - b_) ** 2
-    summed = sq_diff.sum()
-    mean = summed / num_elems
-    res = mean.sqrt()
+    if truncate_dist_matrix:
+        i = torch.triu_indices(a_.shape[0], a_.shape[1], offset=1)
+        mse = torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float())
+        res = torch.sqrt(mse)
+    else:
+        # TODO remove this option for distance matrix norm
+        mse = torch.nn.functional.mse_loss(a_.float(),
+                                           b_.float())
+        res = torch.sqrt(mse)
 
     return res
 

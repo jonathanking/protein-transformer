@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -N alldata02
+#PBS -j oe
+#PBS -l nodes=1:ppn=24:gpus=1:C6
+#PBS -l mem=40gb
+#PBS -l walltime=28:00:00:00
+#PBS -q dept_gpu_12GB
+#PBS -m ae
+#PBS -M jok120@pitt.edu
+
+
+############################
+##       Environment      ##
+############################
+cd $PBS_O_WORKDIR
+export PATH=/usr/local/bin:$PATH
+export PATH=/opt/anaconda3/bin:$PATH
+source activate torch
+
+
+############################
+##     Array Job Exec.    ##
+############################
+cmd="python train.py -clip 1 -print_loss -batch_size 4 -data data/data_1208_trig.pkl -batch_log -log checkpoints/alldata02 -save_model checkpoints/alldata02 > alldata02.log"
+echo $cmd
+eval $cmd
+
+
+############################
+##          Exit          ##
+############################
+exit 0

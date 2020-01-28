@@ -1,0 +1,6 @@
+sleep 30 && echo 1 && echo $(which python)
+sleep 1 && echo 2
+sleep 30 && echo 3
+sleep 1 && echo 4
+sleep 30 && echo 5
+echo $(python protein_transformer/train.py --help)

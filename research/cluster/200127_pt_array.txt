@@ -1,0 +1,4 @@
+python train.py ../data/proteinnet/casp12_200123_100.pt combined01-512 -l combined -esm train-combined -dm 512 -b 16 --log_structure_step 150 -lvs 150 -m enc-only-linear-out --weight_decay --eval_train
+python train.py ../data/proteinnet/casp12_200123_100.pt combined02-256 -l combined -esm train-combined -dm 256 -b 16 --log_structure_step 150 -lvs 150 -m enc-only-linear-out --weight_decay --eval_train
+python train.py ../data/proteinnet/casp12_200123_100.pt mse01-512 -l mse -esm train-mse -dm 512 -b 16 --log_structure_step 150 -lvs 150 -m enc-only-linear-out --weight_decay --eval_train
+python train.py ../data/proteinnet/casp12_200123_100.pt mse02-256 -l mse -esm train-mse -dm 256 -b 16 --log_structure_step 150 -lvs 150 -m enc-only-linear-out --weight_decay --eval_train

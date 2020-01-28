@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import wandb
 
-from .dataset import VOCAB
+from .dataset import VOCAB, VALID_SPLITS, paired_collate_fn
 from .protein.PDB_Creator import PDB_Creator
 from .losses import angles_to_coords, inverse_trig_transform
 
@@ -28,20 +28,15 @@ def print_train_batch_status(args, items):
     lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling == "noam" else ""
     speed_avg = np.mean(metrics["train"]["speeds"])
 
-    if args.cluster:
-        print('Loss = {0:.6f}{1}, res/s={speed:.0f}'.format(
-            float(loss),
-            lr_string,
-            speed=speed_avg))
-    else:
-        pbar.set_description('\r  - (Train) drmsd={drmsd:.2f}, lndrmsd={lnd:0.7f}, rmse={rmse:.4f},'
-                             ' c={comb:.2f}{lr}, res/s={speed:.0f}'.format(
-            drmsd=float(train_drmsd_loss),
-            lr=lr_string,
-            rmse=np.sqrt(float(train_mse_loss)),
-            comb=float(train_comb_loss),
-            lnd=metrics["train"]["batch-ln-drmsd"],
-            speed=speed_avg))
+
+    pbar.set_description('\r  - (Train) drmsd={drmsd:.2f}, lndrmsd={lnd:0.7f}, rmse={rmse:.4f},'
+                         ' c={comb:.2f}{lr}, res/s={speed:.0f}'.format(
+        drmsd=float(train_drmsd_loss),
+        lr=lr_string,
+        rmse=np.sqrt(float(train_mse_loss)),
+        comb=float(train_comb_loss),
+        lnd=metrics["train"]["batch-ln-drmsd"],
+        speed=speed_avg))
 
 
 def print_eval_batch_status(args, items):
@@ -50,12 +45,11 @@ def print_eval_batch_status(args, items):
     Will only be seen if using a progress bar. Otherwise, there is no information logged.
     """
     pbar, d_loss, mode, m_loss, c_loss = items
-    if not args.cluster:
-        pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
-            float(d_loss),
-            mode,
-            np.sqrt(float(m_loss)),
-            float(c_loss)))
+    pbar.set_description('\r  - (Eval-{1}) drmsd = {0:.6f}, rmse = {2:.6f}, comb = {3:.6f}'.format(
+        float(d_loss),
+        mode,
+        np.sqrt(float(m_loss)),
+        float(c_loss)))
 
 
 def print_end_of_epoch_status(mode, items):
@@ -94,16 +88,11 @@ def update_loss_trackers(args, epoch_i, metrics):
     """
     Updates the current loss to compare according to an early stopping policy.
     """
-    if args.train_only:
-        mode = "train"
-    else:
-        mode = "valid"
-    loss_str = args.loss
 
-    loss_to_compare = metrics[mode][f"epoch-{loss_str}"]
-    losses_to_compare = metrics[mode][f"epoch-history-{loss_str}"]
+    loss_to_compare = metrics[args.es_mode][f"epoch-{args.es_metric}"]
+    losses_to_compare = metrics[args.es_mode][f"epoch-history-{args.es_metric}"]
 
-    if loss_to_compare < metrics["best_valid_loss_so_far"]:
+    if metrics["best_valid_loss_so_far"] - loss_to_compare > args.early_stopping_threshold:
         metrics["best_valid_loss_so_far"] = loss_to_compare
         metrics["epoch_last_improved"] = epoch_i
     elif args.early_stopping and epoch_i - metrics["epoch_last_improved"] > args.early_stopping:
@@ -137,7 +126,7 @@ def log_batch(log_writer, metrics, start_time,  mode="valid", end_of_epoch=False
 
 
 def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer, pbar,
-                           start_time, pred_angs, tgt_coords, step):
+                           start_time, pred_angs, tgt_coords, step, validation_datasets, model, device):
     """
     Performs all necessary logging at the end of a batch in the training epoch.
     Updates custom metrics dictionary and wandb logs. Prints status of training.
@@ -178,12 +167,46 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
         print("A nan loss has occurred. Exiting training.")
         sys.exit(1)
 
+    # Log the 16th structure of each validation set
+    if args.log_val_struct_step != 0 and step % args.log_val_struct_step == 0:
+        with torch.no_grad():
+            for split, validation_dataset in validation_datasets.items():
+                val_idx = 16
+                val_src_seq, val_tgt_ang, val_tgt_crds = validation_dataset.dataset[val_idx : val_idx + 1]
+                val_src_seq, val_tgt_ang, val_tgt_crds = map(lambda x: x.to(device),
+                                                             paired_collate_fn(zip(val_src_seq, val_tgt_ang, val_tgt_crds)))
+                val_pred_angs = model(val_src_seq, val_tgt_ang)
+                pred_coords = angles_to_coords(inverse_trig_transform(val_pred_angs)[0].cpu(), val_src_seq[0].cpu(),
+                    remove_batch_padding=True)
+                log_structure_and_angs(args, val_pred_angs[0], pred_coords, val_tgt_crds[0], val_src_seq[0], metrics,
+                                       commit=False, log_angs=False, model_suffix=f"V{split}")
+
     if do_log_str:
         with torch.no_grad():
             pred_coords = angles_to_coords(inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                                            remove_batch_padding=True)
-        log_structure(args, pred_coords, tgt_coords, src_seq[-1])
+        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], metrics, commit=True)
     return metrics
+
+
+def log_angle_distributions(args, pred_ang, src_seq):
+    """ Logs a histogram of predicted angles to wandb. """
+    # Remove batch-level masking
+    batch_mask = src_seq.ne(VOCAB.pad_id)
+    pred_ang = pred_ang[batch_mask]
+    inv_ang = inverse_trig_transform(pred_ang.view(1, pred_ang.shape[0], -1)).cpu().detach().numpy()
+    pred_ang = pred_ang.cpu().detach().numpy()
+
+    wandb.log({"Predicted Angles (sin cos)": wandb.Histogram(np_histogram=np.histogram(pred_ang)),
+               "Predicted Angles (radians)": wandb.Histogram(np_histogram=np.histogram(inv_ang))}, commit=False)
+
+    for sincos_idx in range(pred_ang.shape[-1]):
+        wandb.log({f"Predicted Angles (sin cos) - {sincos_idx:02}":
+                       wandb.Histogram(np_histogram=np.histogram(pred_ang[:,sincos_idx]))}, commit=False)
+
+    for rad_idx in range(inv_ang.shape[-1]):
+        wandb.log({f"Predicted Angles (radians) - {rad_idx:02}":
+                       wandb.Histogram(np_histogram=np.histogram(inv_ang[0,:,rad_idx]))}, commit=False)
 
 
 def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq,  args,  pbar,
@@ -210,7 +233,7 @@ def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
             pred_coords = angles_to_coords(
                 inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                 remove_batch_padding=True)
-        log_structure(args, pred_coords, tgt_coords, src_seq[-1])
+        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], metrics, commit=False)
     return metrics
 
 
@@ -221,31 +244,37 @@ def do_eval_epoch_logging(metrics, mode):
     """
     metrics = update_metrics_end_of_epoch(metrics, mode)
 
-    do_commit = mode != "train"
     wandb.log({f"{mode.title()} Epoch RMSE": np.sqrt(metrics[mode]["epoch-mse"]),
                f"{mode.title()} Epoch RMSD": metrics[mode]["epoch-rmsd"],
                f"{mode.title()} Epoch DRMSD": metrics[mode]["epoch-drmsd"],
                f"{mode.title()} Epoch ln-DRMSD": metrics[mode]["epoch-ln-drmsd"],
-               f"{mode.title()} Epoch Combined Loss": metrics[mode]["epoch-combined"]}, commit=do_commit)
+               f"{mode.title()} Epoch Combined Loss": metrics[mode]["epoch-combined"]}, commit=False)
 
 
-def log_structure(args, pred_coords, gold_item, src_seq):
+def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metrics, commit, log_angs=True, model_suffix=""):
     """
     Logs a 3D structure prediction to wandb.
-    # TODO save PDB files with numbers in addition to just GLTF files
     """
-    return
+    if model_suffix != "":
+        log_title = model_suffix + "_structure_comparison"
+        model_suffix = "-" + model_suffix
+    else:
+        log_title = "structure_comparison"
+    if log_angs:
+        log_angle_distributions(args, pred_ang, src_seq)
+
     gold_item_non_batch_pad = (gold_item != VOCAB.pad_id).any(dim=-1)
     gold_item = gold_item[gold_item_non_batch_pad]
     creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    creator.save_pdb(f"../data/logs/structures/{args.name}_pred.pdb", title="pred")
-    creator.save_gltf(f"../data/logs/structures/{args.name}_pred.gltf")
+    creator.save_pdb(f"{args.structure_dir}/{args.name}{model_suffix}_pred.pdb",title="pred")
     gold_item[torch.isnan(gold_item)] = 0
     t_creator = PDB_Creator(gold_item.cpu().detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    t_creator.save_pdb(f"../data/logs/structures/{args.name}_true.pdb", title="true")
-    t_creator.save_gltfs(f"../data/logs/structures/{args.name}_true.pdb", f"../data/logs/structures/{args.name}_pred.pdb")
-    wandb.log({"structure_comparison": wandb.Object3D(f"../data/logs/structures/{args.name}_true_pred.gltf")}, commit=False)
-    wandb.log({"structure_prediction": wandb.Object3D(f"../data/logs/structures/{args.name}_pred.gltf")}, commit=True)
+    t_creator.save_pdb(f"{args.structure_dir}/{args.name}{model_suffix}_true.pdb", title="true")
+    t_creator.save_gltfs(f"{args.structure_dir}/{args.name}{model_suffix}_true.pdb",
+                         f"{args.structure_dir}/{args.name}{model_suffix}_pred.pdb",
+                         make_pse=True)
+
+    wandb.log({log_title: wandb.Object3D(f"../data/logs/structures/{args.name}{model_suffix}_true_pred.gltf")}, commit=commit)
 
 
 def init_metrics(args):
@@ -253,10 +282,6 @@ def init_metrics(args):
     Returns an empty metric dictionary for recording model performance.
     """
     metrics = {"train": {"epoch-history-drmsd": [],
-                         "epoch-history-combined": [],
-                         "epoch-history-ln-drmsd": [],
-                         "epoch-history-mse": []},
-               "valid": {"epoch-history-drmsd": [],
                          "epoch-history-combined": [],
                          "epoch-history-ln-drmsd": [],
                          "epoch-history-mse": []},
@@ -270,6 +295,13 @@ def init_metrics(args):
                "last_chkpt_time": time.time(),
                "n_batches": 0
                }
+    v_metrics = {}
+    for split in VALID_SPLITS:
+        v_metrics[f"valid-{split}"] = {"epoch-history-drmsd": [],
+                                       "epoch-history-combined": [],
+                                       "epoch-history-ln-drmsd": [],
+                                       "epoch-history-mse": []}
+    metrics.update(v_metrics)
     if args.lr_scheduling != "noam":
         metrics["history-lr"] = [0]
     return metrics

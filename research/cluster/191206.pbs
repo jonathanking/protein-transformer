@@ -1,0 +1,30 @@
+#!/bin/bash
+#PBS -N transformer
+#PBS -j oe
+#PBS -l nodes=1:ppn=4:gpus=1
+#PBS -l mem=10gb
+#PBS -l walltime=28:00:00:00
+#PBS -q dept_gpu_12GB
+
+
+############################
+##       Environment      ##
+############################
+cd $PBS_O_WORKDIR
+export PATH=/usr/local/bin:$PATH
+export PATH=/opt/anaconda3/bin:$PATH
+export LD_LIBRARY_PATH=LD_LIBRARY_PATH:/usr/local/cuda-9.0/lib64/
+conda activate pytorch-build
+
+############################
+##     Array Job Exec.    ##
+############################
+cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch-build/bin/$(sed -n "${PBS_ARRAYID}p" ../research/cluster/191206.txt)"
+echo $cmd
+eval $cmd
+
+
+############################
+##          Exit          ##
+############################
+exit 0

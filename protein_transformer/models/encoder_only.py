@@ -10,13 +10,15 @@ from .transformer.Encoder import Encoder
 class EncoderOnlyTransformer(nn.Module):
     """ A Transformer that only uses Encoder layers. """
 
-    def __init__( self, nlayers, nhead, dmodel, dff, max_seq_len, vocab, angle_mean_path, dropout=0.1):
+    def __init__( self, nlayers, nhead, dmodel, dff, max_seq_len, vocab, angle_mean_path, use_tanh_out, dropout=0.1):
         super().__init__()
         self.angle_mean_path = angle_mean_path
         self.vocab = vocab
         self.encoder = Encoder(len(vocab), dmodel, dff, nhead, nlayers, max_seq_len, dropout)
         self.output_projection = torch.nn.Linear(dmodel, NUM_PREDICTED_ANGLES*2)
-        self.tanh = nn.Tanh()
+        self.use_tanh_out = use_tanh_out
+        if use_tanh_out:
+            self.tanh = nn.Tanh()
         self._init_parameters()
 
     def _init_parameters(self):
@@ -30,7 +32,8 @@ class EncoderOnlyTransformer(nn.Module):
         src_mask = (enc_input != self.vocab.pad_id).unsqueeze(-2)
         enc_output = self.encoder(enc_input, src_mask)
         enc_output = self.output_projection(enc_output)
-        enc_output = self.tanh(enc_output)
+        if self.use_tanh_out:
+            enc_output = self.tanh(enc_output)
         return enc_output
 
     def predict(self, enc_input):

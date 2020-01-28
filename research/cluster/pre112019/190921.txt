@@ -1,0 +1,3 @@
+python train.py data/proteinnet/casp12_190809_30xsmall.pt anglemean_only -e 10 -b 8 -cl -cg 1 -dm 64 -dk 12 -dv 12 -dih 32 --cluster --postnorm -lr 0.0001 --proteinnet
+python train.py data/proteinnet/casp12_190809_30xsmall.pt prenorm_only -e 10 -b 8 -cl -cg 1 -dm 64 -dk 12 -dv 12 -dih 32 --cluster --without_angle_means -lr 0.0001 --proteinnet
+python train.py data/proteinnet/casp12_190809_30xsmall.pt 190921_goodtest -e 20 -b 8 -cl -cg 1 -dm 128 -dk 24 -dv 24 -dih 64 --cluster -lr 0.0001 --proteinnet

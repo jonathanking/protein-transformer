@@ -1,13 +1,15 @@
-import os
-
 import numpy as np
 #import pymol
 import torch
+import wandb
 from prody import calcTransformation
 
-import protein_transformer.models as models
-from .Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
+import os
 
+from protein_transformer.protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
+import protein_transformer
+from protein_transformer.losses import inverse_trig_transform
+from protein_transformer.losses import angles_to_coords
 
 class PDB_Creator(object):
     """
@@ -129,7 +131,7 @@ class PDB_Creator(object):
         residue_lines = []
         for atom_name, atom_coord in zip(atom_names, coords):
             # TODO: what to do in the PDB file if atom is missing?
-            if atom_name is "PAD" or np.isnan(atom_coord).sum() > 0:
+            if atom_name is "PAD" or np.isnan(atom_coord).sum() > 0 or atom_coord.sum() == 0:
                 continue
             # if np.isnan(atom_coord).sum() > 0:
             #     residue_lines.append(self.get_line_for_atom(res_name, atom_name, atom_coord,
@@ -138,12 +140,13 @@ class PDB_Creator(object):
             #     continue
             residue_lines.append(self._get_line_for_atom(res_name, atom_name, atom_coord))
             self.atom_nbr += 1
-        try:
-            oxy_coords = self._get_oxy_coords(coords[1], coords[2], next_n)
-            residue_lines.append(self._get_line_for_atom(res_name, "O", oxy_coords))
-            self.atom_nbr += 1
-        except ValueError:
-            pass
+        if len(residue_lines) > 0:
+            try:
+                oxy_coords = self._get_oxy_coords(coords[1], coords[2], next_n)
+                residue_lines.append(self._get_line_for_atom(res_name, "O", oxy_coords))
+                self.atom_nbr += 1
+            except ValueError:
+                pass
         return residue_lines
 
     def _get_lines_for_protein(self):
@@ -208,7 +211,7 @@ class PDB_Creator(object):
         pymol.cmd.save(path, quiet=True)
         pymol.cmd.delete("all")
 
-    def save_gltfs(self, path1, path2, title="test"):
+    def save_gltfs(self, path1, path2, title="test", make_pse=False):
         """
         This function first creates a PDB file, then converts it to a GLTF
         (3D Object) file. Used for visualizign with Weights and Biases. """
@@ -217,10 +220,18 @@ class PDB_Creator(object):
         pymol.cmd.load(path2, "pred")
         pymol.cmd.color("marine", "true")
         pymol.cmd.color("oxygen", "pred")
+        rmsd, _, _, _, _, _, _ = pymol.cmd.align("true", "pred", quiet=True)
+        pymol.cmd.save(os.path.join("../data/logs/structures/",
+                                    os.path.basename(path1).split("_")[
+                                        0] + "_true_pred.gltf"), quiet=True)
 
-        pymol.cmd.align("true", "pred", quiet=True)
-        pymol.cmd.save(os.path.join(os.path.dirname(path1),
-                                    os.path.basename(path1).split("_")[0] + "_true_pred.gltf"),quiet=True)
+        # Align and save PSE
+        if make_pse:
+            outpath = os.path.join(os.path.dirname(path1),
+                                   os.path.basename(path1).split("_")[0] + f"_{wandb.run.step:05}_true_pred_{rmsd:.2f}.pse")
+            pymol.cmd.save(outpath,quiet=True)
+
+
         pymol.cmd.delete("all")
 
 
@@ -231,144 +242,86 @@ class PDB_Creator(object):
         return "".join([m[0] for m in self.mapping])
 
 
-def load_model(chkpt_path):
-    """
-    Given a checkpoint path, loads and returns the specified transformer model.
-    """
-    chkpt = torch.load(chkpt_path)
-    model_args = chkpt['settings']
-    model_args.cuda = True
-    model_state = chkpt['model_state_dict']
-    model_args.postnorm = False
-    print(model_args)
-
-    the_model = models.transformer.Models.Transformer(model_args,
-                                                      d_k=model_args.d_k,
-                                                      d_v=model_args.d_v,
-                                                      d_model=model_args.d_model,
-                                                      d_inner=model_args.d_inner_hid,
-                                                      n_layers=model_args.n_layers,
-                                                      n_head=model_args.n_head,
-                                                      dropout=model_args.dropout)
-    the_model.load_state_dict(model_state)
-    the_model.use_cuda = True
-    return the_model
-
-def get_data_loader(data_path, n=0, subset="test"):
-    """
-    Given a subset of a dataset as a python dictionary file to make
-    predictions from, this function selects n items at random from that
-    dataset to predict. It then returns a DataLoader for those items,
-    along with a list of ids.
-    """
-    data = torch.load(data_path)
-    data_subset = data[subset]
-
-    if n is 0:
-        train_loader = torch.utils.data.DataLoader(
-            ProteinDataset(
-                seqs=data_subset['seq'],
-                crds=data_subset['crd'],
-                angs=data_subset['ang'],
-                ),
-            num_workers=2,
-            batch_size=1,
-            collate_fn=paired_collate_fn,
-            shuffle=False)
-        return train_loader, data_subset["ids"]
-
-    # We just want to predict a few examples
-    to_predict = set([s.upper() for s in np.random.choice(data_subset["ids"], n)])  # ["2NLP_D", "3ASK_Q", "1SZA_C"]
-    will_predict = []
-    ids = []
-    seqs = []
-    angs = []
-    crds = []
-    for i, prot in enumerate(data_subset["ids"]):
-        if prot.upper() in to_predict and prot.upper() not in will_predict:
-            seqs.append(data_subset["seq"][i])
-            angs.append(data_subset["ang"][i])
-            crds.append(data_subset["crd"][i])
-            ids.append(prot)
-            will_predict.append(prot.upper())
-    assert len(seqs) == n and len(angs) == n or (len(seqs) == len(angs) and len(seqs) < n)
-
-    data_loader = torch.utils.data.DataLoader(
-        ProteinDataset(
-            seqs=seqs,
-            angs=angs,
-            crds=crds),
-        num_workers=2,
-        batch_size=1,
-        collate_fn=paired_collate_fn,
-        shuffle=False)
-    return data_loader, ids
-
-
-def make_prediction(title, data_iter):
-    src_seq, src_pos_enc, tgt_ang, tgt_pos_enc, tgt_crds, tgt_crds_enc = next(data_iter)
-    pred = model.predict(src_seq, src_pos_enc)
-
-    # Calculate loss
-    d_loss, d_loss_normalized, r_loss = drmsd_loss_from_angles(pred, tgt_crds, src_seq[:, 1:], device,
-                                                               return_rmsd=True)
-    m_loss = mse_over_angles(pred, tgt_ang[:, 1:]).to('cpu')
-    print(f"Losses:\n\tMSE = {m_loss.item():.4f}\n\tDRMSD = {d_loss.item():.4f}\n\t"
-          f"ln-DRMSD = {d_loss_normalized.item():.5f}\n\tRMSD = {r_loss.item():.2f}")
-
-    # Generate coords
-    pred = inverse_trig_transform(pred).squeeze()
-    src_seq = src_seq.squeeze()
-    coords = generate_coords(pred, pred.shape[0], src_seq[:, 1:], device)
-
-    # Generate coord, atom_name mapping
-    one_letter_seq = onehot_to_seq(src_seq.squeeze().detach().numpy())
-    cur_map = get_13atom_mapping(one_letter_seq)
-
-    # Make PDB Creator objects
-    pdb_pred = PDB_Creator(coords.squeeze(), cur_map)
-    pdb_true = PDB_Creator(tgt_crds.squeeze(), cur_map)
-
-    # Save PDB files
-    pdb_pred.save_pdb(f"{title}_pred.pdb")
-    pdb_true.save_pdb(f"{title}_true.pdb")
-
-    # Align PDB files
-    # TODO: fix alignment strategy
-    # p = parsePDB(f"{title}_pred.pdb")
-    # t = parsePDB(f"{title}_true.pdb")
-    # tr = calcTransformation(p.getCoords()[:-1], t.getCoords())
-    # p.setCoords(tr.apply(p.getCoords()))
-    # writePDB(f"{title}_pred.pdb", p)
-
-    print(f"Constructed PDB files for {title}.")
-
-
 ATOM_MAP_13 = {}
 for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
     ATOM_MAP_13[one_letter] = ["N", "CA", "C"] + list(SC_DATA[ONE_TO_THREE_LETTER_MAP[one_letter]]["predicted"])
     ATOM_MAP_13[one_letter].extend(["PAD"] * (13 - len(ATOM_MAP_13[one_letter])))
 
+def generate_pdbs_from_debug_dataset():
+    import torch
+
+    data = torch.load("debug_struct.pt")
+
+    seq, seq_gap = data["seq"]
+    ang, ang_gap = data["ang"]
+    crd, crd_gap = data["crd"]
+
+    creator_from_crd = PDB_Creator(crd, seq=seq)
+    creator_from_crd.save_pdb("from_crd.pdb")
+
+    creator_from_crd_gap = PDB_Creator(crd_gap, seq=seq_gap)
+    creator_from_crd_gap.save_pdb("from_crd_gap.pdb")
+
+    crd_from_ang = get_coordinates_from_numpy_data(seq, ang)
+    creator_from_ang = PDB_Creator(crd_from_ang, seq=seq)
+    creator_from_ang.save_pdb("from_ang.pdb")
+
+    crd_from_ang_gap = get_coordinates_from_numpy_data(seq_gap, ang_gap)
+    creator_from_ang_gap = PDB_Creator(crd_from_ang_gap, seq=seq_gap)
+    creator_from_ang_gap.save_pdb("from_ang_gap.pdb")
+
+
+def get_coordinates_from_numpy_data(seq, ang_sincos):
+    # Add batch dimension, make copy
+    ang_sincos_new = ang_sincos[np.newaxis, :]
+
+    # Compute angles in radians from sin/cos representaion
+    ang_rad = \
+    inverse_trig_transform(torch.tensor(ang_sincos_new, dtype=torch.float))[0]
+
+    # Remove nans
+    ang_rad[torch.isnan(ang_rad)] = 0
+
+    if torch.isnan(ang_rad).any():
+        print("Nan in ang_rad.")
+
+    seq_as_ints = protein_transformer.dataset.VOCAB.aa_seq2indices(seq,
+                                                                   add_sos_eos=False)
+    seq_as_ints = torch.tensor(seq_as_ints, dtype=torch.long)
+
+    coords = angles_to_coords(ang_rad, seq_as_ints, remove_batch_padding=False)
+    return coords.numpy()
+
+
+def make_debug_structure_dataset():
+    """ Creates a pytorch dictionary that contains one example of a structure
+        without a gap, and another with a gap. Prints their ProteinNet IDs.
+    """
+    import torch
+
+    data = torch.load("../../data/proteinnet/casp12_191101_100.pt")
+
+
+    nogap = 3
+    gap = 10#5
+    seq, ang, crd = data["train"]["seq"][nogap], data["train"]["ang"][nogap], \
+                    data["train"]["crd"][nogap]
+    seq_gap, ang_gap, crd_gap = data["train"]["seq"][gap], data["train"]["ang"][
+        gap], \
+                                data["train"]["crd"][gap]
+    print(data["train"]["ids"][nogap])
+    print(data["train"]["ids"][gap])
+
+    d = {"seq": (seq, seq_gap), "ang": (ang, ang_gap), "crd": (crd, crd_gap)}
+    torch.save(d, "debug_struct.pt")
+
+
 if __name__ == "__main__":
-    # TODO Clean imports
     # TODO don't reimplement dataloader?
     # TODO do several predictions, add PDB name
     # TODO add ability to predict given model checkpoint
     # TODO CUDA isn't playing nice
-    import sys
-    import os
-    os.chdir('/home/jok120/protein-transformer/')
-    sys.path.append("/home/jok120/protein-transformer/scripts/utils")
-    import torch.utils.data
-    from dataset import ProteinDataset, paired_collate_fn
-    from protein.Structure import generate_coords
-    from losses import inverse_trig_transform, drmsd_loss_from_angles, mse_over_angles
-    from protein.structure_utils import onehot_to_seq
 
-    device = torch.device('cuda')
-
-    model = load_model("data/checkpoints/casp12_30_ln_11_best.chkpt")
-    data_loader, ids = get_data_loader('data/proteinnet/casp12_190809_30xsmall.pt')
-    data_iter = iter(data_loader)
-    make_prediction(9, data_iter)
+    make_debug_structure_dataset()
+    generate_pdbs_from_debug_dataset()
 

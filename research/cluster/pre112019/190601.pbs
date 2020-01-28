@@ -1,0 +1,33 @@
+#!/bin/bash
+#PBS -N trans-hp-q3
+#PBS -j oe
+#PBS -l nodes=1:ppn=2:gpus=1
+#PBS -l mem=10gb
+#PBS -l walltime=1:00:00:00
+#PBS -q any_gpu
+
+
+############################
+##       Environment      ##
+############################
+cd $PBS_O_WORKDIR
+export PATH=/usr/local/bin:$PATH
+export PATH=/opt/anaconda3/bin:$PATH
+export LD_LIBRARY_PATH=LD_LIBRARY_PATH:/usr/local/cuda-9.0/lib64/
+source activate pytorch_conda
+
+
+############################
+##     Array Job Exec.    ##
+############################
+cmd_file=$(basename -- "$0")
+cmd_file="${cmd_file%%.*}.txt"
+cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch_conda/bin/$(sed -n "${PBS_ARRAYID}p" cluster/190601.txt)"
+echo $cmd
+eval $cmd
+
+
+############################
+##          Exit          ##
+############################
+exit 0

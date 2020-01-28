@@ -14,6 +14,10 @@ If you'd like to look around, all code specific to this package can be found und
  is responsible for manipulating and generating protein structure and sequence data. Many other research documents are
   currently included in `research/`, but are not needed to run the script.
   
+ Thanks to integration with Weights and Biases, you can easily monitor the status of your model training on the Weights and Biases dashboard (below). Many training statistics are logged in realtime, including the 3D structure of each prediction.
+ 
+ ![Weights and Biases Dashboard](/data/development/imgs/wandb_dashboard_ex.png)
+  
 ## Installation
 
 To run this code, it's recommended to first perform a developmental install of the package with pip in your current 
@@ -25,6 +29,7 @@ will be free to import any classes or subroutines into your own training script 
 * Pytorch
 * numpy
 * tqdm
+* [wandb](https://docs.wandb.com)
 
 ## How to run
 
@@ -43,17 +48,22 @@ python train.py data/proteinnet/casp12.pt model01 -lr -0.01 -e 30 -b 12 -cl -cg 
 usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
                 [-es EARLY_STOPPING] [-nws N_WARMUP_STEPS] [-cg CLIP]
                 [-l {mse,drmsd,ln-drmsd,combined}] [--train_only]
-                [--lr_scheduling] [--without_angle_means] [--eval_train]
-                [-opt {adam,sgd}] [-fctf FRACTION_COMPLETE_TF]
-                [-fsstf FRACTION_SUBSEQ_TF] [--skip_missing_res_train]
-                [--repeat_train REPEAT_TRAIN] [-s SEED]
-                [--combined_drmsd_weight COMBINED_DRMSD_WEIGHT]
-                [-m {enc-dec,enc-only}] [-dm D_MODEL] [-dih D_INNER_HID]
-                [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT] [--postnorm]
-                [--angle_mean_path ANGLE_MEAN_PATH]
-                [--log_structure_step LOG_STRUCTURE_STEP]
-                [--log_wandb_step LOG_WANDB_STEP] [--no_cuda] [--cluster]
-                [--restart] [--restart_opt]
+                [--lr_scheduling {noam,plateau}] [--patience PATIENCE]
+                [--early_stopping_threshold EARLY_STOPPING_THRESHOLD]
+                [-esm {train-mse,test-mse,valid-10-mse,valid-20-mse,valid-30-mse,valid-40-mse,valid-50-mse,valid-70-mse,valid-90-mse,train-drmsd,test-drmsd,valid-10-drmsd,valid-20-drmsd,valid-30-drmsd,valid-40-drmsd,valid-50-drmsd,valid-70-drmsd,valid-90-drmsd,train-ln-drmsd,test-ln-drmsd,valid-10-ln-drmsd,valid-20-ln-drmsd,valid-30-ln-drmsd,valid-40-ln-drmsd,valid-50-ln-drmsd,valid-70-ln-drmsd,valid-90-ln-drmsd,train-combined,test-combined,valid-10-combined,valid-20-combined,valid-30-combined,valid-40-combined,valid-50-combined,valid-70-combined,valid-90-combined}]
+                [--without_angle_means] [--eval_train] [-opt {adam,sgd}]
+                [-fctf FRACTION_COMPLETE_TF] [-fsstf FRACTION_SUBSEQ_TF]
+                [--skip_missing_res_train] [--repeat_train REPEAT_TRAIN]
+                [-s SEED] [--combined_drmsd_weight COMBINED_DRMSD_WEIGHT]
+                [--batching_order {descending,ascending,binned-random}]
+                [--backbone_loss] [--sequential_drmsd_loss]
+                [-m {enc-dec,enc-only,enc-only-linear-out}] [-dm D_MODEL]
+                [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT]
+                [--postnorm] [--angle_mean_path ANGLE_MEAN_PATH]
+                [--weight_decay] [--log_structure_step LOG_STRUCTURE_STEP]
+                [--log_val_struct_step LOG_VAL_STRUCT_STEP]
+                [--log_wandb_step LOG_WANDB_STEP] [--no_cuda] [-c] [--restart]
+                [--restart_opt]
                 [--checkpoint_time_interval CHECKPOINT_TIME_INTERVAL]
                 [--load_chkpt LOAD_CHKPT]
                 data name
@@ -84,8 +94,17 @@ Training Args:
                         or a combinaation of RMSE and ln-DRMSD.
   --train_only          Train, validation, and testing sets are the same. Only
                         report train accuracy.
-  --lr_scheduling       Use learning rate scheduling as described in original
-                        paper.
+  --lr_scheduling {noam,plateau}
+                        noam: Use learning rate scheduling as described in
+                        Transformer paper, plateau: Decrease learning rate
+                        after Validation loss plateaus.
+  --patience PATIENCE   Number of epochs to wait before reducing LR for
+                        plateau scheduler.
+  --early_stopping_threshold EARLY_STOPPING_THRESHOLD
+                        Threshold for considering improvements during
+                        training/lr scheduling.
+  -esm {train-mse,test-mse,valid-10-mse,valid-20-mse,valid-30-mse,valid-40-mse,valid-50-mse,valid-70-mse,valid-90-mse,train-drmsd,test-drmsd,valid-10-drmsd,valid-20-drmsd,valid-30-drmsd,valid-40-drmsd,valid-50-drmsd,valid-70-drmsd,valid-90-drmsd,train-ln-drmsd,test-ln-drmsd,valid-10-ln-drmsd,valid-20-ln-drmsd,valid-30-ln-drmsd,valid-40-ln-drmsd,valid-50-ln-drmsd,valid-70-ln-drmsd,valid-90-ln-drmsd,train-combined,test-combined,valid-10-combined,valid-20-combined,valid-30-combined,valid-40-combined,valid-50-combined,valid-70-combined,valid-90-combined}, --early_stopping_metric {train-mse,test-mse,valid-10-mse,valid-20-mse,valid-30-mse,valid-40-mse,valid-50-mse,valid-70-mse,valid-90-mse,train-drmsd,test-drmsd,valid-10-drmsd,valid-20-drmsd,valid-30-drmsd,valid-40-drmsd,valid-50-drmsd,valid-70-drmsd,valid-90-drmsd,train-ln-drmsd,test-ln-drmsd,valid-10-ln-drmsd,valid-20-ln-drmsd,valid-30-ln-drmsd,valid-40-ln-drmsd,valid-50-ln-drmsd,valid-70-ln-drmsd,valid-90-ln-drmsd,train-combined,test-combined,valid-10-combined,valid-20-combined,valid-30-combined,valid-40-combined,valid-50-combined,valid-70-combined,valid-90-combined}
+                        Metric observed for early stopping and LR scheduling.
   --without_angle_means
                         Do not initialize the model with pre-computed angle
                         means.
@@ -111,9 +130,19 @@ Training Args:
   --combined_drmsd_weight COMBINED_DRMSD_WEIGHT
                         When combining losses, use weight w for loss = w *
                         drmsd + (1-w) * mse.
+  --batching_order {descending,ascending,binned-random}
+                        Method for constructuing minibatches of proteins
+                        w.r.t. sequence length. Batches can be provided in
+                        descending/ascending order, or 'binned-random' which
+                        keeps the sequencesin a batch similar, while
+                        randomizing the bins/batches.
+  --backbone_loss       While training, only evaluate loss on the backbone.
+  --sequential_drmsd_loss
+                        Compute DRMSD loss without batch-level
+                        parallelization.
 
 Model Args:
-  -m {enc-dec,enc-only}, --model {enc-dec,enc-only}
+  -m {enc-dec,enc-only,enc-only-linear-out}, --model {enc-dec,enc-only,enc-only-linear-out}
                         Model architecture type. Encoder only or
                         encoder/decoder model.
   -dm D_MODEL, --d_model D_MODEL
@@ -136,14 +165,18 @@ Model Args:
   --angle_mean_path ANGLE_MEAN_PATH
                         Path to vector of means for every predicted angle.
                         Used to initialize model output.
+  --weight_decay        Applies weight decay to model weights.
 
 Saving Args:
   --log_structure_step LOG_STRUCTURE_STEP
                         Frequency of logging structure data during training.
+  --log_val_struct_step LOG_VAL_STRUCT_STEP, -lvs LOG_VAL_STRUCT_STEP
+                        During training, make predictions on 1 structure from
+                        every validation set.
   --log_wandb_step LOG_WANDB_STEP
                         Frequency of logging to wandb during training.
   --no_cuda
-  --cluster             Set of parameters to facilitate training on a remote
+  -c, --cluster         Set of parameters to facilitate training on a remote
                         cluster. Limited I/O, etc.
   --restart             Does not resume training.
   --restart_opt         Resumes training but does not load the optimizer
@@ -154,11 +187,12 @@ Saving Args:
   --load_chkpt LOAD_CHKPT
                         Path from which to load a model checkpoint.
 
+
 ```
 
 ## Notes on Training Data
 
-The training data is based on Mohammed AlQuraishi's [ProteinNet](https://github.com/aqlaboratory/proteinnet). Preprocessed data can be downloaded [here](https://pitt.box.com/s/1jc66xcs4ddfi9o2ik8ozozcswen43fh). 
+The training data is based on Mohammed AlQuraishi's [ProteinNet](https://github.com/aqlaboratory/proteinnet). Preprocessed  data from the CASP12 competition that has been modified to work with this project can be downloaded [here (13GB)](https://pitt.box.com/s/tmcav6x5am54lqbe11d96ceqgd7q42hw) and [here (~3GB, a 30% thinning of the previous dataset)](https://pitt.box.com/s/xjigkqj4i02dx74ults12x3adu04utam). 
 
 My data uses the same train/test/validation sets as ProteinNet. While, like ProteinNet, it includes protein sequences and coordinates, I have modified it to include information about the entire protein structure (both backbone and sidechain atoms). Thus, each protein in the dataset includes information for sequence, interior torsional/bond angles, and coordinates. It does not include multiple sequence alignments or secondary structure annotation.
 
@@ -179,7 +213,7 @@ data = {"train": {"seq": [seq1, seq2, ...],
 
 ### Copyright
 
-Copyright (c) 2019, Jonathan King
+Copyright (c) 2020, Jonathan King
 
 
 #### Acknowledgements

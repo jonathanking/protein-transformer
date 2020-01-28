@@ -1,4 +1,0 @@
-python train.py -lr 0.001 -e 10 --cluster -b 4 -cl -cg 1 -dm 500 -nl 4 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_rnn_500b4
-python train.py -lr 0.001 -e 10 --cluster -b 12 -cl -cg 1 -dm 500 -nl 4 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_rnn_500b12
-python train.py -lr 0.01 -e 10 --cluster -b 4 -cl -cg 1 -dm 500 -nl 4 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_rnn_500lr2b4
-python train.py -lr 0.01 -e 10 --cluster -b 12 -cl -cg 1 -dm 250 --proteinnet data/proteinnet/casp12_190809_30xsmall.pt casp12_rnn_250lr2b12

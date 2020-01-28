@@ -1,0 +1,27 @@
+#!/bin/bash
+#PBS -N transformer-fulldata
+#PBS -j oe
+#PBS -l nodes=1:ppn=4:gpus=1
+#PBS -l mem=10gb
+#PBS -l walltime=28:00:00:00
+#PBS -q dept_gpu_12GB
+
+
+############################
+##       Environment      ##
+############################
+cd $PBS_O_WORKDIR
+conda activate pytorch_conda
+
+############################
+##     Array Job Exec.    ##
+############################
+cmd="/net/pulsar/home/koes/jok120/.conda/envs/pytorch_conda/bin/$(sed -n "${PBS_ARRAYID}p" ../research/cluster/191214.txt)"
+echo $cmd
+eval $cmd
+
+#############################
+## Copy log files and exit ##
+#############################
+rsync -avzh /scr/jok120/wandb/ /net/pulsar/home/koes/jok120/protein-transformer/protein_transformer/wandb
+exit 0
