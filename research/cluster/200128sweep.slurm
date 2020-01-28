@@ -12,6 +12,7 @@
 ############################
 ##       Environment      ##
 ############################
+eval "$(conda shell.bash hook)"
 conda activate pytorch_c6m12_cuda101
 module load cuda/10.1
 
