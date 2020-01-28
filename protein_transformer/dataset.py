@@ -125,6 +125,7 @@ class ProteinDataset(torch.utils.data.Dataset):
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
         self.vocab = ProteinVocabulary()
+        self._seqs, self._angs, self._crds = [], [], []
         for i in range(len(seqs)):
             if np.isnan(angs[i]).all(axis=-1).any() and skip_missing_residues:
                 continue
