@@ -1,7 +1,7 @@
 program: train.py
 method: bayes
 metric:
-  name: Train RMSD
+  name: Train Epoch RMSD
   goal: minimize
 parameters:
   data:
