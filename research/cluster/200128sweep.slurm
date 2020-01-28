@@ -21,6 +21,6 @@ module load cuda/10.1
 ##     Array Job Exec.    ##
 ############################
 cd $SLURM_SUBMIT_DIR
-wandb agent --count 1 koes-group/protein-transformer/73aevuo9
+wandb agent --count 1 koes-group/protein-transformer/ohkwkqpq
 
 exit 0
