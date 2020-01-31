@@ -1,6 +1,7 @@
 """ A script to hold some utility functions for model logging. """
 import sys
 import time
+import os
 
 import numpy as np
 import torch

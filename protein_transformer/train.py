@@ -507,13 +507,16 @@ def main():
                          "n_trainable_params": n_trainable_params,
                          "max_seq_len": MAX_SEQ_LEN})
     wandb.run.summary["stopped_training_early"] = False
-    args.structure_dir = f"{wandb.run.dir}/structures"
-    os.makedirs(f"{wandb.run.dir}/structures", exist_ok=True)
+    local_base_dir = wandb.run.dir
+    args.structure_dir = os.path.join(local_base_dir, "structures",)
+    os.makedirs(args.structure_dir, exist_ok=True)
+    with open(os.path.join(local_base_dir, "NAME"), "w") as f:
+        f.write(f"{args.name}\n")
 
     # Prepare log and checkpoint files
-    args.chkpt_path = f"{wandb.run.dir}/checkpoints/" + args.name
-    os.makedirs(f"{wandb.run.dir}/checkpoints/", exist_ok=True)
-    args.log_file = f"{wandb.run.dir}/" + args.name + '.train'
+    args.chkpt_path = os.path.join(local_base_dir, "checkpoints")
+    os.makedirs(args.chkpt_path, exist_ok=True)
+    args.log_file = os.path.join(local_base_dir, args.name + '.train')
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
     model, optimizer, scheduler, resumed, metrics = load_model(model, optimizer, scheduler, args)
@@ -524,6 +527,9 @@ def main():
         log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
 
+    wandb.save(os.path.join(local_base_dir, "structures/*"))
+    wandb.save(os.path.join(local_base_dir, "checkpoints/*"))
+    wandb.save(os.path.join(local_base_dir, "*.train"))
 
 
 
