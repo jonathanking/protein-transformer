@@ -293,38 +293,6 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
               commit=commit)
 
 
-# def log_val_structure(args, pred_coords, true_coords, src_seq, commit, struct_name=""):
-#     """
-#     Logs a 3D structure prediction to wandb for a particular validation set
-#     structure.
-#     """
-#     src_seq_cpu = src_seq.cpu().detach().numpy()
-#
-#     # Make dir if needed
-#     cur_struct_path = os.path.join(args.structure_dir, struct_name)
-#     os.makedirs(cur_struct_path, exist_ok=True)
-#
-#     # Remove coordinate level padding (each residue has about 13 atoms, even if some are missing)
-#     gold_item_non_batch_pad = (true_coords != VOCAB.pad_id).any(dim=-1)
-#     true_coords = true_coords[gold_item_non_batch_pad]
-#     true_coords[torch.isnan(true_coords)] = 0
-#
-#     creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq_cpu))
-#     creator.save_pdb(f"{cur_struct_path}/{wandb.run.step:05}_pred.pdb",title="pred")
-#
-#     t_creator = PDB_Creator(true_coords.cpu().detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq_cpu))
-#     if not os.path.isfile(f"{cur_struct_path}/true.pdb"):
-#         t_creator.save_pdb(f"{cur_struct_path}/true.pdb", title="true")
-#
-#     t_creator.save_gltfs(f"{cur_struct_path}/true.pdb",
-#                          f"{cur_struct_path}/{wandb.run.step:05}_pred.pdb",
-#                          gltf_out_path=os.path.join(args.gltf_dir, f"{wandb.run.step:05}.gltf"),
-#                          make_pse=True,
-#                          pse_out_path=f"{cur_struct_path}/{wandb.run.step:05}_both.pse")
-#
-#     wandb.log({struct_name: wandb.Object3D(os.path.join(args.gltf_dir, f"{wandb.run.step:05}.gltf"))}, commit=commit)
-
-
 def init_metrics(args):
     """
     Returns an empty metric dictionary for recording model performance.

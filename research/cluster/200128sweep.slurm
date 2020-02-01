@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-gpu=4
 #SBATCH --time=7-00:00:00
 #SBATCH --partition=dept_gpu
-#SBATCH --output="../research/cluster/slurm/200128sweep/slurm-%A_%a.out"
+#SBATCH --output="../research/cluster/slurm/200131sweep/slurm-%A_%a.out"
 
 
 ############################
