@@ -288,9 +288,7 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
                          make_pse=True,
                          pse_out_path=f"{cur_struct_path}/{wandb.run.step:05}_both.pse")
 
-    wandb.log({struct_name: wandb.Object3D(
-        os.path.join(args.gltf_dir, f"{wandb.run.step:05}.gltf"))},
-              commit=commit)
+    wandb.log({struct_name: wandb.Object3D(os.path.join(args.gltf_dir, f"{wandb.run.step:05}_{struct_name}.gltf"))}, commit=commit)
 
 
 def init_metrics(args):
