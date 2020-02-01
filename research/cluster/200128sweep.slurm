@@ -4,7 +4,7 @@
 #SBATCH --gpus=1
 #SBATCH -C "C6"
 #SBATCH --cpus-per-gpu=4
-#SBATCH --time=1-00:00:00
+#SBATCH --time=7-00:00:00
 #SBATCH --partition=dept_gpu
 #SBATCH --output="../research/cluster/slurm/200128sweep/slurm-%A_%a.out"
 
@@ -13,7 +13,7 @@
 ##       Environment      ##
 ############################
 eval "$(conda shell.bash hook)"
-conda activate pytorch_c6m12_cuda101
+conda activate psp
 module load cuda/10.1
 
 
