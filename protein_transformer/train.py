@@ -511,6 +511,7 @@ def main():
     args.structure_dir = os.path.join(local_base_dir, "structures")
     args.gltf_dir = os.path.join(args.structure_dir, "gltfs")
     os.makedirs(args.structure_dir, exist_ok=True)
+    os.makedirs(args.gltf_dir, exist_ok=True)
     with open(os.path.join(local_base_dir, "NAME"), "w") as f:
         f.write(f"{args.name}\n")
 
