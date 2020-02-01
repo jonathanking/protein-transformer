@@ -509,7 +509,7 @@ def main():
     wandb.run.summary["stopped_training_early"] = False
     local_base_dir = wandb.run.dir
     args.structure_dir = os.path.join(local_base_dir, "structures")
-    args.gltf_dir = os.path.join(args.structure_dir, "gltfs")
+    args.gltf_dir = f"../data/logs/structures/gltfs/{wandb.run.id}"
     os.makedirs(args.structure_dir, exist_ok=True)
     os.makedirs(args.gltf_dir, exist_ok=True)
     with open(os.path.join(local_base_dir, "NAME"), "w") as f:
@@ -532,7 +532,7 @@ def main():
     wandb.save(os.path.join(local_base_dir, "structures/*"))
     wandb.save(os.path.join(local_base_dir, "checkpoints/*"))
     wandb.save(os.path.join(local_base_dir, "*.train"))
-    wandb.save("structures/gltfs/*")
+    wandb.save(os.path.join(args.gltf_dir, "/*"))
 
 
 
