@@ -532,6 +532,7 @@ def main():
     wandb.save(os.path.join(local_base_dir, "structures/*"))
     wandb.save(os.path.join(local_base_dir, "checkpoints/*"))
     wandb.save(os.path.join(local_base_dir, "*.train"))
+    wandb.save(os.path.join(args.gltf_dir, "*.gltf"))
 
 
 
