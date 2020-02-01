@@ -508,7 +508,8 @@ def main():
                          "max_seq_len": MAX_SEQ_LEN})
     wandb.run.summary["stopped_training_early"] = False
     local_base_dir = wandb.run.dir
-    args.structure_dir = os.path.join(local_base_dir, "structures",)
+    args.structure_dir = os.path.join(local_base_dir, "structures")
+    args.gltf_dir = os.path.join(args.structure_dir, "gltfs")
     os.makedirs(args.structure_dir, exist_ok=True)
     with open(os.path.join(local_base_dir, "NAME"), "w") as f:
         f.write(f"{args.name}\n")
