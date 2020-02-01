@@ -180,7 +180,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
                 pred_coords = angles_to_coords(inverse_trig_transform(val_pred_angs)[0].cpu(), val_src_seq[0].cpu(),
                     remove_batch_padding=True)
                 log_structure_and_angs(args, val_pred_angs[0], pred_coords, val_tgt_crds[0], val_src_seq[0],
-                                       commit=False, log_angs=False, struct_name=f"V{split}_{val_idx}")
+                                       commit=False, log_angs=False, struct_name=f"V{split}[{val_idx}]")
 
     if do_log_str:
         with torch.no_grad():
@@ -281,14 +281,14 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
     if not os.path.isfile(f"{cur_struct_path}/true.pdb"):
         t_creator.save_pdb(f"{cur_struct_path}/true.pdb", title="true")
 
+    gltf_out_path = os.path.join(args.gltf_dir, f"{wandb.run.step:05}_{struct_name}.gltf")
     t_creator.save_gltfs(f"{cur_struct_path}/true.pdb",
                          f"{cur_struct_path}/{wandb.run.step:05}_pred.pdb",
-                         gltf_out_path=os.path.join(args.gltf_dir,
-                                                    f"{wandb.run.step:05}.gltf"),
+                         gltf_out_path=gltf_out_path,
                          make_pse=True,
                          pse_out_path=f"{cur_struct_path}/{wandb.run.step:05}_both.pse")
 
-    wandb.log({struct_name: wandb.Object3D(os.path.join(args.gltf_dir, f"{wandb.run.step:05}_{struct_name}.gltf"))}, commit=commit)
+    wandb.log({struct_name: wandb.Object3D(gltf_out_path)}, commit=commit)
 
 
 def init_metrics(args):
