@@ -45,35 +45,38 @@ python train.py data/proteinnet/casp12.pt model01 -lr -0.01 -e 30 -b 12 -cl -cg 
 
 #### Usage:
 ```
-usage: train.py [-h] [-lr LEARNING_RATE] [-e EPOCHS] [-b BATCH_SIZE]
-                [-es EARLY_STOPPING] [-nws N_WARMUP_STEPS] [-cg CLIP]
+usage: train.py [-h] [--data DATA] [--name NAME] [-lr LEARNING_RATE]
+                [-e EPOCHS] [-b BATCH_SIZE] [-es EARLY_STOPPING]
+                [-nws N_WARMUP_STEPS] [-cg CLIP]
                 [-l {mse,drmsd,ln-drmsd,combined}] [--train_only]
                 [--lr_scheduling {noam,plateau}] [--patience PATIENCE]
                 [--early_stopping_threshold EARLY_STOPPING_THRESHOLD]
                 [-esm {train-mse,test-mse,valid-10-mse,valid-20-mse,valid-30-mse,valid-40-mse,valid-50-mse,valid-70-mse,valid-90-mse,train-drmsd,test-drmsd,valid-10-drmsd,valid-20-drmsd,valid-30-drmsd,valid-40-drmsd,valid-50-drmsd,valid-70-drmsd,valid-90-drmsd,train-ln-drmsd,test-ln-drmsd,valid-10-ln-drmsd,valid-20-ln-drmsd,valid-30-ln-drmsd,valid-40-ln-drmsd,valid-50-ln-drmsd,valid-70-ln-drmsd,valid-90-ln-drmsd,train-combined,test-combined,valid-10-combined,valid-20-combined,valid-30-combined,valid-40-combined,valid-50-combined,valid-70-combined,valid-90-combined}]
-                [--without_angle_means] [--eval_train] [-opt {adam,sgd}]
+                [--without_angle_means] [--eval_train EVAL_TRAIN]
+                [--eval_train_drmsd EVAL_TRAIN_DRMSD] [-opt {adam,sgd}]
                 [-fctf FRACTION_COMPLETE_TF] [-fsstf FRACTION_SUBSEQ_TF]
-                [--skip_missing_res_train] [--repeat_train REPEAT_TRAIN]
-                [-s SEED] [--combined_drmsd_weight COMBINED_DRMSD_WEIGHT]
+                [--skip_missing_res_train SKIP_MISSING_RES_TRAIN]
+                [--repeat_train REPEAT_TRAIN] [-s SEED]
+                [--combined_drmsd_weight COMBINED_DRMSD_WEIGHT]
                 [--batching_order {descending,ascending,binned-random}]
                 [--backbone_loss] [--sequential_drmsd_loss]
                 [-m {enc-dec,enc-only,enc-only-linear-out}] [-dm D_MODEL]
                 [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT]
                 [--postnorm] [--angle_mean_path ANGLE_MEAN_PATH]
-                [--weight_decay] [--log_structure_step LOG_STRUCTURE_STEP]
+                [--weight_decay WEIGHT_DECAY]
+                [--log_structure_step LOG_STRUCTURE_STEP]
                 [--log_val_struct_step LOG_VAL_STRUCT_STEP]
-                [--log_wandb_step LOG_WANDB_STEP] [--no_cuda] [-c] [--restart]
-                [--restart_opt]
+                [--log_wandb_step LOG_WANDB_STEP] [--no_cuda] [-c CLUSTER]
+                [--restart] [--restart_opt]
                 [--checkpoint_time_interval CHECKPOINT_TIME_INTERVAL]
                 [--load_chkpt LOAD_CHKPT]
-                data name
 
 optional arguments:
   -h, --help            show this help message and exit
 
 Required Args:
-  data                  Path to training data.
-  name                  The model name.
+  --data DATA           Path to training data.
+  --name NAME           The model name.
 
 Training Args:
   -lr LEARNING_RATE, --learning_rate LEARNING_RATE
@@ -108,7 +111,11 @@ Training Args:
   --without_angle_means
                         Do not initialize the model with pre-computed angle
                         means.
-  --eval_train          Perform an evaluation of the entire training set after
+  --eval_train EVAL_TRAIN
+                        Perform an evaluation of the entire training set after
+                        a training epoch.
+  --eval_train_drmsd EVAL_TRAIN_DRMSD
+                        Perform an evaluation of the entire training set after
                         a training epoch.
   -opt {adam,sgd}, --optimizer {adam,sgd}
                         Training optimizer.
@@ -119,7 +126,7 @@ Training Args:
   -fsstf FRACTION_SUBSEQ_TF, --fraction_subseq_tf FRACTION_SUBSEQ_TF
                         Fraction of the time to use teacher forcing on a per-
                         timestep basis.
-  --skip_missing_res_train
+  --skip_missing_res_train SKIP_MISSING_RES_TRAIN
                         When training, skip over batches that have missing
                         residues. This can make trainingfaster if using
                         teacher forcing.
@@ -165,7 +172,8 @@ Model Args:
   --angle_mean_path ANGLE_MEAN_PATH
                         Path to vector of means for every predicted angle.
                         Used to initialize model output.
-  --weight_decay        Applies weight decay to model weights.
+  --weight_decay WEIGHT_DECAY
+                        Applies weight decay to model weights.
 
 Saving Args:
   --log_structure_step LOG_STRUCTURE_STEP
@@ -176,7 +184,8 @@ Saving Args:
   --log_wandb_step LOG_WANDB_STEP
                         Frequency of logging to wandb during training.
   --no_cuda
-  -c, --cluster         Set of parameters to facilitate training on a remote
+  -c CLUSTER, --cluster CLUSTER
+                        Set of parameters to facilitate training on a remote
                         cluster. Limited I/O, etc.
   --restart             Does not resume training.
   --restart_opt         Resumes training but does not load the optimizer
@@ -186,7 +195,6 @@ Saving Args:
                         checkpoint is made, regardless of its performance.
   --load_chkpt LOAD_CHKPT
                         Path from which to load a model checkpoint.
-
 
 ```
 
