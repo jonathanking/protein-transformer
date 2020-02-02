@@ -1,6 +1,7 @@
 """ A script to hold some utility functions for model logging. """
 import sys
 import time
+import os
 
 import numpy as np
 import torch
@@ -171,21 +172,21 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
     if args.log_val_struct_step != 0 and step % args.log_val_struct_step == 0:
         with torch.no_grad():
             for split, validation_dataset in validation_datasets.items():
-                val_idx = 16
+                val_idx = len(validation_dataset.dataset) // 2
                 val_src_seq, val_tgt_ang, val_tgt_crds = validation_dataset.dataset[val_idx : val_idx + 1]
                 val_src_seq, val_tgt_ang, val_tgt_crds = map(lambda x: x.to(device),
                                                              paired_collate_fn(zip(val_src_seq, val_tgt_ang, val_tgt_crds)))
                 val_pred_angs = model(val_src_seq, val_tgt_ang)
                 pred_coords = angles_to_coords(inverse_trig_transform(val_pred_angs)[0].cpu(), val_src_seq[0].cpu(),
                     remove_batch_padding=True)
-                log_structure_and_angs(args, val_pred_angs[0], pred_coords, val_tgt_crds[0], val_src_seq[0], metrics,
-                                       commit=False, log_angs=False, model_suffix=f"V{split}")
+                log_structure_and_angs(args, val_pred_angs[0], pred_coords, val_tgt_crds[0], val_src_seq[0],
+                                       commit=False, log_angs=False, struct_name=f"V{split}[{val_idx}]")
 
     if do_log_str:
         with torch.no_grad():
             pred_coords = angles_to_coords(inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                                            remove_batch_padding=True)
-        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], metrics, commit=True)
+        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], commit=True)
     return metrics
 
 
@@ -233,7 +234,7 @@ def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
             pred_coords = angles_to_coords(
                 inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                 remove_batch_padding=True)
-        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], metrics, commit=False)
+        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], commit=False)
     return metrics
 
 
@@ -251,30 +252,43 @@ def do_eval_epoch_logging(metrics, mode):
                f"{mode.title()} Epoch Combined Loss": metrics[mode]["epoch-combined"]}, commit=False)
 
 
-def log_structure_and_angs(args, pred_ang, pred_coords, gold_item, src_seq, metrics, commit, log_angs=True, model_suffix=""):
+def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, commit, log_angs=True, struct_name="train"):
     """
     Logs a 3D structure prediction to wandb.
     """
-    if model_suffix != "":
-        log_title = model_suffix + "_structure_comparison"
-        model_suffix = "-" + model_suffix
-    else:
-        log_title = "structure_comparison"
     if log_angs:
         log_angle_distributions(args, pred_ang, src_seq)
 
-    gold_item_non_batch_pad = (gold_item != VOCAB.pad_id).any(dim=-1)
-    gold_item = gold_item[gold_item_non_batch_pad]
-    creator = PDB_Creator(pred_coords.detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    creator.save_pdb(f"{args.structure_dir}/{args.name}{model_suffix}_pred.pdb",title="pred")
-    gold_item[torch.isnan(gold_item)] = 0
-    t_creator = PDB_Creator(gold_item.cpu().detach().numpy(), seq=VOCAB.indices2aa_seq(src_seq.cpu().detach().numpy()))
-    t_creator.save_pdb(f"{args.structure_dir}/{args.name}{model_suffix}_true.pdb", title="true")
-    t_creator.save_gltfs(f"{args.structure_dir}/{args.name}{model_suffix}_true.pdb",
-                         f"{args.structure_dir}/{args.name}{model_suffix}_pred.pdb",
-                         make_pse=True)
+    src_seq_cpu = src_seq.cpu().detach().numpy()
 
-    wandb.log({log_title: wandb.Object3D(f"../data/logs/structures/{args.name}{model_suffix}_true_pred.gltf")}, commit=commit)
+    # Make dir if needed
+    cur_struct_path = os.path.join(args.structure_dir, struct_name)
+    os.makedirs(cur_struct_path, exist_ok=True)
+
+    # Remove coordinate level padding (each residue has about 13 atoms,
+    # even if some are missing)
+    gold_item_non_batch_pad = (true_coords != VOCAB.pad_id).any(dim=-1)
+    true_coords = true_coords[gold_item_non_batch_pad]
+    true_coords[torch.isnan(true_coords)] = 0
+
+    creator = PDB_Creator(pred_coords.detach().numpy(),
+                          seq=VOCAB.indices2aa_seq(src_seq_cpu))
+    creator.save_pdb(f"{cur_struct_path}/{wandb.run.step:05}_pred.pdb",
+                     title="pred")
+
+    t_creator = PDB_Creator(true_coords.cpu().detach().numpy(),
+                            seq=VOCAB.indices2aa_seq(src_seq_cpu))
+    if not os.path.isfile(f"{cur_struct_path}/true.pdb"):
+        t_creator.save_pdb(f"{cur_struct_path}/true.pdb", title="true")
+
+    gltf_out_path = os.path.join(args.gltf_dir, f"{wandb.run.step:05}_{struct_name}.gltf")
+    t_creator.save_gltfs(f"{cur_struct_path}/true.pdb",
+                         f"{cur_struct_path}/{wandb.run.step:05}_pred.pdb",
+                         gltf_out_path=gltf_out_path,
+                         make_pse=True,
+                         pse_out_path=f"{cur_struct_path}/{wandb.run.step:05}_both.pse")
+
+    wandb.log({struct_name: wandb.Object3D(gltf_out_path)}, commit=commit)
 
 
 def init_metrics(args):
