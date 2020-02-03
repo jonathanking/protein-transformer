@@ -358,7 +358,7 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
 
     return sc_pts
 
-BUILD_FNS = {"ARG": build_arg}
+
 
 def build(res_builder):
     return BUILD_FNS[res_builder.name](res_builder)
@@ -370,4 +370,4 @@ def build_ala(rb):
     pass
 
 
-
+BUILD_FNS = {"ARG": build_arg}
