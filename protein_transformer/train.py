@@ -41,8 +41,6 @@ def train_epoch(model, training_data, validation_datasets, optimizer, device, ar
     for step, batch in enumerate(batch_iter):
         optimizer.zero_grad()
         src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
-        if args.skip_missing_res_train and torch.isnan(tgt_ang).all(dim=-1).any().byte():
-            continue
         pred = model(src_seq, tgt_ang)
         loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool)
 
@@ -108,7 +106,7 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     metrics = reset_metrics_for_epoch(metrics, mode)
     batch_iter = tqdm(validation_data, mininterval=.5, leave=False, unit="batch", dynamic_ncols=True)
 
-    if args.loss == "mse" and mode == "train":
+    if args.loss == "mse" and mode == "train" and not args.eval_train_drmsd:
         d_loss, ln_d_loss, r_loss = torch.tensor(0.), torch.tensor(0.), torch.tensor(0.)
 
     with torch.no_grad():
@@ -116,9 +114,9 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
             src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
             pred = model(src_seq, tgt_ang)
 
-            if not (args.loss == "mse" and mode == "train"):
+            if not (args.loss == "mse" and mode == "train" and not args.eval_train_drmsd) :
                 d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True,
-                                                                do_backward=False, pool=pool)
+                                                            do_backward=False, pool=pool)
             m_loss = mse_over_angles(pred, tgt_ang)
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
 
@@ -346,8 +344,8 @@ def main():
 
     # Required args
     required = parser.add_argument_group("Required Args")
-    required.add_argument('data', help="Path to training data.")
-    required.add_argument("name", type=str, help="The model name.")
+    required.add_argument('--data', help="Path to training data.", default="../data/proteinnet/casp12_200123_30.pt")
+    required.add_argument("--name", type=str, help="The model name.", default="sweep")
 
     # Training parameters
     training = parser.add_argument_group("Training Args")
@@ -378,8 +376,11 @@ def main():
                           help="Metric observed for early stopping and LR scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
-    training.add_argument('--eval_train', action='store_true',
+    training.add_argument('--eval_train', type=bool, default=False,
                         help="Perform an evaluation of the entire training set after a training epoch.")
+    training.add_argument('--eval_train_drmsd', type=bool, default=True,
+                          help="Perform an evaluation of the entire training "
+                               "set after a training epoch.")
     training.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
                         help="Training optimizer.")
     training.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
@@ -387,7 +388,7 @@ def main():
                              "fastest when this is 1.")
     training.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
                         help="Fraction of the time to use teacher forcing on a per-timestep basis.")
-    training.add_argument("--skip_missing_res_train", action="store_true",
+    training.add_argument("--skip_missing_res_train", type=bool, default=True,
                         help="When training, skip over batches that have missing residues. This can make training"
                              "faster if using teacher forcing.")
     training.add_argument("--repeat_train", type=int, default=1,
@@ -427,7 +428,7 @@ def main():
                              "model. May not train as well as pre-layer normalization.")
     model_args.add_argument("--angle_mean_path", type=str, default="./protein/casp12_190927_100_angle_means.npy",
                         help="Path to vector of means for every predicted angle. Used to initialize model output.")
-    model_args.add_argument("--weight_decay", action="store_true", help="Applies weight decay to model weights.")
+    model_args.add_argument("--weight_decay", type=bool, default=True,  help="Applies weight decay to model weights.")
 
 
     # Saving args
@@ -439,7 +440,7 @@ def main():
     saving_args.add_argument('--log_wandb_step', type=int, default=1,
                              help="Frequency of logging to wandb during training.")
     saving_args.add_argument('--no_cuda', action='store_true')
-    saving_args.add_argument('-c', '--cluster', action='store_true',
+    saving_args.add_argument('-c', '--cluster', type=bool, default=False,
                              help="Set of parameters to facilitate training on a remote" +
                                   " cluster. Limited I/O, etc.")
     saving_args.add_argument('--restart', action='store_true', help="Does not resume training.")
@@ -489,12 +490,12 @@ def main():
                                                                verbose=True, threshold=args.early_stopping_threshold)
 
     # Prepare Weights and Biases logging
-    wandb_dir = "/scr/jok120/wandb" if args.cluster else None
+    wandb_dir = "/scr/jok120/wandb" if args.cluster and os.path.isdir("/scr") else None
     if wandb_dir:
         os.makedirs(wandb_dir, exist_ok=True)
     wandb.init(project="protein-transformer", entity="koes-group", dir=wandb_dir)
     wandb.watch(model, "all")
-    wandb.config.update(args)
+    wandb.config.update(args, allow_val_change=True)
     if type(data["date"]) == set:
         wandb.config.update({"data_creation_date": next(iter(data["date"]))})
     else:
@@ -506,13 +507,18 @@ def main():
                          "n_trainable_params": n_trainable_params,
                          "max_seq_len": MAX_SEQ_LEN})
     wandb.run.summary["stopped_training_early"] = False
-    args.structure_dir = f"{wandb.run.dir}/structures"
-    os.makedirs(f"{wandb.run.dir}/structures", exist_ok=True)
+    local_base_dir = wandb.run.dir
+    args.structure_dir = os.path.join(local_base_dir, "structures")
+    args.gltf_dir = f"../data/logs/structures/gltfs/{wandb.run.id}"
+    os.makedirs(args.structure_dir, exist_ok=True)
+    os.makedirs(args.gltf_dir, exist_ok=True)
+    with open(os.path.join(local_base_dir, "NAME"), "w") as f:
+        f.write(f"{args.name}\n")
 
     # Prepare log and checkpoint files
-    args.chkpt_path = f"{wandb.run.dir}/checkpoints/" + args.name
-    os.makedirs(f"{wandb.run.dir}/checkpoints/", exist_ok=True)
-    args.log_file = f"{wandb.run.dir}/" + args.name + '.train'
+    args.chkpt_path = os.path.join(local_base_dir, "checkpoints")
+    os.makedirs(args.chkpt_path, exist_ok=True)
+    args.log_file = os.path.join(local_base_dir, args.name + '.train')
     print('[Info] Training performance will be written to file: {}'.format(args.log_file))
     os.makedirs(os.path.dirname(args.log_file), exist_ok=True)
     model, optimizer, scheduler, resumed, metrics = load_model(model, optimizer, scheduler, args)
@@ -523,6 +529,9 @@ def main():
         log_f.write(LOGFILEHEADER)
     log_writer = csv.writer(log_f)
 
+    wandb.save(os.path.join(local_base_dir, "structures/*"))
+    wandb.save(os.path.join(local_base_dir, "checkpoints/*"))
+    wandb.save(os.path.join(local_base_dir, "*.train"))
 
 
 
