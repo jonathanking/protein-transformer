@@ -1,0 +1,1 @@
+python train.py --data ../data/proteinnet/casp12_200123_30.pt --name m64 -l combined -esm train-combined -dm 64 -b 8 --log_structure_step 150 -lvs 150 -m enc-only-linear-out --weight_decay --eval_train
