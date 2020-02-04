@@ -40,8 +40,38 @@ BUILD_ORDER = {"ALA": ["CB"],
                "TRP": ["CB","CG","CD1","NE1","CE2","CZ2","CH2","CZ3","CE3","CD2"],
                "TYR": ["CB","CG","CD1","CE1","CZ","OH","CE2","CD2"],
                "VAL": ["CB","CG1","CG2"]}
-# for aa in BUILD_ORDER.keys():
-#     BUILD_ORDER[aa] = ["C", "N", "CA"] + BUILD_ORDER[aa]
+
+BUILD_ORDER_CHAINS =  {"ALA": [["CB"]],
+                       "ARG": [["CB","CG","CD", "NE", "CZ", "NH1"],
+                               ["CB", "CG", "CD", "NE", "CZ", "NH2"]],
+                       "ASN": [["CB","CG", "OD1"],
+                               ["CB","CG", "ND2"]],
+                       "ASP": [["CB","CG","OD1"],
+                               ["CB","CG","OD2"]],
+                       "CYS": [["CB", "SG"]],
+                       "GLU": [["CB","CG", "CD", "OE1"],
+                               ["CB","CG", "CD", "OE2"]],
+                       "GLN": [["CB", "CG", "CD", "OE1"],
+                               ["CB","CG", "CD", "NE2"]],
+                       "GLY": [[]],
+                       "HIS": [["CB", "CG", "ND1","CE1","NE2","CD2"]],
+                       "ILE": [["CB","CG1","CD1"],
+                               ["CB","CG2"]],
+                       "LEU": [["CB","CG", "CD1"],
+                               ["CB","CG", "CD2"]],
+                       "LYS": [["CB","CG", "CD","CE","NZ"]],
+                       "MET": [["CB","CG", "SD", "CE"]],
+                       "PHE": [["CB","CG","CD1","CE1","CZ","CE2","CD2"]],
+                       "PRO": [["CB","CG","CD"]],
+                       "SER": [["CB","OG"]],
+                       "THR": [["CB","OG1"],
+                               ["CB","CG2"]],
+                       "TRP": [["CB","CG","CD1","NE1","CE2","CZ2","CH2","CZ3","CE3","CD2"]],
+                       "TYR": [["CB","CG","CD1","CE1","CZ","OH"],
+                               ["CB","CG","CD1","CE1","CZ","CE2","CD2"]],
+                       "VAL": [["CB","CG1"],
+                               ["CB","CG2"]]}
+
 
 def extract_atom_name_type_map(atom_name_file):
     """ Given a force field file that contains the amino acid topologies, this
@@ -67,16 +97,6 @@ def extract_atom_name_type_map(atom_name_file):
     aa_data["HIS"] = aa_data["HID"]
     return aa_data
 
-
-# def extract_amino_acid_info(force_field, atom_name_dict):
-#     AMINO_ACID_INFO = {}
-#     prev_3_atoms = ["C", "N", "CA"]
-#     for AA, build_order in BUILD_ORDER.items():
-#         AMINO_ACID_INFO[AA] = {}
-#         # Add bonds
-#
-#         for atom_name in build_order
-#
 
 def extract_bonds_and_angle_info(force_field):
     """ Given a force field files, extracts the values use for equilibrium
@@ -116,29 +136,39 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
     information for all of the amino acids. It must then be modified slightly
     by hand to account for branched amino acids (ARG, ETC)"""
     AMINO_ACID_INFO = {}
-    for AA, build_order in BUILD_ORDER.items():
+    for AA, build_order_chains in BUILD_ORDER_CHAINS.items():
         AMINO_ACID_INFO[AA] = {}
         # Add bonds
         bonds_names = []
         bonds_types = []
         bond_lens = []
-        prev_bond_atom = "CA"
-        for atom_name in build_order:
-            cur_bond = [prev_bond_atom, atom_name]
-            cur_bond_names = "-".join(cur_bond)
-            bonds_names.append(cur_bond_names)
-            cur_bond_types = "-".join([atom_name_dict[AA][an] for an in cur_bond])
-            bonds_types.append(cur_bond_types)
 
-            try:
-                bond_lens.append(bond_angle_dict["bonds"][cur_bond_types])
-            except KeyError:
+        for i, chain in enumerate(build_order_chains):
+            # This corresponds to a normal chain, beginning with a CA
+            if i == 0:
+                prev_bond_atom = "CA"
+            else:
+                j = 0
+                while build_order_chains[0][j] == build_order_chains[1][j]:
+                    j += 1
+                prev_bond_atom = chain[j-1]
+                chain = chain[j:]
+            for atom_name in chain:
+                cur_bond = [prev_bond_atom, atom_name]
+                cur_bond_names = "-".join(cur_bond)
+                bonds_names.append(cur_bond_names)
+                cur_bond_types = "-".join([atom_name_dict[AA][an] for an in cur_bond])
+                bonds_types.append(cur_bond_types)
+
                 try:
-                    cur_bond_types = "-".join(cur_bond_types.split("-")[::-1])
                     bond_lens.append(bond_angle_dict["bonds"][cur_bond_types])
                 except KeyError:
-                    bond_lens.append("?")
-            prev_bond_atom = atom_name
+                    try:
+                        cur_bond_types = "-".join(cur_bond_types.split("-")[::-1])
+                        bond_lens.append(bond_angle_dict["bonds"][cur_bond_types])
+                    except KeyError:
+                        bond_lens.append("?")
+                prev_bond_atom = atom_name
         AMINO_ACID_INFO[AA]["bonds-names"] = bonds_names
         AMINO_ACID_INFO[AA]["bonds-types"] = bonds_types
         AMINO_ACID_INFO[AA]["bond-lens"] = bond_lens
@@ -146,22 +176,33 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
         angles_names = []
         angles_types = []
         angles_vals = []
-        prev_2_atoms = ["N", "CA"]
-        for atom_name in build_order:
-            cur_angles = [*prev_2_atoms, atom_name]
-            cur_angles_names = "-".join(cur_angles)
-            angles_names.append(cur_angles_names)
-            cur_angles_types = "-".join([atom_name_dict[AA][an] for an in cur_angles])
-            angles_types.append(cur_angles_types)
-            try:
-                angles_vals.append(bond_angle_dict["angles"][cur_angles_types])
-            except KeyError:
+        for i, chain in enumerate(build_order_chains):
+            prev_2_atoms = ["N", "CA"]
+            if i == 1:
+                j = 0
+                cur_angles = [*prev_2_atoms, chain[j]]
+                while "-".join(cur_angles) in angles_names and j < len(chain)-1:
+                    prev_2_atoms = [prev_2_atoms[1], chain[j]]
+                    cur_angles = [*prev_2_atoms, chain[j+1]]
+                    j += 1
+                chain = chain[j:]
+
+
+            for atom_name in chain:
+                cur_angles = [*prev_2_atoms, atom_name]
+                cur_angles_names = "-".join(cur_angles)
+                angles_names.append(cur_angles_names)
+                cur_angles_types = "-".join([atom_name_dict[AA][an] for an in cur_angles])
+                angles_types.append(cur_angles_types)
                 try:
-                    cur_angles_types = "-".join(cur_angles_types.split("-")[::-1])
                     angles_vals.append(bond_angle_dict["angles"][cur_angles_types])
                 except KeyError:
-                    angles_vals.append("?")
-            prev_2_atoms = [prev_2_atoms[-1], atom_name]
+                    try:
+                        cur_angles_types = "-".join(cur_angles_types.split("-")[::-1])
+                        angles_vals.append(bond_angle_dict["angles"][cur_angles_types])
+                    except KeyError:
+                        angles_vals.append("?")
+                prev_2_atoms = [prev_2_atoms[-1], atom_name]
         AMINO_ACID_INFO[AA]["angles-names"] = angles_names
         AMINO_ACID_INFO[AA]["angles-types"] = angles_types
         AMINO_ACID_INFO[AA]["angles-vals"] = angles_vals
@@ -169,21 +210,28 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
         torsion_names = []
         torsion_types = []
         torsion_vals = []
-        prev_3_atoms = ["C", "N", "CA"]
-        for atom_name in build_order:
-            cur_torsion = [*prev_3_atoms, atom_name]
-            cur_torsion_names = "-".join(cur_torsion)
-            torsion_names.append(cur_torsion_names)
-            cur_torsion_types = "-".join(
-                [atom_name_dict[AA][an] for an in cur_torsion])
-            torsion_types.append(cur_torsion_types)
-            torsion_vals.append("?")
-            prev_3_atoms = [prev_3_atoms[-2], prev_3_atoms[-1], atom_name]
+        for i, chain in enumerate(build_order_chains):
+            prev_3_atoms = ["C", "N", "CA"]
+            if i == 1:
+                j = 0
+                cur_torsion = [*prev_3_atoms, chain[j]]
+                while "-".join(cur_torsion) in torsion_names and j < len(chain) - 1:
+                    prev_3_atoms = [prev_3_atoms[-2], prev_3_atoms[-1], chain[j]]
+                    cur_torsion = [*prev_3_atoms, chain[j + 1]]
+                    j += 1
+                chain = chain[j:]
+            for atom_name in chain:
+                cur_torsion = [*prev_3_atoms, atom_name]
+                cur_torsion_names = "-".join(cur_torsion)
+                torsion_names.append(cur_torsion_names)
+                cur_torsion_types = "-".join(
+                    [atom_name_dict[AA][an] for an in cur_torsion])
+                torsion_types.append(cur_torsion_types)
+                torsion_vals.append("?")
+                prev_3_atoms = [prev_3_atoms[-2], prev_3_atoms[-1], atom_name]
         AMINO_ACID_INFO[AA]["torsion-names"] = torsion_names
         AMINO_ACID_INFO[AA]["torsion-types"] = torsion_types
         AMINO_ACID_INFO[AA]["torsion-vals"] = torsion_vals
-
-
 
     return AMINO_ACID_INFO
 
