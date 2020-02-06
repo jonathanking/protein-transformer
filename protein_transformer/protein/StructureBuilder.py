@@ -1,8 +1,11 @@
+from collections import OrderedDict
+
 import torch
 import numpy as np
 
 from protein_transformer.dataset import VOCAB, NUM_PREDICTED_COORDS
-from protein_transformer.protein import Sidechains, SidechainBuildInfo
+from protein_transformer.protein import Sidechains
+from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO
 from protein_transformer.protein.Sidechains import SC_DATA, BONDLENS
 from protein_transformer.protein.Structure import nerf
 
@@ -118,17 +121,16 @@ class ResidueBuilder(object):
 
     def build_sc(self):
         assert len(self.bb) > 0, "Backbone must be built first."
-        pts = list(self.prev_bb[-1] + self.bb[:-1]) # Start with C, N, CA
-        bond_lens = Sidechains.get_bond_len_iter(self.name)
-        angles = Sidechains.get_angle_iter(self.name, predicted_angles=self.ang)
-        torsions = Sidechains.get_torsion_iter(self.name, predicted_angles=self.ang)
-        last_three_pts_slice = Sidechains.get_3_pts_indices_iter(self.name)
-        for (start, end), bond_len, angle, torsion in zip(last_three_pts_slice, bond_lens, angles, torsions):
-            a, b, c = pts[start:end]
+        self.pts = OrderedDict({"C": self.prev_bb[-1],
+                                "N": self.bb[0],
+                                "CA": self.bb[1]})
+        for bond_len, angle, torsion, atom_names in get_residue_build_iter(self.name, SC_BUILD_INFO):
+            a, b, c = (self.pts[an] for an in atom_names[:-1])
             new_pt = nerf(a, b, c, bond_len, angle, torsion)
-            pts.append(new_pt)
+            self.pts[atom_names[-1]] = new_pt
 
-        self.sc = pts
+        self.sc = list(self.pts.values()[3:])
+        return self.sc
 
     def stack_coords(self):
         self.coords = self.bb + self.sc + (NUM_PREDICTED_COORDS - \
@@ -136,12 +138,12 @@ class ResidueBuilder(object):
 
 def get_residue_build_iter(res, build_dictionary):
     r = build_dictionary[res]
-    return iter(zip(r["bonds-vals"], r["angles-vals"], r["torsion-vals"]))
+    return iter(zip(r["bonds-vals"], r["angles-vals"], r["torsion-vals"], r["torsion-names"].split("-")))
 
 if __name__ == '__main__':
-    a = get_residue_build_iter("ALA", SidechainBuildInfo.SC_BUILD_INFO)
-    b = get_residue_build_iter("ARG", SidechainBuildInfo.SC_BUILD_INFO)
-    c = get_residue_build_iter("TYR", SidechainBuildInfo.SC_BUILD_INFO)
+    a = get_residue_build_iter("ALA", SC_BUILD_INFO)
+    b = get_residue_build_iter("ARG", SC_BUILD_INFO)
+    c = get_residue_build_iter("TYR", SC_BUILD_INFO)
     for i in a:
         print(i)
     print("Arginine:")
