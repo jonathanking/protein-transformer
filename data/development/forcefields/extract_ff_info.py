@@ -170,7 +170,7 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
         bonds_names = []
         bonds_types = []
         bond_lens = []
-
+        AMINO_ACID_INFO[AA]["atom-names"] = set()
         for i, chain in enumerate(build_order_chains):
             # This corresponds to a normal chain, beginning with a CA
             if i == 0:
@@ -182,6 +182,7 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
                 prev_bond_atom = chain[j-1]
                 chain = chain[j:]
             for atom_name in chain:
+                AMINO_ACID_INFO[AA]["atom-names"].add(atom_name)
                 cur_bond = [prev_bond_atom, atom_name]
                 cur_bond_names = "-".join(cur_bond)
                 bonds_names.append(cur_bond_names)
@@ -200,6 +201,7 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
         AMINO_ACID_INFO[AA]["bonds-names"] = bonds_names
         AMINO_ACID_INFO[AA]["bonds-types"] = bonds_types
         AMINO_ACID_INFO[AA]["bonds-vals"] = bond_lens
+        AMINO_ACID_INFO[AA]["atom-names"] = [b.split("-")[1] for b in AMINO_ACID_INFO[AA]["bonds-names"]]
 
         angles_names = []
         angles_types = []
