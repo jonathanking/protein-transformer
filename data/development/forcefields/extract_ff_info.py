@@ -19,6 +19,7 @@ conformers, but only contains torsional potential information.
 """
 import re
 import pprint
+import numpy as np
 
 BUILD_ORDER = {"ALA": ["CB"],
                "ARG": ["CB","CD", "NE", "CZ", "NH1", "NH2"],
@@ -232,7 +233,7 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
                 prev_2_atoms = [prev_2_atoms[-1], atom_name]
         AMINO_ACID_INFO[AA]["angles-names"] = angles_names
         AMINO_ACID_INFO[AA]["angles-types"] = angles_types
-        AMINO_ACID_INFO[AA]["angles-vals"] = angles_vals
+        AMINO_ACID_INFO[AA]["angles-vals"] = [np.radians(x) if x != "?" else x for x in angles_vals]
 
         torsion_names = []
         torsion_types = []
@@ -262,7 +263,7 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
                 prev_3_atoms = [prev_3_atoms[-2], prev_3_atoms[-1], atom_name]
         AMINO_ACID_INFO[AA]["torsion-names"] = torsion_names
         AMINO_ACID_INFO[AA]["torsion-types"] = torsion_types
-        AMINO_ACID_INFO[AA]["torsion-vals"] = torsion_vals
+        AMINO_ACID_INFO[AA]["torsion-vals"] = [np.radians(x) if x != "?" else x for x in torsion_vals]
 
     return AMINO_ACID_INFO
 
