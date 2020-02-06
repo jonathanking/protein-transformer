@@ -1,7 +1,10 @@
 import numpy as np
 import torch
 
-NUM_PREDICTED_ANGLES = 12
+NUM_PREDICTED_ANGLES = 13
+NUM_BB_TORSION_ANGLES = 3
+NUM_BB_OTHER_ANGLES = 3
+NUM_SC_ANGLES = NUM_PREDICTED_ANGLES - (NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANGLES)
 NUM_PREDICTED_COORDS = 13
 
 ONE_TO_THREE_LETTER_MAP = {"R": "ARG", "H": "HIS", "K": "LYS", "D": "ASP", "E": "GLU", "S": "SER", "T": "THR",
@@ -10,228 +13,16 @@ ONE_TO_THREE_LETTER_MAP = {"R": "ARG", "H": "HIS", "K": "LYS", "D": "ASP", "E": 
 
 THREE_TO_ONE_LETTER_MAP = {v: k for k, v in ONE_TO_THREE_LETTER_MAP.items()}
 
-BONDLENS = {'cc-cv': 1.375,
-            'c8-cx': 1.526,
-            '2c-ca': 1.51,
-            'cx-3c': 1.526,
-            'c -2c': 1.522,
-            '2c-3c': 1.526,
-            'cx-2c': 1.526,
-            'n2-ca': 1.303,
-            'o -c ': 1.218,
-            'n2-c8': 1.463,
-            'c*-cw': 1.352,
-            'ca-2c': 1.51,
-            'ca-n2': 1.303,
-            '3c-2c': 1.526,
-            's -ct': 1.81,
-            '2c-oh': 1.41,
-            'cv-cc': 1.375,
-            'o2-co': 1.25,
-            '2c-c ': 1.522,
-            'oh-2c': 1.41,
-            '2c-2c': 1.526,
-            'c8-n3': 1.471,
-            '2c-ct': 1.526,
-            'c8-n2': 1.463,
-            'c -o ': 1.218,
-            'co-2c': 1.522,
-            'n3-c8': 1.471,
-            'ct-s ': 1.81,
-            'sh-2c': 1.81,
-            '2c-cx': 1.526,
-            'co-o2': 1.25,
-            'cx-c8': 1.526,
-            '2c-sh': 1.81,
-            'ct-cc': 1.504,
-            's -2c': 1.81,
-            'cx-ct': 1.526,
-            'ct-2c': 1.526,
-            'ct-3c': 1.526,
-            'ct-c*': 1.495,
-            '2c-s ': 1.81,
-            '3c-ct': 1.526,
-            'cc-ct': 1.504,
-            'c8-c8': 1.526,
-            'ca-ca': 1.398,
-            'c*-ct': 1.495,
-            '2c-co': 1.522,
-            'cw-c*': 1.352,
-            'ct-cx': 1.526,
-            '3c-cx': 1.526,
-            '3c-oh': 1.4218,  # measured from PyMOL's build feature for THR
-            'cx-2c-proline': 1.5361,  # measured from PyMOL for PRO
-            'n-ca': 1.442,
-            'ca-c': 1.498,
-            'c-n': 1.379,
-            'CZ-NH2': 1
-            }
+AA_MAP = {'A': 0, 'C': 1, 'D': 2, 'E': 3,
+          'F': 4, 'G': 5, 'H': 6, 'I': 7,
+          'K': 8, 'L': 9, 'M': 10, 'N': 11,
+          'P': 12, 'Q': 13, 'R': 14, 'S': 15,
+          'T': 16, 'V': 17, 'W': 18, 'Y': 19}
 
-BONDANGS = {'c8-cx-n ': 109.7,
-            'cx-2c-c ': 111.1,
-            'o -c -2c': 120.4,
-            'c -2c-2c': 111.1,
-            '2c-2c-c ': 111.1,
-            'c8-c8-cx': 109.5,
-            '2c-2c-co': 111.1,
-            'n -cx-3c': 109.7,
-            '2c-s -ct': 98.9,
-            'ct-2c-3c': 109.5,
-            'cx-2c-2c': 109.5,
-            'cw-c*-ct': 125.0,
-            '2c-c -o ': 120.4,
-            'cc-ct-cx': 113.1,
-            '3c-2c-cx': 109.5,
-            'ct-cc-cv': 120.0,
-            '2c-3c-cx': 109.5,
-            'ct-c*-cw': 125.0,
-            '2c-3c-ct': 109.5,
-            'c8-c8-n3': 111.2,
-            'cx-3c-2c': 109.5,
-            '3c-cx-n ': 109.7,
-            'ct-3c-cx': 109.5,
-            'cx-2c-co': 111.1,
-            '2c-cx-n ': 109.7,
-            'cx-c8-c8': 109.5,
-            'n -cx-ct': 109.7,
-            'cx-3c-ct': 109.5,
-            'c8-c8-c8': 109.5,
-            '2c-co-o2': 117.0,
-            'cx-ct-c*': 115.6,
-            '2c-ca-ca': 120.0,
-            'ct-3c-2c': 109.5,
-            'n2-c8-c8': 111.2,
-            'c8-c8-n2': 111.2,
-            '2c-2c-cx': 109.5,
-            'co-2c-cx': 111.1,
-            'cx-2c-oh': 109.5,
-            'ca-ca-2c': 120.0,
-            'cx-2c-3c': 109.5,
-            'sh-2c-cx': 108.6,
-            'cx-2c-ca': 114.0,
-            '2c-2c-s ': 114.7,
-            'c -2c-cx': 111.1,
-            'ct-s -2c': 98.9,
-            'n -cx-2c': 109.7,
-            'ca-n2-c8': 123.2,
-            'o2-co-2c': 117.0,
-            'n -cx-c8': 109.7,
-            'c8-n2-ca': 123.2,
-            'n3-c8-c8': 111.2,
-            'n2-ca-n2': 120.0,
-            'c*-ct-cx': 115.6,
-            'cv-cc-ct': 120.0,
-            'ca-2c-cx': 114.0,
-            'ct-cx-n ': 109.7,
-            'co-2c-2c': 111.1,
-            'cx-ct-cc': 113.1,
-            '3c-2c-ct': 109.5,
-            's -2c-2c': 114.7,
-            'oh-2c-cx': 109.5,
-            'cx-2c-sh': 108.6,
-            'cx-3c-oh': 110.6,  # measured from PyMOL's build feature for THR
-            'n -cx-2c-proline': 101.88  # measured from PyMOL for PRO
-            }
+for one_letter_code in list(AA_MAP.keys()):
+    AA_MAP[ONE_TO_THREE_LETTER_MAP[one_letter_code]] = AA_MAP[one_letter_code]
 
-SC_DATA = {"ARG": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-n2", "c8-n2-ca", "n2-ca-n2"],
-                   "bonds": ["cx-c8", "c8-c8", "c8-c8", "c8-n2", "n2-ca", "ca-n2"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD', 'NE', 'CZ', 'NH1', 'NH2'],
-                   "predicted": ['CB', 'CG', 'CD', 'NE', 'CZ', 'NH1']},
-           "HIS": {"angles": ["ct-cx-n ", "cc-ct-cx", "ct-cc-cv"],
-                   "bonds": ["cx-ct", "cc-ct", "cc-cv"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'ND1', 'CD2', 'CE1', 'NE2'],
-                   "predicted": ['CB', 'CG', 'CD2']},
-           "LYS": {"angles": ["n -cx-c8", "cx-c8-c8", "c8-c8-c8", "c8-c8-c8", "c8-c8-n3"],
-                   "bonds": ["cx-c8", "c8-c8", "c8-c8", "c8-c8", "c8-n3"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD', 'CE', 'NZ'],
-                   "predicted": ['CB', 'CG', 'CD', 'CE', 'NZ']},
-           "ASP": {"angles": ["n -cx-2c", "cx-2c-co", "2c-co-o2"],
-                   "bonds": ["cx-2c", "2c-co", "co-o2"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'OD1', 'OD2'],
-                   "predicted": ['CB', 'CG', 'OD1']},
-           "GLU": {"angles": ["n -cx-2c", "cx-2c-2c", "2c-2c-co", "2c-co-o2"],
-                   "bonds": ["cx-2c", "2c-2c", "2c-co", "co-o2"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD', 'OE1', 'OE2'],
-                   "predicted": ['CB', 'CG', 'CD', 'OE1']},
-           "SER": {"angles": ["n -cx-2c", "cx-2c-oh"],
-                   "bonds": ["cx-2c", "2c-oh"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'OG'],
-                   "predicted": ['CB', 'OG']},
-           "THR": {"angles": ["n -cx-3c", "cx-3c-ct"],
-                   "bonds": ["cx-3c", "3c-ct"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'OG1', 'CG2'],
-                   "predicted": ['CB', 'CG2']},
-           "ASN": {"angles": ["n -cx-2c", "cx-2c-c ", "2c-c -o "],
-                   "bonds": ["cx-2c", "2c-c ", "c -o "],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'OD1', 'ND2'],
-                   "predicted": ['CB', 'CG', 'OD1']},
-           "GLN": {"angles": ["n -cx-2c", "cx-2c-2c", "2c-2c-c ", "2c-c -o "],
-                   "bonds": ["cx-2c", "2c-2c", "2c-c ", "c -o "],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD', 'OE1', 'NE2'],
-                   "predicted": ['CB', 'CG', 'CD', 'OE1']},
-           "CYS": {"angles": ["n -cx-2c", "cx-2c-sh"],
-                   "bonds": ["cx-2c", "sh-2c"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'SG'],
-                   "predicted": ['CB', 'SG']},
-           "VAL": {"angles": ["n -cx-3c", "cx-3c-ct"],
-                   "bonds": ["cx-3c", "3c-ct"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG1', 'CG2'],
-                   "predicted": ['CB', 'CG1']},
-           "ILE": {"angles": ["n -cx-3c", "cx-3c-2c", "3c-2c-ct"],
-                   "bonds": ["cx-3c", "3c-2c", "2c-ct"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG1', 'CG2', 'CD1'],
-                   "predicted": ['CB', 'CG1', 'CD1']},
-           "LEU": {"angles": ["n -cx-2c", "cx-2c-3c", "2c-3c-ct"],
-                   "bonds": ["cx-2c", "2c-3c", "3c-ct"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD1', 'CD2'],
-                   "predicted": ['CB', 'CG', 'CD1']},
-           "MET": {"angles": ["n -cx-2c", "cx-2c-2c", "2c-2c-s ", "2c-s -ct"],
-                   "bonds": ["cx-2c", "2c-2c", "2c-s ", "s -ct"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'SD', 'CE'],
-                   "predicted": ['CB', 'CG', 'SD', 'CE']},
-           "PHE": {"angles": ["n -cx-2c", "cx-2c-ca", "2c-ca-ca"],
-                   "bonds": ["cx-2c", "2c-ca", "ca-ca"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD1', 'CD2', 'CE1', 'CE2', 'CZ'],
-                   "predicted": ['CB', 'CG', 'CD1']},
-           "TYR": {"angles": ["n -cx-2c", "cx-2c-ca", "2c-ca-ca"],
-                   "bonds": ["cx-2c", "2c-ca", "ca-ca"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD1', 'CD2', 'CE1', 'CE2', 'CZ', 'OH'],
-                   "predicted": ['CB', 'CG', 'CD1']},
-           "TRP": {"angles": ["ct-cx-n ", "cx-ct-c*", "ct-c*-cw"],
-                   "bonds": ["cx-ct", "ct-c*", "c*-cw"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD1', 'CD2', 'NE1', 'CE2', 'CE3', 'CZ2', 'CZ3', 'CH2'],
-                   "predicted": ['CB', 'CG', 'CD1']},
-           "GLY": {"angles": [],
-                   "bonds": [],
-                   "all": ['N', 'CA', 'C', 'O'],
-                   "predicted": []},  # no sidechain
-           "PRO": {"angles": ["n -cx-2c-proline"],
-                   "bonds": ["cx-2c-proline"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB', 'CG', 'CD'],
-                   "predicted": ['CB']},  # special case
-           "ALA": {"angles": ["ct-cx-n "],
-                   "bonds": ["cx-ct"],
-                   "all": ['N', 'CA', 'C', 'O', 'CB'],
-                   "predicted": ['CB']},  # only has beta-carbon
-           }
-
-for res in SC_DATA.keys():
-    # Missing atoms are those not in the backbone and not predicted
-    SC_DATA[res]["missing"] = list(set(SC_DATA[res]["all"])
-                                   - {"N", "CA", "C", "O"}
-                                   - set(SC_DATA[res]["predicted"]))
-
-    # Align target atoms are the last 3 predicted, used to align the mobile part of the sidechain to be constructed
-    SC_DATA[res]["align_target"] = SC_DATA[res]["predicted"][-3:] if len(SC_DATA[res]["predicted"]) >= 3 else []
-    if res == "PRO":
-        SC_DATA[res]["align_target"] = ["N", "CA", "CB"]
-    elif res == "THR":
-        SC_DATA[res]["align_target"] = ["CA", "CB", "CG2"]
-    elif res == "VAL":
-        SC_DATA[res]["align_target"] = ["CA", "CB", "CG1"]
-
-    # Align mobile atoms are the total set of atoms that will be aligned, includes missing and target atoms
-    SC_DATA[res]["align_mobile"] = list(set(SC_DATA[res]["align_target"] + SC_DATA[res]["missing"]))
+AA_MAP_INV = {v: k for k, v in AA_MAP.items()}
 
 
 def deg2rad(angle):
@@ -244,13 +35,11 @@ def deg2rad(angle):
 def extend_sidechain(i, d, bb_arr, input_seq, return_tuples=False, first_sc=False):
     """
     Given an index (i) into an angle tensor (d), builds the requested
-    sidechain and returns it as a list.
     """
     residue_code = torch.argmax(input_seq[i])
     info = (i, d, bb_arr)
-    codes = ["CYS","ASP","SER","GLN","LYS","ILE","PRO","THR","PHE","ASN","GLY","HIS","LEU","ARG","TRP",
-             "ALA","VAL","GLU","TYR","MET"]
-    return extend_any_sc(info, codes[residue_code], return_tuples, first_sc)
+
+    return extend_any_sc(info, AA_MAP_INV[residue_code], return_tuples, first_sc)
 
 
 def generate_sidechain_dihedrals(angles, i):
@@ -357,17 +146,3 @@ def extend_any_sc(info, aa_code, return_tuples=False, first_sc=False):
         return sc_pts, aa_code, predicted
 
     return sc_pts
-
-
-
-def build(res_builder):
-    return BUILD_FNS[res_builder.name](res_builder)
-
-def build_arg(rb):
-    pass
-
-def build_ala(rb):
-    pass
-
-
-BUILD_FNS = {"ARG": build_arg}

@@ -75,7 +75,7 @@ BUILD_ORDER_CHAINS =  {"ALA": [["CB"]],
 
 # These torsion angles correspond to planar, aromatic rings and thus are not predicted
 KNOWN_TORSION_VALS = {"HIS":
-                             {"CB-CG-ND1-CE1": 180.,  # HIS
+                             {"CB-CG-ND1-CE1": 180.,
                               "CG-ND1-CE1-NE2": 0.,
                               "ND1-CE1-NE2-CD2": 0.,
                               "CB-CG-CD1-CE1": 180.},
@@ -85,7 +85,7 @@ KNOWN_TORSION_VALS = {"HIS":
                              'CD1-CE1-CZ-CE2': 0.,
                              'CE1-CZ-CE2-CD2': 0.},
                       "TRP" :
-                             {'CB-CG-CD1-NE1' : 180.,   # TRP
+                             {'CB-CG-CD1-NE1' : 180.,
                               'CG-CD1-NE1-CE2' : 0.,
                               'CD1-NE1-CE2-CZ2' : 180.,
                               'NE1-CE2-CZ2-CH2' : 180.,
@@ -93,7 +93,7 @@ KNOWN_TORSION_VALS = {"HIS":
                               'CZ2-CH2-CZ3-CE3' : 0.,
                               'CH2-CZ3-CE3-CD2' : 0.},
                       "TYR" :
-                             {'CB-CG-CD1-CE1' : 180.,   # TYR
+                             {'CB-CG-CD1-CE1' : 180.,
                               'CG-CD1-CE1-CZ' : 0.,
                               'CD1-CE1-CZ-OH' : 180.,
                               'CD1-CE1-CZ-CE2' : 0.,

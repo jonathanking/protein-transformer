@@ -4,9 +4,7 @@ import torch
 import numpy as np
 
 from protein_transformer.dataset import VOCAB, NUM_PREDICTED_COORDS
-from protein_transformer.protein import Sidechains
-from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO
-from protein_transformer.protein.Sidechains import SC_DATA, BONDLENS
+from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, BB_BUILD_INFO
 from protein_transformer.protein.Structure import nerf
 
 class StructureBuilder(object):
@@ -51,7 +49,7 @@ class StructureBuilder(object):
 
 class ResidueBuilder(object):
 
-    def __init__(self, name, angles, prev_bb, prev_ang):
+    def __init__(self, name, angles, prev_bb, prev_ang, device=torch.device("cpu")):
         """Initialize a residue builder. If prev_{bb, ang} are None, then this
         is the first residue.
 
@@ -71,6 +69,7 @@ class ResidueBuilder(object):
         self.ang = angles
         self.prev_bb = prev_bb
         self.prev_ang = prev_ang
+        self.device = device
 
         self.bb = []
         self.sc = []
@@ -92,17 +91,17 @@ class ResidueBuilder(object):
                 if j == 0:
                     # Placing N
                     t = self.prev_ang[4]         # thetas["ca-c-n"]
-                    b = BONDLENS["c-n"]
+                    b = BB_BUILD_INFO["BONDLENS"]["c-n"]
                     dihedral = self.prev_ang[1]  # psi of previous residue
                 elif j == 1:
                     # Placing Ca
                     t = self.prev_ang[5]         # thetas["c-n-ca"]
-                    b = BONDLENS["n-ca"]
+                    b = BB_BUILD_INFO["BONDLENS"]["n-ca"]
                     dihedral = self.prev_ang[2]  # omega of previous residue
                 else:
                     # Placing C
                     t = self.ang[3]              # thetas["n-ca-c"]
-                    b = BONDLENS["ca-c"]
+                    b = BB_BUILD_INFO["BONDLENS"]["ca-c"]
                     dihedral = self.ang[0]       # phi of current residue
 
                 next_pt = nerf(self.prev_bb[-3], self.prev_bb[-2], self.prev_bb[-1], b, t, dihedral)
@@ -111,11 +110,11 @@ class ResidueBuilder(object):
         return self.bb
 
     def init_bb(self):
-        """ Initialize the first 3 points of the protein's backbone. Placed in an arbitrary plane (x = .001). """
-        a1 = torch.tensor([0.001, 0, 0], device=self.device)
-        a2 = a1 + torch.tensor([BONDLENS["n-ca"], 0, 0], device=self.device)
-        a3x = torch.cos(np.pi - self.ang[0, 3]) * BONDLENS["ca-c"]
-        a3y = torch.sin(np.pi - self.ang[0, 3]) * BONDLENS['ca-c']
+        """ Initialize the first 3 points of the protein's backbone. Placed in an arbitrary plane (z = .001). """
+        a1 = torch.tensor([0, 0, 0.001], device=self.device)
+        a2 = a1 + torch.tensor([BB_BUILD_INFO["BONDLENS"]["n-ca"], 0, 0], device=self.device)
+        a3x = torch.cos(np.pi - self.ang[0, 3]) * BB_BUILD_INFO["BONDLENS"]["ca-c"]
+        a3y = torch.sin(np.pi - self.ang[0, 3]) * BB_BUILD_INFO["BONDLENS"]['ca-c']
         a3 = a2 + torch.tensor([a3x, a3y, 0], device=self.device)
         return [a1, a2, a3]
 

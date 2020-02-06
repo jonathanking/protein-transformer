@@ -572,3 +572,7 @@ SC_BUILD_INFO = \
              'torsion-names': ['C-N-CA-CB', 'N-CA-CB-CG1', 'N-CA-CB-CG2'],
              'torsion-types': ['C -N -CX-3C', 'N -CX-3C-CT', 'N -CX-3C-CT'],
              'torsion-vals': ['?', '?', '?']}}
+
+BB_BUILD_INFO = {"BONDLENS": {'n-ca': 1.442,
+            'ca-c': 1.498,
+            'c-n': 1.379,}}
