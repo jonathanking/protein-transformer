@@ -72,6 +72,33 @@ BUILD_ORDER_CHAINS =  {"ALA": [["CB"]],
                        "VAL": [["CB","CG1"],
                                ["CB","CG2"]]}
 
+# These torsion angles correspond to planar, aromatic rings and thus are not predicted
+KNOWN_TORSION_VALS = {"HIS":
+                             {"CB-CG-ND1-CE1": 180.,  # HIS
+                              "CG-ND1-CE1-NE2": 0.,
+                              "ND1-CE1-NE2-CD2": 0.,
+                              "CB-CG-CD1-CE1": 180.},
+                      "PHE" :
+                            {'CB-CG-CD1-CE1' : 180.,
+                             'CG-CD1-CE1-CZ': 0.,
+                             'CD1-CE1-CZ-CE2': 0.,
+                             'CE1-CZ-CE2-CD2': 0.},
+                      "TRP" :
+                             {'CB-CG-CD1-NE1' : 180.,   # TRP
+                              'CG-CD1-NE1-CE2' : 0.,
+                              'CD1-NE1-CE2-CZ2' : 180.,
+                              'NE1-CE2-CZ2-CH2' : 180.,
+                              'CE2-CZ2-CH2-CZ3' : 0.,
+                              'CZ2-CH2-CZ3-CE3' : 0.,
+                              'CH2-CZ3-CE3-CD2' : 0.},
+                      "TYR" :
+                             {'CB-CG-CD1-CE1' : 180.,   # TYR
+                              'CG-CD1-CE1-CZ' : 0.,
+                              'CD1-CE1-CZ-OH' : 180.,
+                              'CD1-CE1-CZ-CE2' : 0.,
+                              'CE1-CZ-CE2-CD2' : 0.}
+                      }
+
 
 def extract_atom_name_type_map(atom_name_file):
     """ Given a force field file that contains the amino acid topologies, this
@@ -227,7 +254,11 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
                 cur_torsion_types = "-".join(
                     [atom_name_dict[AA][an] for an in cur_torsion])
                 torsion_types.append(cur_torsion_types)
-                torsion_vals.append("?")
+                # Add planar torsion angles
+                if AA in KNOWN_TORSION_VALS and cur_torsion_names in KNOWN_TORSION_VALS[AA]:
+                    torsion_vals.append(KNOWN_TORSION_VALS[AA][cur_torsion_names])
+                else:
+                    torsion_vals.append("?")
                 prev_3_atoms = [prev_3_atoms[-2], prev_3_atoms[-1], atom_name]
         AMINO_ACID_INFO[AA]["torsion-names"] = torsion_names
         AMINO_ACID_INFO[AA]["torsion-types"] = torsion_types
@@ -266,7 +297,6 @@ def main():
     with open("full_amino_acid_build_dict.txt", "w") as f:
         full_amino_acid_build_dict = create_full_amino_acid_build_dict(atom_name_dict, ff14sb_bond_angle_dict)
         f.write(pprint.pformat(full_amino_acid_build_dict))
-
 
 
 if __name__ == "__main__":
