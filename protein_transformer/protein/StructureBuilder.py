@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 from protein_transformer.dataset import VOCAB, NUM_PREDICTED_COORDS
-from protein_transformer.protein import Sidechains
+from protein_transformer.protein import Sidechains, SidechainBuildInfo
 from protein_transformer.protein.Sidechains import SC_DATA, BONDLENS
 from protein_transformer.protein.Structure import nerf
 
@@ -133,3 +133,20 @@ class ResidueBuilder(object):
     def stack_coords(self):
         self.coords = self.bb + self.sc + (NUM_PREDICTED_COORDS - \
             len(self.bb) - len(self.sc)) * [self.coordinate_padding]
+
+def get_residue_build_iter(res, build_dictionary):
+    r = build_dictionary[res]
+    return iter(zip(r["bonds-vals"], r["angles-vals"], r["torsion-vals"]))
+
+if __name__ == '__main__':
+    a = get_residue_build_iter("ALA", SidechainBuildInfo.SC_BUILD_INFO)
+    b = get_residue_build_iter("ARG", SidechainBuildInfo.SC_BUILD_INFO)
+    c = get_residue_build_iter("TYR", SidechainBuildInfo.SC_BUILD_INFO)
+    for i in a:
+        print(i)
+    print("Arginine:")
+    for i in b:
+        print(f"\t{i}")
+    print("Tyrosine:")
+    for i in c:
+        print(f"\t{i}")

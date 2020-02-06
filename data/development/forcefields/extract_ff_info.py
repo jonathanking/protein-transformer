@@ -198,7 +198,7 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
                 prev_bond_atom = atom_name
         AMINO_ACID_INFO[AA]["bonds-names"] = bonds_names
         AMINO_ACID_INFO[AA]["bonds-types"] = bonds_types
-        AMINO_ACID_INFO[AA]["bond-lens"] = bond_lens
+        AMINO_ACID_INFO[AA]["bonds-vals"] = bond_lens
 
         angles_names = []
         angles_types = []
