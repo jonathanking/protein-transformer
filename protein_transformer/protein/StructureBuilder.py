@@ -6,6 +6,9 @@ import numpy as np
 from protein_transformer.dataset import VOCAB, NUM_PREDICTED_COORDS
 from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, BB_BUILD_INFO
 from protein_transformer.protein.Structure import nerf
+from protein_transformer.protein.Sidechains import NUM_BB_TORSION_ANGLES, NUM_BB_OTHER_ANGLES
+
+SC_ANGLE_START_POS = NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANGLES - 1
 
 class StructureBuilder(object):
     """ 
@@ -123,8 +126,10 @@ class ResidueBuilder(object):
         self.pts = OrderedDict({"C": self.prev_bb[-1],
                                 "N": self.bb[0],
                                 "CA": self.bb[1]})
-        for bond_len, angle, torsion, atom_names in get_residue_build_iter(self.name, SC_BUILD_INFO):
+        for i, (bond_len, angle, torsion, atom_names) in enumerate(get_residue_build_iter(self.name, SC_BUILD_INFO)):
             a, b, c = (self.pts[an] for an in atom_names[:-1])
+            if torsion == "?":
+                torsion = self.ang[SC_ANGLE_START_POS + i]
             new_pt = nerf(a, b, c, bond_len, angle, torsion)
             self.pts[atom_names[-1]] = new_pt
 
