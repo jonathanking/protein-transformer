@@ -8,7 +8,7 @@ from protein_transformer.dataset import VOCAB, NUM_PREDICTED_COORDS
 from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, BB_BUILD_INFO
 from protein_transformer.protein.Structure import nerf
 from protein_transformer.protein.Sidechains import NUM_BB_TORSION_ANGLES, \
-    NUM_BB_OTHER_ANGLES, AA_MAP
+    NUM_BB_OTHER_ANGLES, AA_MAP, AA_MAP_INV
 
 SC_ANGLE_START_POS = NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANGLES - 1
 
@@ -40,7 +40,7 @@ class StructureBuilder(object):
         self.prev_bb = None
         self.next_bb = None
 
-    def iter_residues(self, start=1):
+    def iter_residues(self, start=2):
         for resname, angles in zip(self.seq[start:], self.ang[start:]):
             yield ResidueBuilder(resname, angles, self.prev_bb, self.prev_ang)
 
@@ -58,12 +58,17 @@ class StructureBuilder(object):
         second_res.build()
         first_res.next_bb = second_res.bb
         first_res.build_sc()
+        first_res.stack_coords()
+        second_res.stack_coords()
+        self.coords = first_res.coords + second_res.coords
 
         for residue in self.iter_residues():
             residue.build()
             self.coords += residue.coords
             self.prev_ang = residue.ang
             self.prev_bb = residue.bb
+
+        self.coords = torch.stack(self.coords)
 
         return self.coords
 
@@ -88,9 +93,9 @@ class ResidueBuilder(object):
         """
         assert type(name) == torch.Tensor, "Expected integer AA code." + str(name.shape) + str(type(name))
         if type(angles) == numpy.ndarray:
-            angles = torch.tensor(angles)
+            angles = torch.tensor(angles, dtype=torch.float32)
         self.name = name
-        self.ang = angles
+        self.ang = angles.squeeze()
         self.prev_bb = prev_bb
         self.prev_ang = prev_ang
         self.device = device
@@ -156,12 +161,12 @@ class ResidueBuilder(object):
                                     "CA": self.bb[1]})
         for i, (bond_len, angle, torsion, atom_names) in enumerate(get_residue_build_iter(self.name, SC_BUILD_INFO)):
             a, b, c = (self.pts[an] for an in atom_names[:-1])
-            if torsion == "?":
+            if type(torsion) is str and torsion == "?":
                 torsion = self.ang[SC_ANGLE_START_POS + i]
             new_pt = nerf(a, b, c, bond_len, angle, torsion)
             self.pts[atom_names[-1]] = new_pt
 
-        self.sc = list(self.pts.values()[3:])
+        self.sc = list(self.pts.values())[3:]
         return self.sc
 
     def stack_coords(self):
@@ -169,8 +174,11 @@ class ResidueBuilder(object):
             len(self.bb) - len(self.sc)) * [self.coordinate_padding]
 
 def get_residue_build_iter(res, build_dictionary):
-    r = build_dictionary[res]
-    return iter(zip(r["bonds-vals"], r["angles-vals"], r["torsion-vals"], r["torsion-names"].split("-")))
+    r = build_dictionary[AA_MAP_INV[int(res)]]
+    bvals = [torch.tensor(b, dtype=torch.float32) for b in r["bonds-vals"]]
+    avals = [torch.tensor(a, dtype=torch.float32) for a in r["angles-vals"]]
+    tvals = [torch.tensor(t, dtype=torch.float32) if t != "?" else "?" for t in r["torsion-vals"]]
+    return iter(zip(bvals, avals, tvals, [t.split("-") for t in r["torsion-names"]]))
 
 if __name__ == '__main__':
     a = get_residue_build_iter("ALA", SC_BUILD_INFO)

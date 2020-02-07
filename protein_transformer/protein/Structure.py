@@ -2,6 +2,7 @@ import numpy as np
 import torch
 
 import protein_transformer.protein.StructureBuilder as StructureBuilder
+from protein_transformer.losses import inverse_trig_transform
 
 
 def generate_coords(angles, input_seq, device):
@@ -55,7 +56,7 @@ def nerf(a, b, c, l, theta, chi):
 
     # calculate with rotation as our final output
     # TODO: is the squeezing necessary?
-    d = d.unsqueeze(1)
+    d = d.unsqueeze(1).to(torch.float32)
     res = c + torch.mm(M, d).squeeze()
     return res.squeeze()
 
@@ -63,6 +64,7 @@ if __name__ == '__main__':
     d = torch.load("/home/jok120/protein-transformer/data/proteinnet/casp12_200206_30.pt")
     seq = d["train"]["seq"][0]
     ang = d["train"]["ang"][0]
+    ang = inverse_trig_transform(torch.tensor(ang, dtype=torch.float32))
     sb = StructureBuilder.StructureBuilder(seq, ang)
     sb.build()
     print("Hi")
