@@ -3,11 +3,11 @@ import torch
 import torch.utils.data
 import wandb
 
-from .protein.Sidechains import NUM_PREDICTED_COORDS, AA_MAP
+from protein_transformer.protein.Sequence import ProteinVocabulary
+from protein_transformer.protein.Structure import NUM_PREDICTED_COORDS
 
 VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
 MAX_SEQ_LEN = 500
-VOCAB = None
 
 
 def paired_collate_fn(insts):
@@ -23,7 +23,7 @@ def paired_collate_fn(insts):
     return sequences, angles, coords
 
 
-def collate_fn(insts, coords=False, sequences=False, max_seq_len=None, vocab=VOCAB):
+def collate_fn(insts, coords=False, sequences=False, max_seq_len=None):
     """
     Given a list of tuples to be stitched together into a batch, this function
     pads each instance to the max seq length in batch and returns a batch
@@ -33,7 +33,7 @@ def collate_fn(insts, coords=False, sequences=False, max_seq_len=None, vocab=VOC
     batch = []
     for inst in insts:
         if sequences:
-            z = np.ones((max_batch_len - len(inst))) * vocab.pad_id
+            z = np.ones((max_batch_len - len(inst))) * VOCAB.pad_id
         else:
             z = np.zeros((max_batch_len - len(inst), inst.shape[-1]))
         c = np.concatenate((inst, z), axis=0)
@@ -54,81 +54,13 @@ def collate_fn(insts, coords=False, sequences=False, max_seq_len=None, vocab=VOC
     return batch
 
 
-class ProteinVocabulary(object):
-    """
-    Represents the 'vocabulary' of amino acids for encoding a protein sequence.
-    Includes pad, sos, eos, and unknown characters as well as the 20 standard
-    amino acids.
-    """
-    def __init__(self, add_sos_eos=False):
-        self.pad_char = "_"  # Pad character
-        self.unk_char = "?"  # unknown character
-        self.sos_char = "<"  # SOS character
-        self.eos_char = ">"  # EOS character
-
-        self._char2int = dict()
-        self._int2char = dict()
-
-        self.add(self.pad_char)
-        self.add(self.unk_char)
-        if add_sos_eos:
-            self.add(self.sos_char)
-            self.add(self.eos_char)
-
-        # Extract the ordered list of 1-letter amino acid codes from the project-level AA_MAP.
-        self.stdaas = map(lambda x: x[0], sorted(list(AA_MAP.items()), key=lambda x: x[1]))
-        self.stdaas = "".join(filter(lambda x: len(x) == 1, self.stdaas))
-        for aa in self.stdaas:
-            self.add(aa)
-
-    def __getitem__(self, aa):
-        return self._char2int.get(aa, self._char2int[self.unk_char])
-
-    def __contains__(self, aa):
-        return aa in self._char2int
-
-    def __setitem__(self, key, value):
-        raise ValueError('vocabulary is readonly')
-
-    def __len__(self):
-        return len(self._char2int)
-
-    def __repr__(self):
-        return f"ProteinVocabulary[size={len(self)}]"
-
-    def int2char(self, id):
-        return self._int2char[id]
-
-    def add(self, aa):
-        if aa not in self:
-            aaid = self._char2int[aa] = len(self)
-            self._int2char[aaid] = aa
-            return aaid
-        else:
-            return self[aa]
-
-    def str2ints(self, seq, add_sos_eos=True):
-        if add_sos_eos:
-            return [self["<"]] + [self[aa] for aa in seq] + [self[">"]]
-        else:
-            return [self[aa] for aa in seq]
-
-    def ints2str(self, ints, include_sos_eos=False):
-        seq = ""
-        for i in ints:
-            c = self.int2char(i)
-            if include_sos_eos or (c not in [self.sos_char, self.eos_char, self.pad_char]):
-                seq += c
-        return seq
-
-
 class ProteinDataset(torch.utils.data.Dataset):
     """
     This dataset can hold lists of sequences, angles, and coordinates for
     each protein.
     """
     def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True,
-                 sort_by_length=True, reverse_sort=True, skip_missing_residues=True, vocab=VOCAB):
+                 sort_by_length=True, reverse_sort=True, skip_missing_residues=True):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
@@ -137,7 +69,7 @@ class ProteinDataset(torch.utils.data.Dataset):
             if np.isnan(angs[i]).all(axis=-1).any() and skip_missing_residues:
                 continue
             else:
-                self._seqs.append(vocab.str2ints(seqs[i], add_sos_eos))
+                self._seqs.append(VOCAB.str2ints(seqs[i], add_sos_eos))
                 self._angs.append(angs[i])
                 self._crds.append(crds[i])
 
@@ -175,7 +107,7 @@ class BinnedProteinDataset(torch.utils.data.Dataset):
 
     Assumes protein data is sorted from shortest to longest (ascending).
     """
-    def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True, skip_missing_residues=True, vocab=VOCAB):
+    def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True, skip_missing_residues=True):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
@@ -185,7 +117,7 @@ class BinnedProteinDataset(torch.utils.data.Dataset):
             if np.isnan(angs[i]).all(axis=-1).any() and skip_missing_residues:
                 continue
             else:
-                self._seqs.append(vocab.str2ints(seqs[i], add_sos_eos))
+                self._seqs.append(VOCAB.str2ints(seqs[i], add_sos_eos))
                 self._angs.append(angs[i])
                 self._crds.append(crds[i])
 

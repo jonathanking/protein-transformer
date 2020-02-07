@@ -17,8 +17,8 @@ from tqdm import tqdm
 import wandb
 from joblib import Parallel
 
-from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN, \
-    ProteinVocabulary
+from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
+from protein_transformer.protein.Sequence import ProteinVocabulary
 from protein_transformer.log import *
 from protein_transformer.losses import compute_batch_drmsd, \
     mse_over_angles, \
@@ -26,9 +26,7 @@ from protein_transformer.losses import compute_batch_drmsd, \
 from protein_transformer.models.encoder_only import EncoderOnlyTransformer
 from protein_transformer.models.transformer.Optimizer import ScheduledOptim
 from protein_transformer.models.transformer.Transformer import Transformer
-from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
-
-
+from protein_transformer.protein.Structure import NUM_PREDICTED_ANGLES
 
 
 def train_epoch(model, training_data, validation_datasets, optimizer, device, args, log_writer, metrics, pool=None):

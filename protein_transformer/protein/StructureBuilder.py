@@ -4,19 +4,16 @@ import numpy
 import torch
 import numpy as np
 
-from protein_transformer.dataset import VOCAB, NUM_PREDICTED_COORDS
 from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, BB_BUILD_INFO
-from protein_transformer.protein.Structure import nerf
-from protein_transformer.protein.Sidechains import NUM_BB_TORSION_ANGLES, \
-    NUM_BB_OTHER_ANGLES, AA_MAP, AA_MAP_INV
+from protein_transformer.protein.Structure import nerf, NUM_PREDICTED_COORDS, \
+    SC_ANGLE_START_POS
+from protein_transformer.protein.Sequence import VOCAB
 
-SC_ANGLE_START_POS = NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANGLES
 
 class StructureBuilder(object):
     """ 
     Given angles and protein sequence, reconstructs a single protein's structure.
     """
-    # TODO Clarify first residue builder
     # TODO clarify mapping from angle names to position in array
     def __init__(self, seq, ang, device=torch.device("cpu")):
         """
@@ -32,7 +29,7 @@ class StructureBuilder(object):
             The device on which to build the structure.
         """
         if type(seq) == str:
-            seq = torch.tensor([AA_MAP[s] for s in seq])
+            seq = torch.tensor([VOCAB._char2int[s] for s in seq])
         self.seq = seq
         self.ang = ang
         self.device = device
@@ -47,7 +44,7 @@ class StructureBuilder(object):
 
     def build(self):
         """
-        Constuct all of the atoms for a residue. Special care must be taken
+        Construct all of the atoms for a residue. Special care must be taken
         for the first residue in the sequence in order to place its CB, if
         present.
         """
@@ -76,6 +73,9 @@ class StructureBuilder(object):
         self.coords = torch.stack(self.coords)
 
         return self.coords
+
+    def seq_as_str(self):
+        return VOCAB.ints2str(map(int, self.seq))
 
 
 
@@ -176,10 +176,10 @@ class ResidueBuilder(object):
     def stack_coords(self):
         self.coords = self.bb + self.sc + (NUM_PREDICTED_COORDS - \
             len(self.bb) - len(self.sc)) * [self.coordinate_padding]
-        return self.coords()
+        return self.coords
 
 def get_residue_build_iter(res, build_dictionary):
-    r = build_dictionary[AA_MAP_INV[int(res)]]
+    r = build_dictionary[VOCAB.int2chars(int(res))]
     bvals = [torch.tensor(b, dtype=torch.float32) for b in r["bonds-vals"]]
     avals = [torch.tensor(a, dtype=torch.float32) for a in r["angles-vals"]]
     tvals = [torch.tensor(t, dtype=torch.float32) if t != "?" else "?" for t in r["torsion-vals"]]

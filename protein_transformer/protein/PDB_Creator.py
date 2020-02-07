@@ -6,10 +6,13 @@ from prody import calcTransformation
 
 import os
 
-from protein_transformer.protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
+from protein_transformer.protein.Sequence import ONE_TO_THREE_LETTER_MAP
 import protein_transformer
 from protein_transformer.losses import inverse_trig_transform
 from protein_transformer.losses import angles_to_coords
+from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO
+from protein_transformer.protein.Structure import NUM_PREDICTED_COORDS
+
 
 class PDB_Creator(object):
     """
@@ -21,7 +24,7 @@ class PDB_Creator(object):
     The Python format string was taken from http://cupnet.net/pdb-format/.
     """
 
-    def __init__(self, coords, seq=None, mapping=None, atoms_per_res=13):
+    def __init__(self, coords, seq=None, mapping=None, atoms_per_res=NUM_PREDICTED_COORDS):
         """
         Input:
             coords: (L x N) x 3 where L is the protein sequence len and N
@@ -240,7 +243,7 @@ class PDB_Creator(object):
 
 ATOM_MAP_13 = {}
 for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
-    ATOM_MAP_13[one_letter] = ["N", "CA", "C"] + list(SC_DATA[ONE_TO_THREE_LETTER_MAP[one_letter]]["predicted"])
+    ATOM_MAP_13[one_letter] = ["N", "CA", "C"] + list(SC_BUILD_INFO[ONE_TO_THREE_LETTER_MAP[one_letter]]["atom-names"])
     ATOM_MAP_13[one_letter].extend(["PAD"] * (13 - len(ATOM_MAP_13[one_letter])))
 
 def generate_pdbs_from_debug_dataset():

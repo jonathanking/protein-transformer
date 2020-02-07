@@ -6,8 +6,9 @@ import torch
 from joblib import Parallel, delayed
 import wandb
 
-from .dataset import VOCAB
-from .protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
+from protein_transformer.protein.Sequence import VOCAB
+from protein_transformer.protein.Structure import NUM_PREDICTED_ANGLES, \
+    NUM_PREDICTED_COORDS
 import protein_transformer.protein.Structure
 from .protein.structure_utils import get_backbone_from_full_coords
 

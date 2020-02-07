@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 
-from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
+from protein_transformer.protein.Structure import NUM_PREDICTED_ANGLES
 from .Decoder import Decoder
 from .Encoder import Encoder
 

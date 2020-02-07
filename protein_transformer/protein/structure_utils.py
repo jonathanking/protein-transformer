@@ -10,8 +10,9 @@ from protein_transformer.protein.structure_exceptions import \
     NonStandardAminoAcidError, IncompleteStructureError, SequenceError, \
     ContigMultipleMatchingError, ShortStructureError, MissingAtomsError, \
     NoneStructureError
-from .Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS, \
-    AA_MAP, AA_MAP_INV, NUM_BB_TORSION_ANGLES, NUM_BB_OTHER_ANGLES
+from protein_transformer.protein.Structure import NUM_PREDICTED_ANGLES, \
+    NUM_BB_TORSION_ANGLES, NUM_BB_OTHER_ANGLES, NUM_PREDICTED_COORDS
+from protein_transformer.protein.Sequence import AA_MAP, AA_MAP_INV
 
 GLOBAL_PAD_CHAR = np.nan
 

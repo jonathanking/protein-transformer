@@ -1,8 +1,16 @@
 import numpy as np
 import torch
 
-import protein_transformer.protein.StructureBuilder as StructureBuilder
+NUM_PREDICTED_ANGLES = 13
+NUM_PREDICTED_COORDS = 13
+NUM_BB_TORSION_ANGLES = 3
+NUM_BB_OTHER_ANGLES = 3
+NUM_SC_ANGLES = NUM_PREDICTED_ANGLES - (NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANGLES)
+SC_ANGLE_START_POS = NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANGLES
+
+
 from protein_transformer.losses import inverse_trig_transform
+
 
 
 def generate_coords(angles, input_seq, device):
@@ -60,12 +68,23 @@ def nerf(a, b, c, l, theta, chi):
     res = c + torch.mm(M, d).squeeze()
     return res.squeeze()
 
+
+def deg2rad(angle):
+    """
+    Converts an angle in degrees to radians.
+    """
+    return angle * np.pi / 180.
+
+import protein_transformer.protein.StructureBuilder as StructureBuilder
+
 if __name__ == '__main__':
     d = torch.load("/home/jok120/protein-transformer/data/proteinnet/casp12_200206_30.pt")
-    seq = d["train"]["seq"][0]
-    ang = d["train"]["ang"][0]
+    seq = d["train"]["seq"][100]
+    ang = d["train"]["ang"][100]
     ang = inverse_trig_transform(torch.tensor(ang, dtype=torch.float32))
     sb = StructureBuilder.StructureBuilder(seq, ang)
+    print(sb.seq_as_str())
     sb.build()
     print("Hi")
     pass
+
