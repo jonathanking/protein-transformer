@@ -121,7 +121,7 @@ class ResidueBuilder(object):
         if self.prev_ang is None and self.prev_bb is None:
             self.bb = self.init_bb()
         else:
-            self.bb = []
+            pts = [self.prev_bb[-3], self.prev_bb[-2], self.prev_bb[-1]]
             for j in range(3):
                 if j == 0:
                     # Placing N
@@ -139,8 +139,9 @@ class ResidueBuilder(object):
                     b = BB_BUILD_INFO["BONDLENS"]["ca-c"]
                     dihedral = self.ang[0]       # phi of current residue
 
-                next_pt = nerf(self.prev_bb[-3], self.prev_bb[-2], self.prev_bb[-1], b, t, dihedral)
-                self.bb.append(next_pt)
+                next_pt = nerf(pts[-3], pts[-2], pts[-1], b, t, dihedral)
+                pts.append(next_pt)
+            self.bb = pts[3:]
 
         return self.bb
 
@@ -177,6 +178,9 @@ class ResidueBuilder(object):
         self.coords = self.bb + self.sc + (NUM_PREDICTED_COORDS - \
             len(self.bb) - len(self.sc)) * [self.coordinate_padding]
         return self.coords
+
+    def __repr__(self):
+        return f"ResidueBuilder({VOCAB.int2char(self.name)})"
 
 def get_residue_build_iter(res, build_dictionary):
     r = build_dictionary[VOCAB.int2chars(int(res))]

@@ -9,10 +9,6 @@ NUM_SC_ANGLES = NUM_PREDICTED_ANGLES - (NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANG
 SC_ANGLE_START_POS = NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANGLES
 
 
-from protein_transformer.losses import inverse_trig_transform
-
-
-
 def generate_coords(angles, input_seq, device):
     """ Returns a protein's coordinates generated from its angles and sequence.
 
@@ -78,9 +74,10 @@ def deg2rad(angle):
 import protein_transformer.protein.StructureBuilder as StructureBuilder
 
 if __name__ == '__main__':
+    from protein_transformer.losses import inverse_trig_transform
     d = torch.load("/home/jok120/protein-transformer/data/proteinnet/casp12_200206_30.pt")
-    seq = d["train"]["seq"][100]
-    ang = d["train"]["ang"][100]
+    seq = d["train"]["seq"][70]
+    ang = d["train"]["ang"][70]
     ang = inverse_trig_transform(torch.tensor(ang, dtype=torch.float32))
     sb = StructureBuilder.StructureBuilder(seq, ang)
     print(sb.seq_as_str())
