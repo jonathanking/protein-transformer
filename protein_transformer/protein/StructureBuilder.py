@@ -1,12 +1,14 @@
 from collections import OrderedDict
 
+import numpy
 import torch
 import numpy as np
 
 from protein_transformer.dataset import VOCAB, NUM_PREDICTED_COORDS
 from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, BB_BUILD_INFO
 from protein_transformer.protein.Structure import nerf
-from protein_transformer.protein.Sidechains import NUM_BB_TORSION_ANGLES, NUM_BB_OTHER_ANGLES
+from protein_transformer.protein.Sidechains import NUM_BB_TORSION_ANGLES, \
+    NUM_BB_OTHER_ANGLES, AA_MAP
 
 SC_ANGLE_START_POS = NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANGLES - 1
 
@@ -28,18 +30,35 @@ class StructureBuilder(object):
         device : device
             The device on which to build the structure.
         """
+        if type(seq) == str:
+            seq = torch.tensor([AA_MAP[s] for s in seq])
         self.seq = seq
         self.ang = ang
         self.device = device
         self.coords = []
         self.prev_ang = None
         self.prev_bb = None
+        self.next_bb = None
 
-    def iter_residues(self):
-        for resname, angles in zip(self.seq, self.ang):
-            yield ResidueBuilder(resname, angles, self.prev_bb, self.prev_ang) 
+    def iter_residues(self, start=1):
+        for resname, angles in zip(self.seq[start:], self.ang[start:]):
+            yield ResidueBuilder(resname, angles, self.prev_bb, self.prev_ang)
 
     def build(self):
+        # Because the placement of the CB for the first residue depends on the
+        # backbone placement of the second residue, we first build the bb for
+        # residues 1 and 2. Then we build their sidechains.
+        # first_res = ResidueBuilder(self.seq[0], self.ang[0], prev_bb=None, prev_ang=None)
+        residue_iterator = self.iter_residues()
+        first_res = next(residue_iterator)
+        first_res.build_bb()
+        self.prev_bb = first_res.bb
+        self.prev_ang = first_res.ang
+        second_res = next(residue_iterator)
+        second_res.build()
+        first_res.next_bb = second_res.bb
+        first_res.build_sc()
+
         for residue in self.iter_residues():
             residue.build()
             self.coords += residue.coords
@@ -67,12 +86,15 @@ class ResidueBuilder(object):
         prev_ang : Tensor, None
             Angle tensor (1 X NUM_PREDICTED_ANGLES) of previous reside, upon which this residue is extending.
         """
-        assert len(name) == 1 and type(name) == torch.Tensor, "Expected integer AA code."
+        assert type(name) == torch.Tensor, "Expected integer AA code." + str(name.shape) + str(type(name))
+        if type(angles) == numpy.ndarray:
+            angles = torch.tensor(angles)
         self.name = name
         self.ang = angles
         self.prev_bb = prev_bb
         self.prev_ang = prev_ang
         self.device = device
+        self.next_bb = None
 
         self.bb = []
         self.sc = []
@@ -117,16 +139,21 @@ class ResidueBuilder(object):
         """ Initialize the first 3 points of the protein's backbone. Placed in an arbitrary plane (z = .001). """
         a1 = torch.tensor([0, 0, 0.001], device=self.device)
         a2 = a1 + torch.tensor([BB_BUILD_INFO["BONDLENS"]["n-ca"], 0, 0], device=self.device)
-        a3x = torch.cos(np.pi - self.ang[0, 3]) * BB_BUILD_INFO["BONDLENS"]["ca-c"]
-        a3y = torch.sin(np.pi - self.ang[0, 3]) * BB_BUILD_INFO["BONDLENS"]['ca-c']
-        a3 = a2 + torch.tensor([a3x, a3y, 0], device=self.device)
+        a3x = torch.cos(np.pi - self.ang[3]) * BB_BUILD_INFO["BONDLENS"]["ca-c"]
+        a3y = torch.sin(np.pi - self.ang[3]) * BB_BUILD_INFO["BONDLENS"]['ca-c']
+        a3 = a2 + torch.tensor([a3x, a3y, 0], device=self.device, dtype=torch.float32)
         return [a1, a2, a3]
 
     def build_sc(self):
         assert len(self.bb) > 0, "Backbone must be built first."
-        self.pts = OrderedDict({"C": self.prev_bb[-1],
-                                "N": self.bb[0],
-                                "CA": self.bb[1]})
+        if self.next_bb:
+            self.pts = OrderedDict({"CA": self.bb[1],
+                                    "C": self.bb[-1],
+                                    "N": self.next_bb[0]})
+        else:
+            self.pts = OrderedDict({"C": self.prev_bb[-1],
+                                    "N": self.bb[0],
+                                    "CA": self.bb[1]})
         for i, (bond_len, angle, torsion, atom_names) in enumerate(get_residue_build_iter(self.name, SC_BUILD_INFO)):
             a, b, c = (self.pts[an] for an in atom_names[:-1])
             if torsion == "?":

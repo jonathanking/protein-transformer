@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from protein_transformer.protein.StructureBuilder import StructureBuilder
+import protein_transformer.protein.StructureBuilder as StructureBuilder
 
 
 def generate_coords(angles, input_seq, device):
@@ -11,7 +11,7 @@ def generate_coords(angles, input_seq, device):
     set of cartesian coordinates using the NeRF method, (L x A` x 3),
     where A` is the number of atoms generated (depends on amino acid sequence).
     """
-    sb = StructureBuilder(input_seq, angles, device)
+    sb = StructureBuilder.StructureBuilder(input_seq, angles, device)
     return sb.build()
 
 
@@ -60,6 +60,10 @@ def nerf(a, b, c, l, theta, chi):
     return res.squeeze()
 
 if __name__ == '__main__':
-    d = torch.load("~/protein-transformer/data/proteinnet/casp12_200206_30.pt")
+    d = torch.load("/home/jok120/protein-transformer/data/proteinnet/casp12_200206_30.pt")
     seq = d["train"]["seq"][0]
     ang = d["train"]["ang"][0]
+    sb = StructureBuilder.StructureBuilder(seq, ang)
+    sb.build()
+    print("Hi")
+    pass
