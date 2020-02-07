@@ -83,6 +83,7 @@ class ResidueBuilder(object):
         self.build_bb()
         self.build_sc()
         self.stack_coords()
+        return self.coords
 
     def build_bb(self):
         """ Builds backbone for residue. """
