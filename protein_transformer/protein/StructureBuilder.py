@@ -16,7 +16,8 @@ class StructureBuilder(object):
     """ 
     Given angles and protein sequence, reconstructs a single protein's structure.
     """
-
+    # TODO Clarify first residue builder
+    # TODO clarify mapping from angle names to position in array
     def __init__(self, seq, ang, device=torch.device("cpu")):
         """
         Initialize a StructureBuilder for a single protein.
