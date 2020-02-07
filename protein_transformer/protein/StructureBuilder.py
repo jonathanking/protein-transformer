@@ -10,7 +10,7 @@ from protein_transformer.protein.Structure import nerf
 from protein_transformer.protein.Sidechains import NUM_BB_TORSION_ANGLES, \
     NUM_BB_OTHER_ANGLES, AA_MAP, AA_MAP_INV
 
-SC_ANGLE_START_POS = NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANGLES - 1
+SC_ANGLE_START_POS = NUM_BB_OTHER_ANGLES + NUM_BB_TORSION_ANGLES
 
 class StructureBuilder(object):
     """ 
@@ -41,29 +41,33 @@ class StructureBuilder(object):
         self.prev_bb = None
         self.next_bb = None
 
-    def iter_residues(self, start=2):
+    def iter_residues(self, start=0):
         for resname, angles in zip(self.seq[start:], self.ang[start:]):
             yield ResidueBuilder(resname, angles, self.prev_bb, self.prev_ang)
 
     def build(self):
-        # Because the placement of the CB for the first residue depends on the
-        # backbone placement of the second residue, we first build the bb for
-        # residues 1 and 2. Then we build their sidechains.
-        # first_res = ResidueBuilder(self.seq[0], self.ang[0], prev_bb=None, prev_ang=None)
+        """
+        Constuct all of the atoms for a residue. Special care must be taken
+        for the first residue in the sequence in order to place its CB, if
+        present.
+        """
+        # Initialize the first and second residues' backbones
         residue_iterator = self.iter_residues()
         first_res = next(residue_iterator)
         first_res.build_bb()
-        self.prev_bb = first_res.bb
-        self.prev_ang = first_res.ang
+        self.prev_bb, self.prev_ang = first_res.bb, first_res.ang
         second_res = next(residue_iterator)
         second_res.build()
+        self.prev_bb, self.prev_ang = second_res.bb, second_res.ang
+
+        # Use the second residue's bb to build the first's CB
         first_res.next_bb = second_res.bb
         first_res.build_sc()
-        first_res.stack_coords()
-        second_res.stack_coords()
-        self.coords = first_res.coords + second_res.coords
 
-        for residue in self.iter_residues():
+        # Combine the coordinates and build the rest of the protein
+        self.coords = first_res.stack_coords() + second_res.stack_coords()
+
+        for residue in self.iter_residues(start=2):
             residue.build()
             self.coords += residue.coords
             self.prev_ang = residue.ang
@@ -110,8 +114,7 @@ class ResidueBuilder(object):
     def build(self):
         self.build_bb()
         self.build_sc()
-        self.stack_coords()
-        return self.coords
+        return self.stack_coords()
 
     def build_bb(self):
         """ Builds backbone for residue. """
@@ -173,6 +176,7 @@ class ResidueBuilder(object):
     def stack_coords(self):
         self.coords = self.bb + self.sc + (NUM_PREDICTED_COORDS - \
             len(self.bb) - len(self.sc)) * [self.coordinate_padding]
+        return self.coords()
 
 def get_residue_build_iter(res, build_dictionary):
     r = build_dictionary[AA_MAP_INV[int(res)]]
