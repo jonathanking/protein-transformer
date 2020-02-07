@@ -369,7 +369,7 @@ def save_data_dict(data):
     Saves a Python dictionary containing all training data to disk via Pickle or PyTorch.
     """
     if not args.out_file:
-        args.out_file = "data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pt"
+        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pt"
     torch.save(data, args.out_file)
     print(f"Data saved to {args.out_file}.")
 

@@ -11,7 +11,7 @@ from protein_transformer.protein.structure_exceptions import \
     ContigMultipleMatchingError, ShortStructureError, MissingAtomsError, \
     NoneStructureError
 from .Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS, \
-    AA_MAP, AA_MAP_INV
+    AA_MAP, AA_MAP_INV, NUM_BB_TORSION_ANGLES, NUM_BB_OTHER_ANGLES
 
 GLOBAL_PAD_CHAR = np.nan
 
@@ -170,28 +170,35 @@ def compute_sidechain_dihedrals(residue, prev_residue, next_res):
     used instead. Then, each group of 4 atoms in atom_names is used to
     generate a list of dihedral angles for this residue.
     """
-    torsion_names = SC_BUILD_INFO[residue.getResname()]["torsion-names"]
+    try:
+        torsion_names = SC_BUILD_INFO[residue.getResname()]["torsion-names"]
+    except KeyError:
+        raise NonStandardAminoAcidError
     if len(torsion_names) == 0:
-        return (NUM_PREDICTED_ANGLES - 6) * [GLOBAL_PAD_CHAR]
+        return (NUM_PREDICTED_ANGLES - (NUM_BB_TORSION_ANGLES + NUM_BB_OTHER_ANGLES)) * [GLOBAL_PAD_CHAR]
 
     # Compute CB dihedral, which may depend on the previous or next residue for placement
     try:
         if prev_residue:
-            cb_dihedral = get_dihedral(prev_residue.select("name C").getCoords(),
-                                       *(residue.select(f"name {an}").getCoords() for an in torsion_names[0].split("-")[1:]))
+            cb_dihedral = compute_single_dihedral((prev_residue.select("name C"),
+                                       *(residue.select(f"name {an}") for an in ["N", "CA", "CB"])))
         else:
-            cb_dihedral = get_dihedral(next_res.select("name N").getCoords(),
-                                       *(residue.select(f"name {an}").getCoords() for an in ["C", "CA", "CB"]))
+            cb_dihedral = compute_single_dihedral((next_res.select("name N"),
+                                       *(residue.select(f"name {an}") for an in ["C", "CA", "CB"])))
     except AttributeError:
         cb_dihedral = GLOBAL_PAD_CHAR
 
     res_dihedrals = [cb_dihedral]
 
-    for t in torsion_names[1:]:
-        atom_names = t.split("-")
+    for t_name, t_val in zip(torsion_names[1:], SC_BUILD_INFO[residue.getResname()]["torsion-vals"][1:]):
+        # Only record torsional angles that are relevant (i.e. not planar).
+        # All torsion values that vary are marked with '?' in SC_BUILD_INFO
+        if t_val != "?":
+            break
+        atom_names = t_name.split("-")
         res_dihedrals.append(compute_single_dihedral([residue.select("name " + an) for an in atom_names]))
 
-    return res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [GLOBAL_PAD_CHAR]
+    return res_dihedrals + (NUM_PREDICTED_ANGLES - (NUM_BB_TORSION_ANGLES + NUM_BB_OTHER_ANGLES) - len(res_dihedrals)) * [GLOBAL_PAD_CHAR]
 
 
 def get_atom_coords_by_names(residue, atom_names):
