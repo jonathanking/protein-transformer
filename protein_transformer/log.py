@@ -272,12 +272,12 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
     true_coords[torch.isnan(true_coords)] = 0
 
     creator = PDB_Creator(pred_coords.detach().numpy(),
-                          seq=VOCAB.indices2aa_seq(src_seq_cpu))
+                          seq=VOCAB.ints2str(src_seq_cpu))
     creator.save_pdb(f"{cur_struct_path}/{wandb.run.step:05}_pred.pdb",
                      title="pred")
 
     t_creator = PDB_Creator(true_coords.cpu().detach().numpy(),
-                            seq=VOCAB.indices2aa_seq(src_seq_cpu))
+                            seq=VOCAB.ints2str(src_seq_cpu))
     if not os.path.isfile(f"{cur_struct_path}/true.pdb"):
         t_creator.save_pdb(f"{cur_struct_path}/true.pdb", title="true")
 

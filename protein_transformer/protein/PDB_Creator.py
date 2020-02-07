@@ -281,8 +281,8 @@ def get_coordinates_from_numpy_data(seq, ang_sincos):
     if torch.isnan(ang_rad).any():
         print("Nan in ang_rad.")
 
-    seq_as_ints = protein_transformer.dataset.VOCAB.aa_seq2indices(seq,
-                                                                   add_sos_eos=False)
+    seq_as_ints = protein_transformer.dataset.VOCAB.str2ints(seq,
+                                                             add_sos_eos=False)
     seq_as_ints = torch.tensor(seq_as_ints, dtype=torch.long)
 
     coords = angles_to_coords(ang_rad, seq_as_ints, remove_batch_padding=False)

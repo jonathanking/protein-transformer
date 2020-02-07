@@ -17,7 +17,8 @@ from tqdm import tqdm
 import wandb
 from joblib import Parallel
 
-from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
+from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN, \
+    ProteinVocabulary
 from protein_transformer.log import *
 from protein_transformer.losses import compute_batch_drmsd, \
     mse_over_angles, \

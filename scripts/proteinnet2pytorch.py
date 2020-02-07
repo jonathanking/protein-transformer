@@ -386,8 +386,8 @@ def main():
     # Download and preprocess all data from PDB IDs
     lim = None
     train_results = []
-    with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
-        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim]), dynamic_ncols=True))
+    # with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
+    train_results = list(tqdm.tqdm(map(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim]), dynamic_ncols=True))
     valid_result_meta = {}
     for split, vids in group_validation_set(valid_ids).items():
         valid_result_meta[split] = []
