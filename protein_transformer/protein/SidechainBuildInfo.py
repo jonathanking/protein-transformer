@@ -194,9 +194,9 @@ SC_BUILD_INFO = \
              'angles-vals': [1.9146261894377796,
                              1.9739673840055867,
                              2.0943951023931953,
-                             2.0943951023931953,
-                             2.0943951023931953,
-                             2.0420352248333655],
+                             1.8849555921538759,
+                             1.8849555921538759,
+                             1.8849555921538759],
              'atom-names': ['CB', 'CG', 'ND1', 'CE1', 'NE2', 'CD2'],
              'bonds-names': ['CA-CB',
                              'CB-CG',
@@ -572,7 +572,6 @@ SC_BUILD_INFO = \
              'torsion-names': ['C-N-CA-CB', 'N-CA-CB-CG1', 'N-CA-CB-CG2'],
              'torsion-types': ['C -N -CX-3C', 'N -CX-3C-CT', 'N -CX-3C-CT'],
              'torsion-vals': ['?', '?', '?']}}
-
 BB_BUILD_INFO = {"BONDLENS": {'n-ca': 1.442,
             'ca-c': 1.498,
             'c-n': 1.379,}}

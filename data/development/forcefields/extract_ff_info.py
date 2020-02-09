@@ -281,6 +281,11 @@ def main():
         ff14sb_bond_angle_dict = extract_bonds_and_angle_info(force_field)
         f.write(pprint.pformat(ff14sb_bond_angle_dict))
 
+    for a in ['CC-NA-CR',
+                              'NA-CR-NB',
+                              'CR-NB-CV']:
+        ff14sb_bond_angle_dict["angles"][a] = 108
+
     with open("parm10_bonds_angles_dict.txt", "w") as f:
         force_field = "parm10.dat"
         parm10_bond_angle_dict = extract_bonds_and_angle_info(force_field)
