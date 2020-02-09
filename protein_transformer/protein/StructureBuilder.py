@@ -157,15 +157,18 @@ class ResidueBuilder(object):
     def build_sc(self):
         assert len(self.bb) > 0, "Backbone must be built first."
         if self.next_bb:
-            self.pts = OrderedDict({"CA": self.bb[1],
+            self.pts = OrderedDict({"N": self.next_bb[0],
                                     "C": self.bb[-1],
-                                    "N": self.next_bb[0]})
+                                    "CA": self.bb[1]})
         else:
             self.pts = OrderedDict({"C": self.prev_bb[-1],
                                     "N": self.bb[0],
                                     "CA": self.bb[1]})
         for i, (bond_len, angle, torsion, atom_names) in enumerate(get_residue_build_iter(self.name, SC_BUILD_INFO)):
-            a, b, c = (self.pts[an] for an in atom_names[:-1])
+            if i == 0:
+                a, b, c = tuple(self.pts.values())
+            else:
+                a, b, c = (self.pts[an] for an in atom_names[:-1])
             if type(torsion) is str and torsion == "?":
                 torsion = self.ang[SC_ANGLE_START_POS + i]
             new_pt = nerf(a, b, c, bond_len, angle, torsion)
