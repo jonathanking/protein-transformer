@@ -87,7 +87,7 @@ class StructureBuilder(object):
 
         if not self.pdb_creator:
             from protein_transformer.protein.PDB_Creator import PDB_Creator
-            self.pdb_creator = PDB_Creator(self.coords, self.seq_as_str())
+            self.pdb_creator = PDB_Creator(self.coords.numpy(), self.get_seq_as_str())
 
         self.pdb_creator.save_pdb(path, title)
 
@@ -185,18 +185,24 @@ class ResidueBuilder(object):
         else:
             self.pts["C-"] = self.prev_bb[-1]
 
+        last_torsion = None
         for i, (bond_len, angle, torsion, atom_names) in enumerate(get_residue_build_iter(self.name, SC_BUILD_INFO)):
+
             if self.next_bb and i == 0:
                 a, b, c = self.pts["N+"], self.pts["C"], self.pts["CA"]
             elif i == 0:
                 a, b, c = self.pts["C-"], self.pts["N"], self.pts["CA"]
             else:
                 a, b, c = (self.pts[an] for an in atom_names[:-1])
-            if type(torsion) is str and torsion == "?":
+
+            if type(torsion) is str and torsion == "p":
                 torsion = self.ang[SC_ANGLE_START_POS + i]
+            elif type(torsion) is str and torsion == "i" and last_torsion:
+                torsion = last_torsion - np.pi
             new_pt = nerf(a, b, c, bond_len, angle, torsion)
             self.pts[atom_names[-1]] = new_pt
             self.sc.append(new_pt)
+            last_torsion = torsion
 
         return self.sc
 
@@ -219,7 +225,7 @@ def get_residue_build_iter(res, build_dictionary):
     r = build_dictionary[VOCAB.int2chars(int(res))]
     bvals = [torch.tensor(b, dtype=torch.float32) for b in r["bonds-vals"]]
     avals = [torch.tensor(a, dtype=torch.float32) for a in r["angles-vals"]]
-    tvals = [torch.tensor(t, dtype=torch.float32) if t != "?" else "?" for t in r["torsion-vals"]]
+    tvals = [torch.tensor(t, dtype=torch.float32) if t not in ["p", "i"] else t for t in r["torsion-vals"]]
     return iter(zip(bvals, avals, tvals, [t.split("-") for t in r["torsion-names"]]))
 
 if __name__ == '__main__':

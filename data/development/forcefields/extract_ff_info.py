@@ -260,12 +260,19 @@ def create_full_amino_acid_build_dict(atom_name_dict, bond_angle_dict):
                 # Add planar torsion angles
                 if AA in KNOWN_TORSION_VALS and cur_torsion_names in KNOWN_TORSION_VALS[AA]:
                     torsion_vals.append(KNOWN_TORSION_VALS[AA][cur_torsion_names])
+                # Mark certain torsion angles as inferred
+                elif (AA == "ARG" and cur_torsion_names == 'CD-NE-CZ-NH2') or (
+                      AA == "ASN" and cur_torsion_names == 'CA-CB-CG-ND2') or (
+                      AA == "ASP" and cur_torsion_names == 'CA-CB-CG-OD2') or (
+                      AA == "GLN" and cur_torsion_names == 'CB-CG-CD-NE2') or (
+                      AA == "GLU" and cur_torsion_names == 'CB-CG-CD-OE2'):
+                    torsion_vals.append("i")
                 else:
-                    torsion_vals.append("?")
+                    torsion_vals.append("p")
                 prev_3_atoms = [prev_3_atoms[-2], prev_3_atoms[-1], atom_name]
         AMINO_ACID_INFO[AA]["torsion-names"] = torsion_names
         AMINO_ACID_INFO[AA]["torsion-types"] = torsion_types
-        AMINO_ACID_INFO[AA]["torsion-vals"] = [np.radians(x) if x != "?" else x for x in torsion_vals]
+        AMINO_ACID_INFO[AA]["torsion-vals"] = [np.radians(x) if x not in ["p", "i"] else x for x in torsion_vals]
 
     return AMINO_ACID_INFO
 
@@ -281,9 +288,9 @@ def main():
         ff14sb_bond_angle_dict = extract_bonds_and_angle_info(force_field)
         f.write(pprint.pformat(ff14sb_bond_angle_dict))
 
-    for a in ['CC-NA-CR',
-                              'NA-CR-NB',
-                              'CR-NB-CV']:
+    # Manually set the Histidine ring angles to be 108 degrees, since AMBER
+    # seems to want them at 120 deg for some unknown reason
+    for a in ['CC-NA-CR', 'NA-CR-NB', 'CR-NB-CV']:
         ff14sb_bond_angle_dict["angles"][a] = 108
 
     with open("parm10_bonds_angles_dict.txt", "w") as f:
