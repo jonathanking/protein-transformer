@@ -2,7 +2,7 @@ import numpy
 import torch
 import numpy as np
 
-from protein_transformer.protein.PDB_Creator import PDB_Creator
+
 from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, BB_BUILD_INFO
 from protein_transformer.protein.Structure import nerf, NUM_PREDICTED_COORDS, \
     SC_ANGLE_START_POS
@@ -86,6 +86,7 @@ class StructureBuilder(object):
             self.build()
 
         if not self.pdb_creator:
+            from protein_transformer.protein.PDB_Creator import PDB_Creator
             self.pdb_creator = PDB_Creator(self.coords, self.seq_as_str())
 
         self.pdb_creator.save_pdb(path, title)

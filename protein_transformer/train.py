@@ -425,7 +425,7 @@ def main():
     model_args.add_argument('--postnorm', action='store_true',
                         help="Use post-layer normalization, as depicted in the original figure for the Transformer "
                              "model. May not train as well as pre-layer normalization.")
-    model_args.add_argument("--angle_mean_path", type=str, default="./protein/casp12_190927_100_angle_means.npy",
+    model_args.add_argument("--angle_mean_path", type=str, default="./protein/casp12_200207_30_angle_means.npy",
                         help="Path to vector of means for every predicted angle. Used to initialize model output.")
     model_args.add_argument("--weight_decay", type=bool, default=True,  help="Applies weight decay to model weights.")
 
