@@ -572,6 +572,11 @@ SC_BUILD_INFO = \
              'torsion-names': ['C-N-CA-CB', 'N-CA-CB-CG1', 'N-CA-CB-CG2'],
              'torsion-types': ['C -N -CX-3C', 'N -CX-3C-CT', 'N -CX-3C-CT'],
              'torsion-vals': ['p', 'p', 'p']}}
+
 BB_BUILD_INFO = {"BONDLENS": {'n-ca': 1.442,
-            'ca-c': 1.498,
-            'c-n': 1.379,}}
+                              'ca-c': 1.498,
+                              'c-n' : 1.379},
+                 # For placing last oxygen:
+                 "BONDANGS": {'ca-c-n': 2.0350539},              # From parm10.dat
+                 "BONDTORSIONS": {'n-ca-c-n': -0.785398163 }     # A simple approximation, not meant to be exact.
+                 }
