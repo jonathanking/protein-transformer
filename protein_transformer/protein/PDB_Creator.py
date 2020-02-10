@@ -73,7 +73,7 @@ class PDB_Creator(object):
 
     def _get_oxy_coords(self, ca, c, n):
         """
-        iven atomic coordinates for an alpha carbon, carbonyl carbon, and the
+        Given atomic coordinates for an alpha carbon, carbonyl carbon, and the
         following nitrogen, this function aligns a peptide bond to those
         atoms and returns the coordinates of the corresponding oxygen.
         """

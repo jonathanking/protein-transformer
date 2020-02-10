@@ -7,7 +7,8 @@ import numpy as np
 import torch
 import wandb
 
-from .dataset import VOCAB, VALID_SPLITS, paired_collate_fn
+from protein_transformer.protein.Sequence import VOCAB
+from .dataset import  VALID_SPLITS, paired_collate_fn
 from .protein.PDB_Creator import PDB_Creator
 from .losses import angles_to_coords, inverse_trig_transform
 
