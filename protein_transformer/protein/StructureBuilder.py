@@ -2,6 +2,7 @@ import numpy
 import torch
 import numpy as np
 
+from protein_transformer.protein.PDB_Creator import PDB_Creator
 from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, BB_BUILD_INFO
 from protein_transformer.protein.Structure import nerf, NUM_PREDICTED_COORDS, \
     SC_ANGLE_START_POS
@@ -35,6 +36,9 @@ class StructureBuilder(object):
         self.prev_ang = None
         self.prev_bb = None
         self.next_bb = None
+
+        self.pdb_creator = None
+        self.seq_as_str = None
 
     def iter_residues(self, start=0):
         for resname, angles in zip(self.seq[start:], self.ang[start:]):
@@ -72,8 +76,19 @@ class StructureBuilder(object):
 
         return self.coords
 
-    def seq_as_str(self):
-        return VOCAB.ints2str(map(int, self.seq))
+    def get_seq_as_str(self):
+        if not self.seq_as_str:
+            self.seq_as_str = VOCAB.ints2str(map(int, self.seq))
+        return self.seq_as_str
+
+    def to_pdb(self, path, title="pred"):
+        if len(self.coords) == 0:
+            self.build()
+
+        if not self.pdb_creator:
+            self.pdb_creator = PDB_Creator(self.coords, self.seq_as_str())
+
+        self.pdb_creator.save_pdb(path, title)
 
 
 
@@ -153,6 +168,13 @@ class ResidueBuilder(object):
         return [a1, a2, a3]
 
     def build_sc(self):
+        """
+        Builds the sidechain atoms for this residue.
+
+        Care is taken when placing the first sc atom (the beta-Carbon). This is
+        because the dihedral angle that places this atom must be defined using
+        a neighboring (previous or next) residue.
+        """
         assert len(self.bb) > 0, "Backbone must be built first."
         self.pts = {"N": self.bb[0],
                     "CA": self.bb[1],
@@ -161,8 +183,6 @@ class ResidueBuilder(object):
             self.pts["N+"] = self.next_bb[0]
         else:
             self.pts["C-"] = self.prev_bb[-1]
-
-        build_order = []
 
         for i, (bond_len, angle, torsion, atom_names) in enumerate(get_residue_build_iter(self.name, SC_BUILD_INFO)):
             if self.next_bb and i == 0:
@@ -175,9 +195,8 @@ class ResidueBuilder(object):
                 torsion = self.ang[SC_ANGLE_START_POS + i]
             new_pt = nerf(a, b, c, bond_len, angle, torsion)
             self.pts[atom_names[-1]] = new_pt
-            build_order.append(atom_names[-1])
+            self.sc.append(new_pt)
 
-        self.sc = [self.pts[p] for p in build_order]
         return self.sc
 
     def stack_coords(self):
@@ -189,6 +208,13 @@ class ResidueBuilder(object):
         return f"ResidueBuilder({VOCAB.int2char(self.name)})"
 
 def get_residue_build_iter(res, build_dictionary):
+    """
+    For a given residue integer code and a residue building data dictionary,
+    this function returns an iterator that returns 4-tuples. Each tuple
+    contains the necessary information to generate the next atom in that
+    residue's sidechain. This includes the bond lengths, bond angles, and
+    torsional angles.
+    """
     r = build_dictionary[VOCAB.int2chars(int(res))]
     bvals = [torch.tensor(b, dtype=torch.float32) for b in r["bonds-vals"]]
     avals = [torch.tensor(a, dtype=torch.float32) for a in r["angles-vals"]]
