@@ -1,5 +1,3 @@
-from collections import OrderedDict
-
 import numpy
 import torch
 import numpy as np
@@ -156,25 +154,30 @@ class ResidueBuilder(object):
 
     def build_sc(self):
         assert len(self.bb) > 0, "Backbone must be built first."
+        self.pts = {"N": self.bb[0],
+                    "CA": self.bb[1],
+                    "C": self.bb[2]}
         if self.next_bb:
-            self.pts = OrderedDict({"N": self.next_bb[0],
-                                    "C": self.bb[-1],
-                                    "CA": self.bb[1]})
+            self.pts["N+"] = self.next_bb[0]
         else:
-            self.pts = OrderedDict({"C": self.prev_bb[-1],
-                                    "N": self.bb[0],
-                                    "CA": self.bb[1]})
+            self.pts["C-"] = self.prev_bb[-1]
+
+        build_order = []
+
         for i, (bond_len, angle, torsion, atom_names) in enumerate(get_residue_build_iter(self.name, SC_BUILD_INFO)):
-            if i == 0:
-                a, b, c = tuple(self.pts.values())
+            if self.next_bb and i == 0:
+                a, b, c = self.pts["N+"], self.pts["C"], self.pts["CA"]
+            elif i == 0:
+                a, b, c = self.pts["C-"], self.pts["N"], self.pts["CA"]
             else:
                 a, b, c = (self.pts[an] for an in atom_names[:-1])
             if type(torsion) is str and torsion == "?":
                 torsion = self.ang[SC_ANGLE_START_POS + i]
             new_pt = nerf(a, b, c, bond_len, angle, torsion)
             self.pts[atom_names[-1]] = new_pt
+            build_order.append(atom_names[-1])
 
-        self.sc = list(self.pts.values())[3:]
+        self.sc = [self.pts[p] for p in build_order]
         return self.sc
 
     def stack_coords(self):
