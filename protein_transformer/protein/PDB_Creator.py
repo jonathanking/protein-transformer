@@ -4,8 +4,6 @@ import torch
 import wandb
 from prody import calcTransformation
 
-import os
-
 from protein_transformer.protein.Sequence import ONE_TO_THREE_LETTER_MAP
 import protein_transformer
 from protein_transformer.losses import inverse_trig_transform
@@ -167,10 +165,8 @@ class PDB_Creator(object):
         self.res_nbr = 1
         self.atom_nbr = 1
         mapping_coords = zip(self.mapping, self._coord_generator())
-        prev_n = torch.tensor([0, 0, -1])
         for (res_name, atom_names), (res_coords, next_n) in mapping_coords:
             self.lines.extend(self._get_lines_for_residue(res_name, atom_names, res_coords, next_n))
-            prev_n = res_coords[0]
             self.res_nbr += 1
         return self.lines
 
@@ -234,7 +230,9 @@ class PDB_Creator(object):
 
         # Align and save PSE
         if make_pse:
+            pymol.cmd.show("lines")
             pymol.cmd.save(pse_out_path, quiet=True)
+            pymol.cmd.png(gltf_out_path.replace("gltf", "png"), width=800, dpi=300, ray=0)
 
 
         pymol.cmd.delete("all")

@@ -280,7 +280,7 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
 
     t_creator = PDB_Creator(true_coords.cpu().detach().numpy(),
                             seq=VOCAB.ints2str(src_seq_cpu))
-    if not os.path.isfile(f"{cur_struct_path}/true.pdb"):
+    if not os.path.isfile(f"{cur_struct_path}/true.pdb") or struct_name == "train":
         t_creator.save_pdb(f"{cur_struct_path}/true.pdb", title="true")
 
     gltf_out_path = os.path.join(args.gltf_dir, f"{wandb.run.step:05}_{struct_name}.gltf")
@@ -290,7 +290,8 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
                          make_pse=True,
                          pse_out_path=f"{cur_struct_path}/{wandb.run.step:05}_both.pse")
 
-    wandb.log({struct_name: wandb.Object3D(gltf_out_path)}, commit=commit)
+    wandb.log({struct_name: wandb.Object3D(gltf_out_path),
+               struct_name + "_img": wandb.Image(gltf_out_path.replace("gltf", "png"))}, commit=commit)
 
 
 def init_metrics(args):

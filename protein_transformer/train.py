@@ -33,7 +33,6 @@ def train_epoch(model, training_data, validation_datasets, optimizer, device, ar
     model.train()
     metrics = reset_metrics_for_epoch(metrics, "train")
     batch_iter = tqdm(training_data, leave=False, unit="batch", dynamic_ncols=True)
-
     for step, batch in enumerate(batch_iter):
         optimizer.zero_grad()
         src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
@@ -310,7 +309,7 @@ def seed_rngs(args):
     """
     Seed all necessary random number generators.
     """
-    # torch.set_num_threads(1)  # Suggested for issues with deadlocks, etc.
+    torch.set_num_threads(1)  # Suggested for issues with deadlocks, etc.
     seed = args.seed
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -472,7 +471,6 @@ def main():
     # Prepare torch
     drmsd_worker_pool = init_worker_pool(args)
     seed_rngs(args)
-    torch.set_num_threads(1)
 
     # Load dataset
     data = torch.load(args.data)
@@ -522,8 +520,10 @@ def main():
     local_base_dir = wandb.run.dir
     args.structure_dir = os.path.join(local_base_dir, "structures")
     args.gltf_dir = f"../data/logs/structures/gltfs/{wandb.run.id}"
+    args.png_dir = f"../data/logs/structures/pngs/{wandb.run.id}"
     os.makedirs(args.structure_dir, exist_ok=True)
     os.makedirs(args.gltf_dir, exist_ok=True)
+    os.makedirs(args.png_dir, exist_ok=True)
     with open(os.path.join(local_base_dir, "NAME"), "w") as f:
         f.write(f"{args.name}\n")
 
