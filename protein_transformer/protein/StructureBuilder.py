@@ -1,19 +1,18 @@
 import numpy
-import torch
 import numpy as np
+import torch
 
-
-from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, BB_BUILD_INFO
+from protein_transformer.protein.Sequence import VOCAB
+from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, \
+    BB_BUILD_INFO
 from protein_transformer.protein.Structure import nerf, NUM_PREDICTED_COORDS, \
     SC_ANGLE_START_POS
-from protein_transformer.protein.Sequence import VOCAB
 
 
 class StructureBuilder(object):
     """ 
     Given angles and protein sequence, reconstructs a single protein's structure.
     """
-    # TODO clarify mapping from angle names to position in array
     def __init__(self, seq, ang, device=torch.device("cpu")):
         """
         Initialize a StructureBuilder for a single protein.

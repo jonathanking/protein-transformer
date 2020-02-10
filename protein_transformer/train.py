@@ -8,17 +8,14 @@ acid sequence.
 
 import argparse
 import csv
-import os
 import random
 
+import torch.multiprocessing as mp
 import torch.optim as optim
 import torch.utils.data
 from tqdm import tqdm
-import wandb
-from joblib import Parallel
 
 from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
-from protein_transformer.protein.Sequence import ProteinVocabulary
 from protein_transformer.log import *
 from protein_transformer.losses import compute_batch_drmsd, \
     mse_over_angles, \
@@ -52,7 +49,8 @@ def train_epoch(model, training_data, validation_datasets, optimizer, device, ar
 
         # Record performance metrics
         metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
-                               log_writer, batch_iter, START_TIME, pred, tgt_crds, step, validation_datasets, model, device)
+                                         log_writer, batch_iter, START_TIME, pred, tgt_crds, step, validation_datasets,
+                                         model, device)
 
     metrics = update_metrics_end_of_epoch(metrics, "train")
 
@@ -129,12 +127,11 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     return metrics
 
 
-def train(model, metrics, training_data, train_eval_loader, validation_datasets, test_data, optimizer, device, args, log_writer, scheduler):
+def train(model, metrics, training_data, train_eval_loader, validation_datasets, test_data, optimizer, device, args,
+          log_writer, scheduler, drmsd_worker_pool):
     """
     Model training control loop.
     """
-
-    drmsd_worker_pool = Parallel(min(torch.multiprocessing.cpu_count(), args.batch_size)) if not args.sequential_drmsd_loss else None
     for epoch_i in range(START_EPOCH, args.epochs):
         print(f'[ Epoch {epoch_i} ]')
 
@@ -165,6 +162,9 @@ def train(model, metrics, training_data, train_eval_loader, validation_datasets,
             break
         checkpoint_model(args, optimizer, model, metrics, epoch_i, scheduler)
 
+    if drmsd_worker_pool:
+        drmsd_worker_pool.close()
+        drmsd_worker_pool.join()
 
 
     # Test Epoch
@@ -310,6 +310,7 @@ def seed_rngs(args):
     """
     Seed all necessary random number generators.
     """
+    # torch.set_num_threads(1)  # Suggested for issues with deadlocks, etc.
     seed = args.seed
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -323,6 +324,14 @@ def seed_rngs(args):
     torch.backends.cudnn.enabled = True
     if torch.backends.cudnn.deterministic:
         print("[Info] cudnn.deterministic set to True. CUDNN-optimized code may be slow.")
+
+
+def init_worker_pool(args):
+    """
+    Creates the worker pool for drmsd batch computation. Does nothing if sequential.
+    """
+    torch.multiprocessing.set_start_method("spawn")
+    return torch.multiprocessing.Pool(mp.cpu_count()) if not args.sequential_drmsd_loss else None
 
 
 def main():
@@ -380,7 +389,7 @@ def main():
     training.add_argument('--eval_train_drmsd', type=bool, default=True,
                           help="Perform an evaluation of the entire training "
                                "set after a training epoch.")
-    training.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
+    training.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='sgd',
                         help="Training optimizer.")
     training.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
                         help="Fraction of the time to use teacher forcing for every timestep of the batch. Model trains"
@@ -450,18 +459,22 @@ def main():
                                "regardless of its performance. ")
     saving_args.add_argument('--load_chkpt', type=str, default=None,
                         help="Path from which to load a model checkpoint.")
-
+    # Parse args
     args = parser.parse_args()
     args.cuda = not args.no_cuda
-    assert "_" not in args.name, "Please do not use a '_' in your model name. Conflicts with structure files."
+    assert "_" not in args.name, "Please do not use a '_' in your model name. " \
+                                 "Conflicts with structure files."
     args.buffering_mode = 1
     args.es_mode, args.es_metric = args.early_stopping_metric.split("-")
+    args.add_sos_eos = args.model == "enc-dec"
     LOGFILEHEADER = prepare_log_header(args)
+
+    # Prepare torch
+    drmsd_worker_pool = init_worker_pool(args)
     seed_rngs(args)
     torch.set_num_threads(1)
 
     # Load dataset
-    args.add_sos_eos = args.model == "enc-dec"
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
     training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
@@ -539,7 +552,7 @@ def main():
 
     # Begin training
     train(model, metrics, training_data, training_eval_loader, validation_datasets, test_data, optimizer,
-          device, args, log_writer, scheduler)
+          device, args, log_writer, scheduler, drmsd_worker_pool)
     log_f.close()
 
 

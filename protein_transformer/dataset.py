@@ -3,7 +3,7 @@ import torch
 import torch.utils.data
 import wandb
 
-from protein_transformer.protein.Sequence import ProteinVocabulary
+from protein_transformer.protein.Sequence import ProteinVocabulary, VOCAB
 from protein_transformer.protein.Structure import NUM_PREDICTED_COORDS
 
 VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
@@ -202,8 +202,6 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
     function returns train, validation, and test set dataloaders with 2 workers
     each. Note that there are multiple validation sets in ProteinNet.
     """
-    global VOCAB
-    VOCAB = ProteinVocabulary(add_sos_eos=args.add_sos_eos)
 
     if args.batching_order in ["descending", "ascending"]:
         raise NotImplementedError("Descending and ascending order have not been reimplemented.")
