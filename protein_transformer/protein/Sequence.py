@@ -26,6 +26,8 @@ class ProteinVocabulary(object):
             self.add(self.eos_char)
 
         self.pad_id = self[self.pad_char]
+        self.sos_id = self[self.sos_char]
+        self.eos_id =self[self.eos_char]
 
     def __getitem__(self, aa):
         return self._char2int.get(aa, self._char2int[self.unk_char])
