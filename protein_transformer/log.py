@@ -187,7 +187,8 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
         with torch.no_grad():
             pred_coords = angles_to_coords(inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                                            remove_batch_padding=True)
-        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], commit=True)
+        tgt_coords_unpadded = tgt_coords[-1:, :pred_coords.shape[0]]
+        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords_unpadded[-1], src_seq[-1], commit=True)
     return metrics
 
 

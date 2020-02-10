@@ -52,7 +52,7 @@ def train_epoch(model, training_data, validation_datasets, optimizer, device, ar
 
         # Record performance metrics
         metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
-                               log_writer, batch_iter, START_TIME, pred, tgt_crds[-1], step, validation_datasets, model, device)
+                               log_writer, batch_iter, START_TIME, pred, tgt_crds, step, validation_datasets, model, device)
 
     metrics = update_metrics_end_of_epoch(metrics, "train")
 
