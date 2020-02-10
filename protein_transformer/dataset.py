@@ -3,7 +3,9 @@ import torch
 import torch.utils.data
 import wandb
 
-from .protein.Sidechains import NUM_PREDICTED_COORDS
+from protein_transformer.protein.Sequence import ProteinVocabulary, VOCAB
+from protein_transformer.protein.Structure import NUM_PREDICTED_COORDS
+
 VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
 MAX_SEQ_LEN = 500
 
@@ -52,68 +54,6 @@ def collate_fn(insts, coords=False, sequences=False, max_seq_len=None):
     return batch
 
 
-class ProteinVocabulary(object):
-    """
-    Represents the 'vocabulary' of amino acids for encoding a protein sequence.
-    Includes pad, sos, eos, and unknown characters as well as the 20 standard
-    amino acids.
-    """
-    def __init__(self):
-        self.aa2id = dict()
-        self.pad_id = 0         # Pad character
-        self.sos_id = 1         # SOS character
-        self.eos_id = 2         # EOS character
-        self.unk_id = 3         # unknown character
-        self.aa2id['_'] = self.pad_id
-        self.aa2id['<'] = self.sos_id
-        self.aa2id['>'] = self.eos_id
-        self.aa2id['?'] = self.unk_id
-        self._id2aa = {v: k for k, v in self.aa2id.items()}
-        self.stdaas = "ARNDCQEGHILKMFPSTWYV"
-        for aa in self.stdaas:
-            self.add(aa)
-
-    def __getitem__(self, aa):
-        return self.aa2id.get(aa, self.unk_id)
-
-    def __contains__(self, aa):
-        return aa in self.aa2id
-
-    def __setitem__(self, key, value):
-        raise ValueError('vocabulary is readonly')
-
-    def __len__(self):
-        return len(self.aa2id)
-
-    def __repr__(self):
-        return f"ProteinVocabulary[size={len(self)}]"
-
-    def id2aa(self, id):
-        return self._id2aa[id]
-
-    def add(self, aa):
-        if aa not in self:
-            aaid = self.aa2id[aa] = len(self)
-            self._id2aa[aaid] = aa
-            return aaid
-        else:
-            return self[aa]
-
-    def aa_seq2indices(self, seq, add_sos_eos=True):
-        if add_sos_eos:
-            return [self["<"]] + [self[aa] for aa in seq] + [self[">"]]
-        else:
-            return [self[aa] for aa in seq]
-
-    def indices2aa_seq(self, indices, include_sos_eos=False):
-        seq = ""
-        for i in indices:
-            c = self.id2aa(i)
-            if include_sos_eos or (i != self.sos_id and i != self.eos_id and i != self.pad_id):
-                seq += c
-        return seq
-
-
 class ProteinDataset(torch.utils.data.Dataset):
     """
     This dataset can hold lists of sequences, angles, and coordinates for
@@ -124,13 +64,12 @@ class ProteinDataset(torch.utils.data.Dataset):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
-        self.vocab = ProteinVocabulary()
         self._seqs, self._angs, self._crds = [], [], []
         for i in range(len(seqs)):
             if np.isnan(angs[i]).all(axis=-1).any() and skip_missing_residues:
                 continue
             else:
-                self._seqs.append(VOCAB.aa_seq2indices(seqs[i], add_sos_eos))
+                self._seqs.append(VOCAB.str2ints(seqs[i], add_sos_eos))
                 self._angs.append(angs[i])
                 self._crds.append(crds[i])
 
@@ -178,7 +117,7 @@ class BinnedProteinDataset(torch.utils.data.Dataset):
             if np.isnan(angs[i]).all(axis=-1).any() and skip_missing_residues:
                 continue
             else:
-                self._seqs.append(VOCAB.aa_seq2indices(seqs[i], add_sos_eos))
+                self._seqs.append(VOCAB.str2ints(seqs[i], add_sos_eos))
                 self._angs.append(angs[i])
                 self._crds.append(crds[i])
 
@@ -263,6 +202,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
     function returns train, validation, and test set dataloaders with 2 workers
     each. Note that there are multiple validation sets in ProteinNet.
     """
+
     if args.batching_order in ["descending", "ascending"]:
         raise NotImplementedError("Descending and ascending order have not been reimplemented.")
 
@@ -314,6 +254,3 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
         worker_init_fn=_init_fn)
 
     return train_loader, train_eval_loader, valid_loaders, test_loader
-
-VOCAB = ProteinVocabulary()
-# TODO remove creation of VOCAB by default

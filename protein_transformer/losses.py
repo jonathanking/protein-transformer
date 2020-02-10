@@ -3,12 +3,12 @@
 import numpy as np
 import prody as pr
 import torch
-from joblib import Parallel, delayed
 import wandb
 
-from .dataset import VOCAB
-from .protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
-from .protein.Structure import generate_coords
+import protein_transformer.protein.Structure
+from protein_transformer.protein.Sequence import VOCAB
+from protein_transformer.protein.Structure import NUM_PREDICTED_ANGLES, \
+    NUM_PREDICTED_COORDS
 from .protein.structure_utils import get_backbone_from_full_coords
 
 LNDRMSD_TARGET_VAL = 0.02
@@ -54,6 +54,9 @@ def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, bac
     of predicted angles, coordinates, and sequence. Works for 1 protein at a
     time.
     """
+    # Move numpy arrays to torch tensors
+    pred_ang, true_crd, input_seq = torch.tensor(pred_ang), torch.tensor(true_crd), torch.tensor(input_seq)
+
     # Record leaf-node pointer to access gradients at end
     pred_ang.requires_grad_()
     starting_ang = pred_ang
@@ -103,13 +106,22 @@ def angles_to_coords(angles, seq, remove_batch_padding=False):
     pred_ang = pred_ang[:input_seq.shape[0]]
 
     # Generate coordinates
-    return generate_coords(pred_ang, pred_ang.shape[0], input_seq, torch.device("cpu"))
+    return protein_transformer.protein.Structure.generate_coords(pred_ang, input_seq, torch.device("cpu"))
 
 
 def parallel_coords_only(ang, seq):
     coords = angles_to_coords(ang, seq)
     return coords
 
+def drmsd_work_wrapper(ang_crd_seq_retrmsd_doback_bbonly):
+    """
+    Unpacks arguments for the drmsd_work function. Useful for Pool.map().
+    Parameters
+    ----------
+    ang_crd_seq_retrmsd_doback_bbonly : tuple
+    """
+    ang, crd, seq, return_rmsd, do_backward, backbone_only = ang_crd_seq_retrmsd_doback_bbonly
+    return drmsd_work(ang, crd, seq, return_rmsd, do_backward, backbone_only)
 
 def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("cpu"), return_rmsd=False,
                         do_backward=False, retain_graph=False, pool=None, backbone_only=False):
@@ -123,12 +135,12 @@ def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("c
 
     # Compute drmsd in parallel over the batch
     if pool is not None:
-        results = pool(delayed(drmsd_work)(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward, backbone_only)
-                          for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
+        results = pool.map(drmsd_work_wrapper, zip(pred_angs.detach().numpy(), true_crds.detach().numpy(),
+                                                   input_seqs.detach().numpy(), [return_rmsd]*pred_angs.shape[0],
+                                                   [do_backward]*pred_angs.shape[0], [backbone_only]*pred_angs.shape[0]))
     else:
         results = (drmsd_work(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward, backbone_only)
                               for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
-
 
     # Unpack the multiprocessing results
     grads, losses, len_normalized_losses, rmsds = [], [], [], []

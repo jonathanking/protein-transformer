@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES
+from protein_transformer.protein.Structure import NUM_PREDICTED_ANGLES
 from .transformer.Encoder import Encoder
 
 

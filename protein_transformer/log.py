@@ -7,7 +7,8 @@ import numpy as np
 import torch
 import wandb
 
-from .dataset import VOCAB, VALID_SPLITS, paired_collate_fn
+from protein_transformer.protein.Sequence import VOCAB
+from .dataset import  VALID_SPLITS, paired_collate_fn
 from .protein.PDB_Creator import PDB_Creator
 from .losses import angles_to_coords, inverse_trig_transform
 
@@ -186,7 +187,8 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
         with torch.no_grad():
             pred_coords = angles_to_coords(inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                                            remove_batch_padding=True)
-        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], commit=True)
+        tgt_coords_unpadded = tgt_coords[-1:, :pred_coords.shape[0]]
+        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords_unpadded[-1], src_seq[-1], commit=True)
     return metrics
 
 
@@ -272,13 +274,13 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
     true_coords[torch.isnan(true_coords)] = 0
 
     creator = PDB_Creator(pred_coords.detach().numpy(),
-                          seq=VOCAB.indices2aa_seq(src_seq_cpu))
+                          seq=VOCAB.ints2str(src_seq_cpu))
     creator.save_pdb(f"{cur_struct_path}/{wandb.run.step:05}_pred.pdb",
                      title="pred")
 
     t_creator = PDB_Creator(true_coords.cpu().detach().numpy(),
-                            seq=VOCAB.indices2aa_seq(src_seq_cpu))
-    if not os.path.isfile(f"{cur_struct_path}/true.pdb"):
+                            seq=VOCAB.ints2str(src_seq_cpu))
+    if not os.path.isfile(f"{cur_struct_path}/true.pdb") or struct_name == "train":
         t_creator.save_pdb(f"{cur_struct_path}/true.pdb", title="true")
 
     gltf_out_path = os.path.join(args.gltf_dir, f"{wandb.run.step:05}_{struct_name}.gltf")
@@ -288,7 +290,8 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
                          make_pse=True,
                          pse_out_path=f"{cur_struct_path}/{wandb.run.step:05}_both.pse")
 
-    wandb.log({struct_name: wandb.Object3D(gltf_out_path)}, commit=commit)
+    wandb.log({struct_name: wandb.Object3D(gltf_out_path),
+               struct_name + "_img": wandb.Image(gltf_out_path.replace("gltf", "png"))}, commit=commit)
 
 
 def init_metrics(args):

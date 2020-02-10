@@ -369,7 +369,7 @@ def save_data_dict(data):
     Saves a Python dictionary containing all training data to disk via Pickle or PyTorch.
     """
     if not args.out_file:
-        args.out_file = "data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pt"
+        args.out_file = "../data/proteinnet/" + CASP_VERSION + "_" + SUFFIX + ".pt"
     torch.save(data, args.out_file)
     print(f"Data saved to {args.out_file}.")
 
@@ -386,8 +386,8 @@ def main():
     # Download and preprocess all data from PDB IDs
     lim = None
     train_results = []
-    with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
-        train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim]), dynamic_ncols=True))
+    # with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
+    train_results = list(tqdm.tqdm(map(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim]), dynamic_ncols=True))
     valid_result_meta = {}
     for split, vids in group_validation_set(valid_ids).items():
         valid_result_meta[split] = []
@@ -435,7 +435,7 @@ def print_failure_summary():
     print(f"{len(NO_PBD_FILE)} ProteinNet IDs failed because no PDB file exists and they probably have .CIF instead.")
     print(f"{len(NONE_STRUCTURE_ERRORS)} ProteinNet IDs failed because chain become `None`.")
 
-
+    os.makedirs("errors/", exist_ok=True)
     with open('errors/MISSING_ASTRAL_IDS.txt', 'w') as f:
         f.write('\n'.join(MISSING_ASTRAL_IDS))
     with open('errors/FAILED_ASTRAL_IDS.txt', 'w') as f:
@@ -491,7 +491,7 @@ if __name__ == "__main__":
     VALID_SPLITS = [10, 20, 30, 40, 50, 70, 90]
     TRAIN_FILE = f"training_{args.training_set}.pt"
     PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT = None, None, None
-    ASTRAL_FILE = "data/proteinnet/astral_pdb_map.txt"#"data/fullDict.txt" # combined previous versions of dir.des.scope.2.xx-stable.txt into one big dict
+    ASTRAL_FILE = "../data/proteinnet/astral_pdb_map.txt"#"data/fullDict.txt" # combined previous versions of dir.des.scope.2.xx-stable.txt into one big dict
     ASTRAL_ID_MAPPING = parse_astral_summary_file(ASTRAL_FILE)
     SUFFIX = str(datetime.datetime.today().strftime("%y%m%d")) + f"_{args.training_set}"
     match = re.search(r"casp\d+", args.input_dir, re.IGNORECASE)

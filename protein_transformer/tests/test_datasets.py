@@ -4,7 +4,9 @@ from pytest import approx
 import pytest
 
 from protein_transformer.dataset import BinnedProteinDataset, paired_collate_fn, SimilarLengthBatchSampler
-from protein_transformer.protein.Sidechains import NUM_PREDICTED_ANGLES, NUM_PREDICTED_COORDS
+
+from protein_transformer.protein.Structure import NUM_PREDICTED_ANGLES, \
+    NUM_PREDICTED_COORDS
 
 np. set_printoptions(precision=None, suppress=True)
 

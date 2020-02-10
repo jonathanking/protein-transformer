@@ -4,12 +4,15 @@ import torch
 import wandb
 from prody import calcTransformation
 
-import os
-
-from protein_transformer.protein.Sidechains import SC_DATA, ONE_TO_THREE_LETTER_MAP
+from protein_transformer.protein.Sequence import ONE_TO_THREE_LETTER_MAP
 import protein_transformer
 from protein_transformer.losses import inverse_trig_transform
 from protein_transformer.losses import angles_to_coords
+from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, \
+    BB_BUILD_INFO
+from protein_transformer.protein.Structure import NUM_PREDICTED_COORDS, nerf
+from protein_transformer.protein.StructureBuilder import StructureBuilder
+
 
 class PDB_Creator(object):
     """
@@ -21,7 +24,7 @@ class PDB_Creator(object):
     The Python format string was taken from http://cupnet.net/pdb-format/.
     """
 
-    def __init__(self, coords, seq=None, mapping=None, atoms_per_res=13):
+    def __init__(self, coords, seq=None, mapping=None, atoms_per_res=NUM_PREDICTED_COORDS):
         """
         Input:
             coords: (L x N) x 3 where L is the protein sequence len and N
@@ -70,7 +73,7 @@ class PDB_Creator(object):
 
     def _get_oxy_coords(self, ca, c, n):
         """
-        iven atomic coordinates for an alpha carbon, carbonyl carbon, and the
+        Given atomic coordinates for an alpha carbon, carbonyl carbon, and the
         following nitrogen, this function aligns a peptide bond to those
         atoms and returns the coordinates of the corresponding oxygen.
         """
@@ -88,8 +91,12 @@ class PDB_Creator(object):
             if coord_idx + self.atoms_per_res + 1 < self.coords.shape[0]:
                 next_n = self.coords[coord_idx + self.atoms_per_res + 1]
             else:
-                # TODO: Fix oxygen placement for final residue
-                next_n = self.coords[-1] + np.array([1.2, 0, 0])
+                n, ca, c = [self.coords[coord_idx + i: coord_idx + i + 1][0] for i in range(3)]
+                l = BB_BUILD_INFO["BONDLENS"]["c-n"]
+                theta = BB_BUILD_INFO["BONDANGS"]["ca-c-n"]
+                chi = BB_BUILD_INFO["BONDTORSIONS"]["n-ca-c-n"]
+                nerf_args = (map(torch.tensor, [n, ca, c, l, theta, chi]))
+                next_n = nerf(*nerf_args).numpy()
             yield self.coords[coord_idx:coord_idx + self.atoms_per_res], next_n
             coord_idx += self.atoms_per_res
 
@@ -145,8 +152,8 @@ class PDB_Creator(object):
                 oxy_coords = self._get_oxy_coords(coords[1], coords[2], next_n)
                 residue_lines.append(self._get_line_for_atom(res_name, "O", oxy_coords))
                 self.atom_nbr += 1
-            except ValueError:
-                pass
+            except ValueError as e:
+                raise e
         return residue_lines
 
     def _get_lines_for_protein(self):
@@ -158,10 +165,8 @@ class PDB_Creator(object):
         self.res_nbr = 1
         self.atom_nbr = 1
         mapping_coords = zip(self.mapping, self._coord_generator())
-        prev_n = torch.tensor([0, 0, -1])
         for (res_name, atom_names), (res_coords, next_n) in mapping_coords:
             self.lines.extend(self._get_lines_for_residue(res_name, atom_names, res_coords, next_n))
-            prev_n = res_coords[0]
             self.res_nbr += 1
         return self.lines
 
@@ -225,7 +230,9 @@ class PDB_Creator(object):
 
         # Align and save PSE
         if make_pse:
+            pymol.cmd.show("lines")
             pymol.cmd.save(pse_out_path, quiet=True)
+            pymol.cmd.png(gltf_out_path.replace("gltf", "png"), width=800, dpi=300, ray=0)
 
 
         pymol.cmd.delete("all")
@@ -240,7 +247,7 @@ class PDB_Creator(object):
 
 ATOM_MAP_13 = {}
 for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
-    ATOM_MAP_13[one_letter] = ["N", "CA", "C"] + list(SC_DATA[ONE_TO_THREE_LETTER_MAP[one_letter]]["predicted"])
+    ATOM_MAP_13[one_letter] = ["N", "CA", "C"] + list(SC_BUILD_INFO[ONE_TO_THREE_LETTER_MAP[one_letter]]["atom-names"])
     ATOM_MAP_13[one_letter].extend(["PAD"] * (13 - len(ATOM_MAP_13[one_letter])))
 
 def generate_pdbs_from_debug_dataset():
@@ -281,8 +288,8 @@ def get_coordinates_from_numpy_data(seq, ang_sincos):
     if torch.isnan(ang_rad).any():
         print("Nan in ang_rad.")
 
-    seq_as_ints = protein_transformer.dataset.VOCAB.aa_seq2indices(seq,
-                                                                   add_sos_eos=False)
+    seq_as_ints = protein_transformer.dataset.VOCAB.str2ints(seq,
+                                                             add_sos_eos=False)
     seq_as_ints = torch.tensor(seq_as_ints, dtype=torch.long)
 
     coords = angles_to_coords(ang_rad, seq_as_ints, remove_batch_padding=False)
@@ -318,6 +325,15 @@ if __name__ == "__main__":
     # TODO add ability to predict given model checkpoint
     # TODO CUDA isn't playing nice
 
-    make_debug_structure_dataset()
-    generate_pdbs_from_debug_dataset()
+    # make_debug_structure_dataset()
+    # generate_pdbs_from_debug_dataset()
+
+    d = torch.load("/home/jok120/protein-transformer/data/proteinnet/casp12_200207_30.pt")
+    seq = d["train"]["seq"][5000]
+    ang = d["train"]["ang"][5000]
+    ang = inverse_trig_transform(torch.tensor(ang, dtype=torch.float32))
+    sb = StructureBuilder(seq, ang)
+    sb.to_pdb("200210.pdb")
+
+
 

@@ -5,11 +5,14 @@ import re
 import numpy as np
 import prody as pr
 
+from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO
 from protein_transformer.protein.structure_exceptions import \
     NonStandardAminoAcidError, IncompleteStructureError, SequenceError, \
     ContigMultipleMatchingError, ShortStructureError, MissingAtomsError, \
     NoneStructureError
-from .Sidechains import NUM_PREDICTED_ANGLES, SC_DATA, NUM_PREDICTED_COORDS
+from protein_transformer.protein.Structure import NUM_PREDICTED_ANGLES, \
+    NUM_BB_TORSION_ANGLES, NUM_BB_OTHER_ANGLES, NUM_PREDICTED_COORDS
+from protein_transformer.protein.Sequence import AA_MAP, AA_MAP_INV
 
 GLOBAL_PAD_CHAR = np.nan
 
@@ -153,13 +156,10 @@ def determine_sidechain_atomnames(_res):
     Given a residue from ProDy, returns a list of sidechain atom names that
     must be recorded.
     """
-    if _res.getResname() is "GLY":
-        atom_names = []
-    elif _res.getResname() in SC_DATA.keys():
-        atom_names = ["N", "CA"] + SC_DATA[_res.getResname()]["predicted"]
+    if _res.getResname() in SC_BUILD_INFO.keys():
+        return SC_BUILD_INFO[_res.getResname()]["atom-names"]
     else:
         raise NonStandardAminoAcidError
-    return atom_names
 
 
 def compute_sidechain_dihedrals(residue, prev_residue, next_res):
@@ -171,53 +171,35 @@ def compute_sidechain_dihedrals(residue, prev_residue, next_res):
     used instead. Then, each group of 4 atoms in atom_names is used to
     generate a list of dihedral angles for this residue.
     """
-    atom_names = determine_sidechain_atomnames(residue)
+    try:
+        torsion_names = SC_BUILD_INFO[residue.getResname()]["torsion-names"]
+    except KeyError:
+        raise NonStandardAminoAcidError
+    if len(torsion_names) == 0:
+        return (NUM_PREDICTED_ANGLES - (NUM_BB_TORSION_ANGLES + NUM_BB_OTHER_ANGLES)) * [GLOBAL_PAD_CHAR]
 
-    res_dihedrals = []
-    if len(atom_names) > 0:
-        # The first residue has no previous residue, so use the next residue to calculate the (N+1)-C-CA-CB dihedral
-        if prev_residue is None:
-            atoms = [residue.select("name " + an) for an in atom_names]
-            try:
-                cb_dihedral = get_dihedral(next_res.select("name N").getCoords()[0],
-                                           residue.select("name C").getCoords()[0],
-                                           residue.select("name CA").getCoords()[0],
-                                           residue.select("name CB").getCoords()[0],
-                                           radian=True)
-            except AttributeError:
-                cb_dihedral = GLOBAL_PAD_CHAR
-            res_dihedrals.append(cb_dihedral)
-        # If there is a previous residue, use its C to calculate the C-N-CA-CB dihedral
-        elif prev_residue is not None:
-            atoms = [prev_residue.select("name C")] + [residue.select("name " + an) for an in atom_names]
+    # Compute CB dihedral, which may depend on the previous or next residue for placement
+    try:
+        if prev_residue:
+            cb_dihedral = compute_single_dihedral((prev_residue.select("name C"),
+                                       *(residue.select(f"name {an}") for an in ["N", "CA", "CB"])))
+        else:
+            cb_dihedral = compute_single_dihedral((next_res.select("name N"),
+                                       *(residue.select(f"name {an}") for an in ["C", "CA", "CB"])))
+    except AttributeError:
+        cb_dihedral = GLOBAL_PAD_CHAR
 
-        for n in range(len(atoms) - 3):
-            dihe_atoms = atoms[n:n + 4]
-            res_dihedrals.append(compute_single_dihedral(dihe_atoms))
+    res_dihedrals = [cb_dihedral]
 
-    resname = residue.getResname()
-    if resname not in ["LEU", "ILE", "VAL", "THR"]:
-        return res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [GLOBAL_PAD_CHAR]
-    # Extra angles to predict that are not included in SC_DATA[RES]["predicted"]
-    if resname == "LEU":
-        first_three = ["CA", "CB", "CG"]
-        next_atom = "CD2"
-    elif resname == "ILE":
-        first_three = ["N", "CA", "CB"]
-        next_atom = "CG2"
-    elif resname == "VAL":
-        first_three = ["N", "CA", "CB"]
-        next_atom = "CG2"
-    elif resname == "THR":
-        first_three = ["N", "CA", "CB"]
-        next_atom = "OG1"
-    atom_selections = [residue.select("name " + an) for an in first_three + [next_atom]]
-    res_dihedrals.append(compute_single_dihedral(atom_selections))
-    assert len(res_dihedrals) == 4 and resname in ["ILE","LEU"] or len(res_dihedrals) == 3 and resname in ["VAL",
-                                                                                                           "THR"], \
-        "Angle position in array must match what is assumed in Sidechains:extend_any_sidechain."
+    for t_name, t_val in zip(torsion_names[1:], SC_BUILD_INFO[residue.getResname()]["torsion-vals"][1:]):
+        # Only record torsional angles that are relevant (i.e. not planar).
+        # All torsion values that vary are marked with '?' in SC_BUILD_INFO
+        if t_val != "?":
+            break
+        atom_names = t_name.split("-")
+        res_dihedrals.append(compute_single_dihedral([residue.select("name " + an) for an in atom_names]))
 
-    return res_dihedrals + (NUM_PREDICTED_ANGLES - 6 - len(res_dihedrals)) * [GLOBAL_PAD_CHAR]
+    return res_dihedrals + (NUM_PREDICTED_ANGLES - (NUM_BB_TORSION_ANGLES + NUM_BB_OTHER_ANGLES) - len(res_dihedrals)) * [GLOBAL_PAD_CHAR]
 
 
 def get_atom_coords_by_names(residue, atom_names):
@@ -241,9 +223,9 @@ def measure_res_coordinates(_res):
     """
     Given a ProDy residue, measure all relevant coordinates.
     """
-    _atom_names = determine_sidechain_atomnames(_res)
+    sc_atom_names = determine_sidechain_atomnames(_res)
     bbcoords = get_atom_coords_by_names(_res, ["N", "CA", "C"])
-    sccoords = get_atom_coords_by_names(_res, set(_atom_names) - {"N", "CA", "C", "H"})
+    sccoords = get_atom_coords_by_names(_res, sc_atom_names)
     coord_padding = np.zeros((NUM_PREDICTED_COORDS - len(bbcoords) - len(sccoords), 3))
     coord_padding[:] = GLOBAL_PAD_CHAR
     return np.concatenate((np.stack(bbcoords + sccoords), coord_padding))
@@ -588,11 +570,3 @@ def get_dihedral(coords1, coords2, coords3, coords4, radian=False):
         return rad
     else:
         return rad * rad2deg
-
-
-AA_MAP = {'A': 0, 'C': 1, 'D': 2, 'E': 3,
-          'F': 4, 'G': 5, 'H': 6, 'I': 7,
-          'K': 8, 'L': 9, 'M': 10, 'N': 11,
-          'P': 12, 'Q': 13, 'R': 14, 'S': 15,
-          'T': 16, 'V': 17, 'W': 18, 'Y': 19}
-AA_MAP_INV = {v: k for k, v in AA_MAP.items()}
