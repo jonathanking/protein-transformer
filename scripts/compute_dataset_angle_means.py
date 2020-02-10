@@ -5,6 +5,7 @@ import sys
 
 from protein_transformer.losses import inverse_trig_transform
 
+SAVE_RADIANS = False
 
 def main():
     """
@@ -15,7 +16,10 @@ def main():
     """
     data = torch.load(sys.argv[1])
     train_angles_sincos = np.concatenate(data["train"]["ang"])
-    train_angles = numpy_inverse_trig(train_angles_sincos)
+    if SAVE_RADIANS:
+        train_angles = numpy_inverse_trig(train_angles_sincos)
+    else:
+        train_angles = train_angles_sincos
     new_means = np.nanmean(train_angles, axis=0)
     np.save(sys.argv[2], new_means)
 
