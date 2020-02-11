@@ -165,12 +165,17 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
     grouped by sequence length. This has the effect of yielding batches where
     all items in a batch have similar length, but average length of any
     particular batch is completely random.
+
+    When optimize_batch_for_cpus is True, the sampler will always yield batches
+    that are a multiple of the number of available CPUs.
     """
 
-    def __init__(self, data_source, batch_size, dynamic_batch):
+    def __init__(self, data_source, batch_size, dynamic_batch, optimize_batch_for_cpus):
         self.data_source = data_source
         self.batch_size = batch_size
         self.dynamic_batch = dynamic_batch
+        self.optimize_batch_for_cpus = optimize_batch_for_cpus
+        self.cpu_count = torch.multiprocessing.cpu_count()
 
     def __len__(self):
         # If batches are dynamically sized to contain the same number of residues,
@@ -186,10 +191,15 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
             while i < len(self):
                 bin = np.random.choice(range(len(self.data_source.hist_bins)), p=self.data_source.bin_probs)
                 if self.dynamic_batch:
-                    this_batch_size = int(self.dynamic_batch / self.data_source.hist_bins[bin])
+                    # Make the batch size a multiple of the number of availble CPUs for fast drmsd loss computation
+                    if self.optimize_batch_for_cpus:
+                        largest_possible = int(self.dynamic_batch / self.data_source.hist_bins[bin])
+                        this_batch_size = largest_possible - (largest_possible % self.cpu_count)
+                    else:
+                        this_batch_size = int(self.dynamic_batch / self.data_source.hist_bins[bin])
                 else:
                     this_batch_size = self.batch_size
-                wandb.log({"batch_size": this_batch_size}, commit=False)
+                wandb.log({"Batch size": this_batch_size}, commit=False)
                 yield np.random.choice(self.data_source.bin_map[bin], size=this_batch_size)
                 i += 1
         return batch_generator()
@@ -216,7 +226,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
                     collate_fn=paired_collate_fn,
                     batch_sampler=SimilarLengthBatchSampler(train_dataset,
                                                             args.batch_size,
-                                                            dynamic_batch=args.batch_size * MAX_SEQ_LEN))
+                                                            dynamic_batch=args.batch_size * MAX_SEQ_LEN,
+                                                            optimize_batch_for_cpus=args.loss in ["combined", "drmsd", "ln-drmsd"]))
     train_eval_loader = torch.utils.data.DataLoader(
                         train_dataset,
                         collate_fn=paired_collate_fn,
