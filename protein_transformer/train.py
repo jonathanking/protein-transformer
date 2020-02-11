@@ -149,6 +149,7 @@ def train(model, metrics, training_data, train_eval_loader, validation_datasets,
                 metrics = eval_epoch(model, validation_data, device, args, metrics, pool=drmsd_worker_pool, mode=f"valid-{split}")
                 print_end_of_epoch_status(f"valid-{split}", (start, metrics))
                 log_batch(log_writer, metrics, START_TIME, mode=f"valid-{split}", end_of_epoch=True)
+            log_avg_validation_performance(metrics, validation_datasets)
 
         # Update LR
         if scheduler:
@@ -161,10 +162,6 @@ def train(model, metrics, training_data, train_eval_loader, validation_datasets,
             break
         checkpoint_model(args, optimizer, model, metrics, epoch_i, scheduler)
 
-    if drmsd_worker_pool:
-        drmsd_worker_pool.close()
-        drmsd_worker_pool.join()
-
 
     # Test Epoch
     if not args.train_only:
@@ -172,6 +169,10 @@ def train(model, metrics, training_data, train_eval_loader, validation_datasets,
         metrics = eval_epoch(model, test_data, device, args, metrics, mode="test", pool=drmsd_worker_pool)
         print_end_of_epoch_status("test", (start, metrics))
         log_batch(log_writer, metrics, START_TIME, mode="test", end_of_epoch=True)
+
+    if drmsd_worker_pool:
+        drmsd_worker_pool.close()
+        drmsd_worker_pool.join()
 
 
 def checkpoint_model(args, optimizer, model, metrics, epoch_i, scheduler):

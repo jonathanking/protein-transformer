@@ -162,7 +162,8 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
             wandb.log({"Learning Rate": optimizer.cur_lr}, commit=not do_log_str)
 
     log_batch(log_writer, metrics, start_time, mode="train", end_of_epoch=False)
-    print_train_batch_status(args, (pbar, metrics, src_seq))
+    if pbar:
+        print_train_batch_status(args, (pbar, metrics, src_seq))
 
     # Check for NaNs
     if np.isnan(loss.item()):
@@ -238,6 +239,28 @@ def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
                 remove_batch_padding=True)
         log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords, src_seq[-1], commit=False)
     return metrics
+
+def log_avg_validation_performance(metrics, validation_datasets):
+    """
+    After evaluating performance on all validation sets, this method records
+    the average validation performance to wandb.
+    """
+    rmse, rmsd, drmsd, lndrmsd, combined = 0, 0, 0, 0, 0
+    n = 0.
+    for split, validation_data in validation_datasets.items():
+        mode = f"valid-{split}"
+        rmse += np.sqrt(metrics[mode]["epoch-mse"])
+        rmsd += metrics[mode]["epoch-rmsd"]
+        drmsd += metrics[mode]["epoch-drmsd"]
+        lndrmsd += metrics[mode]["epoch-ln-drmsd"]
+        combined += metrics[mode]["epoch-combined"]
+        n += 1
+
+    wandb.log({"Valid-Avg Epoch RMSE": rmse/n,
+               "Valid-Avg Epoch RMSD": rmsd/n,
+               "Valid-Avg Epoch DRMSD": drmsd/n,
+               "Valid-Avg Epoch ln-DRMSD": lndrmsd/n,
+               "Valid-Avg Epoch Combined Loss": combined/n}, commit=False)
 
 
 def do_eval_epoch_logging(metrics, mode):

@@ -195,7 +195,6 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
         return batch_generator()
 
 
-
 def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
     """
     Using the pre-processed data, stored in a nested Python dictionary, this
@@ -205,9 +204,6 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
 
     if args.batching_order in ["descending", "ascending"]:
         raise NotImplementedError("Descending and ascending order have not been reimplemented.")
-
-    def _init_fn(worker_id):
-        np.random.seed(int(args.seed))
 
     train_dataset = BinnedProteinDataset(
             seqs=data['train']['seq']*args.repeat_train,
@@ -237,8 +233,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
                 skip_missing_residues=args.skip_missing_res_train),
             num_workers=num_workers,
             batch_size=args.batch_size,
-            collate_fn=paired_collate_fn,
-            worker_init_fn=_init_fn)
+            collate_fn=paired_collate_fn)
         valid_loaders[split] = valid_loader
 
     test_loader = torch.utils.data.DataLoader(
@@ -250,7 +245,6 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
             skip_missing_residues=args.skip_missing_res_train),
         num_workers=num_workers,
         batch_size=args.batch_size,
-        collate_fn=paired_collate_fn,
-        worker_init_fn=_init_fn)
+        collate_fn=paired_collate_fn)
 
     return train_loader, train_eval_loader, valid_loaders, test_loader

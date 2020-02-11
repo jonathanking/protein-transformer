@@ -232,7 +232,7 @@ class PDB_Creator(object):
         if make_pse:
             pymol.cmd.show("lines")
             pymol.cmd.save(pse_out_path, quiet=True)
-            pymol.cmd.png(gltf_out_path.replace("gltf", "png"), width=800, dpi=300, ray=0)
+            pymol.cmd.png(gltf_out_path.replace("gltf", "png"), width=400, ray=0)
 
 
         pymol.cmd.delete("all")
