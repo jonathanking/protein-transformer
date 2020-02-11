@@ -107,7 +107,7 @@ class BinnedProteinDataset(torch.utils.data.Dataset):
 
     Assumes protein data is sorted from shortest to longest (ascending).
     """
-    def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True, skip_missing_residues=True):
+    def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True, skip_missing_residues=True, bins="auto"):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
@@ -124,7 +124,7 @@ class BinnedProteinDataset(torch.utils.data.Dataset):
 
         # Compute length-based histogram bins and probabilities
         self.lens = list(map(lambda x: len(x) if len(x) <= MAX_SEQ_LEN else MAX_SEQ_LEN, self._seqs))
-        self.hist_counts, self.hist_bins = np.histogram(self.lens, bins="auto")
+        self.hist_counts, self.hist_bins = np.histogram(self.lens, bins=bins)
         self.hist_bins = self.hist_bins[1:]  # make each bin define the rightmost value in each bin, ie '( , ]'.
         self.bin_probs = self.hist_counts / self.hist_counts.sum()
         self.bin_map = {}
@@ -209,7 +209,7 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
             seqs=data['train']['seq']*args.repeat_train,
             crds=data['train']['crd']*args.repeat_train,
             angs=data['train']['ang']*args.repeat_train,
-            add_sos_eos=args.add_sos_eos, skip_missing_residues=args.skip_missing_res_train)
+            add_sos_eos=args.add_sos_eos, skip_missing_residues=args.skip_missing_res_train, bins=args.bins)
     train_loader = torch.utils.data.DataLoader(
                     train_dataset,
                     num_workers=num_workers,

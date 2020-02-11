@@ -415,6 +415,7 @@ def main():
                           help="While training, only evaluate loss on the backbone.")
     training.add_argument('--sequential_drmsd_loss', action="store_true",
                           help="Compute DRMSD loss without batch-level parallelization.")
+    training.add_argument("--bins", type=int, default=-1, help="Number of bins for protein dataset batching. ")
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
@@ -468,6 +469,7 @@ def main():
     args.es_mode, args.es_metric = args.early_stopping_metric.split("-")
     args.add_sos_eos = args.model == "enc-dec"
     LOGFILEHEADER = prepare_log_header(args)
+    args.bins = "auto" if args.bins == -1 else args.bins
 
     # Prepare torch
     drmsd_worker_pool = init_worker_pool(args)
