@@ -15,7 +15,8 @@ import torch.optim as optim
 import torch.utils.data
 from tqdm import tqdm
 
-from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
+from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN, \
+    BinnedProteinDataset, SimilarLengthBatchSampler
 from protein_transformer.log import *
 from protein_transformer.losses import compute_batch_drmsd, \
     mse_over_angles, \
@@ -54,6 +55,103 @@ def train_epoch(model, training_data, validation_datasets, optimizer, device, ar
     metrics = update_metrics_end_of_epoch(metrics, "train")
 
     return metrics
+
+
+def first_train_epoch(model, training_data, validation_datasets, optimizer, device, args, log_writer, metrics, pool=None):
+    """
+    One complete training epoch.
+    """
+    model.train()
+    metrics = reset_metrics_for_epoch(metrics, "train")
+    batch_iter = tqdm(training_data, leave=False, unit="batch", dynamic_ncols=True)
+    for step, batch in enumerate(batch_iter):
+        optimizer.zero_grad()
+        src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
+        pred = model(src_seq, tgt_ang)
+        loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool)
+
+        # Clip gradients
+        if args.clip:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+
+        # Update parameters
+        optimizer.step()
+
+        # Record performance metrics
+        metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
+                                         log_writer, batch_iter, START_TIME, pred, tgt_crds, step, validation_datasets,
+                                         model, device)
+
+    metrics = update_metrics_end_of_epoch(metrics, "train")
+
+    return metrics
+
+
+
+def train_determine_max_batch_size(data, model, optimizer, device, args, log_writer, validation_datasets, pool):
+    """
+    A makeshift training loop that increases the batch size
+    """
+    adapt = True
+    b = 63
+    step = 0
+    train_dataset, train_loader = None, None
+    while True:
+        try:
+            print(f"Trying batch size {b}...", end="")
+            args.batch_size = b
+            model.train()
+            if adapt:
+                train_dataset = BinnedProteinDataset(
+                    seqs=data['train']['seq'] * args.repeat_train,
+                    crds=data['train']['crd'] * args.repeat_train,
+                    angs=data['train']['ang'] * args.repeat_train,
+                    add_sos_eos=args.add_sos_eos,
+                    skip_missing_residues=args.skip_missing_res_train, bins=args.bins)
+                train_loader = torch.utils.data.DataLoader(
+                    train_dataset,
+                    num_workers=1,
+                    collate_fn=paired_collate_fn,
+                    batch_sampler=SimilarLengthBatchSampler(train_dataset,
+                                                            args.batch_size,
+                                                            dynamic_batch=args.batch_size * MAX_SEQ_LEN))
+
+
+            for batch in train_loader:
+                optimizer.zero_grad()
+                src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
+                pred = model(src_seq, tgt_ang)
+                loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred,
+                                                                     tgt_ang,
+                                                                     tgt_crds,
+                                                                     src_seq,
+                                                                     pool=pool)
+
+                # Clip gradients
+                if args.clip:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(),
+                                                   args.clip)
+
+                # Update parameters
+                optimizer.step()
+
+                # Record metrics
+                # metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss,
+                #                                  m_loss, c_loss, src_seq, loss,
+                #                                  optimizer, args,
+                #                                  log_writer, None,
+                #                                  START_TIME, pred, tgt_crds,
+                #                                  step, validation_datasets,
+                #                                  model, device)
+                step += 1
+                break
+            b += 1
+            print(" success.")
+            torch.cuda.empty_cache()
+        except RuntimeError:
+            print(f" found max batch size of {b}.")
+            return b
+
 
 
 def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None):
@@ -333,6 +431,32 @@ def init_worker_pool(args):
     torch.multiprocessing.set_start_method("spawn")
     return torch.multiprocessing.Pool(mp.cpu_count()) if not args.sequential_drmsd_loss else None
 
+def setup_model_optimizer_scheduler(args, device):
+    model = make_model(args, device).to(device)
+
+    # Prepare optimizer
+    wd = 10e-3 if args.weight_decay else 0
+    if args.optimizer == "adam":
+        optimizer = optim.Adam(
+            filter(lambda x: x.requires_grad, model.parameters()),
+            betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate,
+            weight_decay=wd)
+    elif args.optimizer == "sgd":
+        optimizer = optim.SGD(
+            filter(lambda x: x.requires_grad, model.parameters()),
+            lr=args.learning_rate, weight_decay=wd)
+
+    # Prepare scheduler
+    if args.lr_scheduling == "noam":
+        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps)
+        scheduler = None
+    else:
+        # Construct an LR scheduler with patience = 5 and a factor of 1/10
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                               patience=args.patience,
+                                                               verbose=True,
+                                                               threshold=args.early_stopping_threshold)
+    return model, optimizer, scheduler
 
 def main():
     """
@@ -482,25 +606,7 @@ def main():
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
-    model = make_model(args, device).to(device)
-
-    # Prepare optimizer
-    wd = 10e-3 if args.weight_decay else 0
-    if args.optimizer == "adam":
-        optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                               betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate, weight_decay=wd)
-    elif args.optimizer == "sgd":
-        optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()),
-                              lr=args.learning_rate, weight_decay=wd)
-
-    # Prepare scheduler
-    if args.lr_scheduling == "noam":
-        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps)
-        scheduler = None
-    else:
-        # Construct an LR scheduler with patience = 5 and a factor of 1/10
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience,
-                                                               verbose=True, threshold=args.early_stopping_threshold)
+    model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
 
     # Prepare Weights and Biases logging
     wandb_dir = "/scr/jok120/wandb" if args.cluster and os.path.isdir("/scr") else None
@@ -551,9 +657,24 @@ def main():
 
 
     print(args, "\n")
-    del data
 
-    # Begin training
+
+    # Find max batch size
+    # max_batch = train_determine_max_batch_size(data, model, optimizer, device, args, log_writer, validation_datasets, drmsd_worker_pool)
+    # # model_state = model.state_dict()
+    # # optim_state = optimizer.state_dict()
+    # args.batch_size = max((max_batch - (max_batch // 2), 1))
+    # print(f"Using batch size of {args.batch_size}.")
+    # del model
+    # del optimizer
+    # del validation_datasets
+
+    # Restart training
+    model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
+    # model.load_state_dict(model_state)
+    # optimizer.load_state_dict(optim_state)
+    training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
+    del data
     train(model, metrics, training_data, training_eval_loader, validation_datasets, test_data, optimizer,
           device, args, log_writer, scheduler, drmsd_worker_pool)
     log_f.close()
