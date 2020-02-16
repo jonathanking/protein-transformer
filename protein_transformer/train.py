@@ -376,7 +376,7 @@ def main():
                         help='noam: Use learning rate scheduling as described in Transformer paper, plateau: Decrease learning rate after Validation loss plateaus.')
     training.add_argument('--patience', type=int, default=10,
                           help="Number of epochs to wait before reducing LR for plateau scheduler.")
-    training.add_argument('--early_stopping_threshold', type=float, default=0.0001,
+    training.add_argument('--early_stopping_threshold', type=float, default=0.001,
                           help="Threshold for considering improvements during training/lr scheduling.")
     training.add_argument('-esm', '--early_stopping_metric',
                           choices=[f"{mode}-{metric}" for metric in ["mse", "drmsd", "ln-drmsd", "combined"]
