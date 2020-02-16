@@ -39,7 +39,7 @@ def make_dev_dataset(data, dev_ids):
         completed += 1
 
     # Copy any remaining data from the original dictionary
-    other_items = {k: v for k, v in d.items() if k not in ["train", "test"] + [f"valid-{split}" for split in VALID_SPLITS]}
+    other_items = {k: v for k, v in data.items() if k not in ["train", "test"] + [f"valid-{split}" for split in VALID_SPLITS]}
     new_data.update(other_items)
     new_data["date"] = datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")
 
