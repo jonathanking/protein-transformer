@@ -575,8 +575,11 @@ SC_BUILD_INFO = \
 
 BB_BUILD_INFO = {"BONDLENS": {'n-ca': 1.442,
                               'ca-c': 1.498,
-                              'c-n' : 1.379},
+                              'c-n' : 1.379,
+                              'c-o' : 1.229,                    # From parm10.dat
+                              'c-oh': 1.364},                   # From parm10.dat
                  # For placing last oxygen:
-                 "BONDANGS": {'ca-c-n': 2.0350539},              # From parm10.dat
-                 "BONDTORSIONS": {'n-ca-c-n': -0.785398163 }     # A simple approximation, not meant to be exact.
+                 "BONDANGS": {'ca-c-o':  2.0350539,             # From parm10.dat
+                              'ca-c-oh': 2.0350539},            # Equal to 'ca-c-o'
+                 "BONDTORSIONS": {'n-ca-c-n': -0.785398163}    # A simple approximation, not meant to be exact.
                  }
