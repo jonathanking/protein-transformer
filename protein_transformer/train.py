@@ -419,6 +419,8 @@ def main():
     training.add_argument('--sequential_drmsd_loss', action="store_true",
                           help="Compute DRMSD loss without batch-level parallelization.")
     training.add_argument("--bins", type=int, default=-1, help="Number of bins for protein dataset batching. ")
+    training.add_argument("--train_eval_downsample", type=float, default=0.3, help="Fraction of training set to "
+                                                                                   "evaluate on each epoch.")
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")

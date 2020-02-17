@@ -60,6 +60,7 @@ usage: train.py [-h] [--data DATA] [--name NAME] [-lr LEARNING_RATE]
                 [--combined_drmsd_weight COMBINED_DRMSD_WEIGHT]
                 [--batching_order {descending,ascending,binned-random}]
                 [--backbone_loss] [--sequential_drmsd_loss] [--bins BINS]
+                [--train_eval_downsample TRAIN_EVAL_DOWNSAMPLE]
                 [-m {enc-dec,enc-only,enc-only-linear-out}] [-dm D_MODEL]
                 [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT]
                 [--postnorm] [--angle_mean_path ANGLE_MEAN_PATH]
@@ -148,6 +149,8 @@ Training Args:
                         Compute DRMSD loss without batch-level
                         parallelization.
   --bins BINS           Number of bins for protein dataset batching.
+  --train_eval_downsample TRAIN_EVAL_DOWNSAMPLE
+                        Fraction of training set to evaluate on each epoch.
 
 Model Args:
   -m {enc-dec,enc-only,enc-only-linear-out}, --model {enc-dec,enc-only,enc-only-linear-out}
