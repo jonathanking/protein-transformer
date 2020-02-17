@@ -1,38 +1,56 @@
-from tqdm import tqdm
+"""
+This script is to be used to determine the maximum batch size that can fit into GPU memory for a certain
+set of hyperparameters. This is designed to be called by `train.py`, which uses the exit code of this
+script in order to ascertain what the maximum batch size was.
 
-import protein_transformer
-import sys
+A separate script is used because, even though PyTorch allows users to clear GPU cache, a non-zero sized
+cache is left over afterwards. By moving this code into its own process, then all of the memory will be
+cleared when the process completes, leaving a completely free GPU available for the parent script (`train.py`).
+
+    Author: Jonathan King
+    Date: 02/17/2020
+"""
 
 from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
-from protein_transformer.train import create_parser, load_model, setup_model_optimizer_scheduler, init_worker_pool, \
-    train, init_metrics, reset_metrics_for_epoch, get_losses
+from protein_transformer.train import create_parser, setup_model_optimizer_scheduler, get_losses
 import torch
-import wandb
+
 
 def test_batch_size(args):
-    # Prepare torch
-    drmsd_worker_pool = init_worker_pool(args)
-
+    """ Increases the batch size by one, stopping with the system runs out of memory. """
+    import torch
     # Load dataset
     data = torch.load(args.data)
+
     args.max_token_seq_len = data['settings']["max_len"]
 
-    # Prepare model
-    device = torch.device('cuda' if args.cuda else 'cpu')
-    model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
+    while True:
+        try:
+            # Prepare model
+            import torch
+            device = torch.device('cuda' if args.cuda else 'cpu')
+            model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
+            training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN, use_largest_bin=True)
+            res = first_train_epoch(model, training_data, optimizer, device, args, pool=None)
 
-    training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN, use_largest_bin=True)
-
-    del data
-
-    return first_train_epoch(model, training_data, optimizer, device, args, pool=drmsd_worker_pool)
+            # Clean up
+            del device
+            del model, optimizer, scheduler
+            del training_data, training_eval_loader, validation_datasets, test_data
+            args.batch_size += 1
+            torch.cuda.empty_cache()
+            del torch
+            del res
+        except RuntimeError:
+            print("failed.")
+            return args.batch_size
 
 
 def first_train_epoch(model, training_data, optimizer, device, args, pool=None):
     """
-    Complete 3 training steps to ensure model can train.
+    Complete 3 training steps to ensure model can train with the specified batch size.
     """
-    print(f"Testing batch size {args.batch_size}", end="")
+    print(f"Testing batch size {args.batch_size: >3}", end="")
     model.train()
     batch_iter = training_data
     max_step = 3
@@ -70,7 +88,4 @@ if __name__ == '__main__':
     args.batch_size = args.experimental_batch_size
 
     result = test_batch_size(args)
-    if result:
-        exit(0)
-    else:
-        exit(1)
+    exit(result)

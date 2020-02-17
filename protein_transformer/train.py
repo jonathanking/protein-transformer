@@ -466,7 +466,7 @@ def create_parser():
     training.add_argument('--sequential_drmsd_loss', action="store_true",
                           help="Compute DRMSD loss without batch-level parallelization.")
     training.add_argument("--bins", type=int, default=-1, help="Number of bins for protein dataset batching. ")
-    training.add_argument("--train_eval_downsample", type=float, default=0.3, help="Fraction of training set to "
+    training.add_argument("--train_eval_downsample", type=float, default=0.15, help="Fraction of training set to "
                                                                                    "evaluate on each epoch.")
     training.add_argument("--automatically_determine_batch_size", "-adbs", type=bool, help="Experimentally determine"
                                                                                            "the maximum allowable batch"
@@ -520,7 +520,7 @@ def create_parser():
     return parser
 
 
-def determine_largest_batch_size():
+def determine_largest_batch_size(fraction_to_keep=0.9):
     """
     Repeatedly tries a few training batches until the system runs out of memory. Returns the largest batch size
     found.
@@ -528,16 +528,13 @@ def determine_largest_batch_size():
     import subprocess
     from math import ceil
     b = 1
-    first = True
     start = time.time()
-    my_env = {**os.environ, "WANDB_MODE":"dryrun"}
-    while first or completed_process.returncode == 0:
-        first = False
-        b += 1
-        completed_process = subprocess.run(args=["python", "../scripts/determine_largest_batchsize.py", *sys.argv[1:],
-                                                 "--experimental_batch_size", str(b)], env=my_env)
-    max_batch_size = ceil((b * .85))
-    print(f"Maximum batch size found to be {b}. Will proceed with {max_batch_size}. {(time.time() - start)//60} min elapsed.")
+    completed_process = subprocess.run(args=["python", "../scripts/determine_largest_batchsize.py", *sys.argv[1:],
+                                             "--experimental_batch_size", str(b)], encoding="utf-8")
+    b = int(completed_process.returncode)
+    max_batch_size = ceil((b * fraction_to_keep))
+    print(f"Maximum batch size found to be {b}. Will proceed with {max_batch_size}. {int((time.time() - start)//60)}"
+          f" min elapsed.")
     return max_batch_size
 
 def main():
@@ -630,25 +627,9 @@ def main():
     wandb.save(os.path.join(local_base_dir, "checkpoints/*"))
     wandb.save(os.path.join(local_base_dir, "*.train"))
 
-
-
     print(args, "\n")
 
-
-    # Find max batch size
-    # max_batch = train_determine_max_batch_size(data, model, optimizer, device, args, log_writer, validation_datasets, drmsd_worker_pool)
-    # # model_state = model.state_dict()
-    # # optim_state = optimizer.state_dict()
-    # args.batch_size = max((max_batch - (max_batch // 2), 1))
-    # print(f"Using batch size of {args.batch_size}.")
-    # del model
-    # del optimizer
-    # del validation_datasets
-
-    # Restart training
-    model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
-    # model.load_state_dict(model_state)
-    # optimizer.load_state_dict(optim_state)
+    # Start training
     training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
     del data
     train(model, metrics, training_data, training_eval_loader, validation_datasets, test_data, optimizer,
