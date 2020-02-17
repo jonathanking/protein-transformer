@@ -471,7 +471,7 @@ def create_parser():
     training.add_argument("--automatically_determine_batch_size", "-adbs", type=bool, help="Experimentally determine"
                                                                                            "the maximum allowable batch"
                                                                                            "size for training.",
-                          default=True)
+                          default=False)
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
