@@ -435,7 +435,7 @@ def create_parser():
     training.add_argument('--sequential_drmsd_loss', action="store_true",
                           help="Compute DRMSD loss without batch-level parallelization.")
     training.add_argument("--bins", type=int, default=-1, help="Number of bins for protein dataset batching. ")
-    training.add_argument("--train_eval_downsample", type=float, default=0.15, help="Fraction of training set to "
+    training.add_argument("--train_eval_downsample", type=float, default=0.10, help="Fraction of training set to "
                                                                                    "evaluate on each epoch.")
     training.add_argument("--automatically_determine_batch_size", "-adbs", type=bool, help="Experimentally determine"
                                                                                            "the maximum allowable batch"
@@ -496,6 +496,7 @@ def determine_largest_batch_size(fraction_to_keep=0.8):
     """
     import subprocess
     from math import ceil
+    print("Determining maximum batch size.")
     b = 1
     start = time.time()
     completed_process = subprocess.run(args=["python", "../scripts/determine_largest_batchsize.py", *sys.argv[1:],
