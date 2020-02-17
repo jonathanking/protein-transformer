@@ -193,8 +193,8 @@ def compute_sidechain_dihedrals(residue, prev_residue, next_res):
 
     for t_name, t_val in zip(torsion_names[1:], SC_BUILD_INFO[residue.getResname()]["torsion-vals"][1:]):
         # Only record torsional angles that are relevant (i.e. not planar).
-        # All torsion values that vary are marked with '?' in SC_BUILD_INFO
-        if t_val != "?":
+        # All torsion values that vary are marked with 'p' in SC_BUILD_INFO
+        if t_val != "p":
             break
         atom_names = t_name.split("-")
         res_dihedrals.append(compute_single_dihedral([residue.select("name " + an) for an in atom_names]))
@@ -224,7 +224,7 @@ def measure_res_coordinates(_res):
     Given a ProDy residue, measure all relevant coordinates.
     """
     sc_atom_names = determine_sidechain_atomnames(_res)
-    bbcoords = get_atom_coords_by_names(_res, ["N", "CA", "C"])
+    bbcoords = get_atom_coords_by_names(_res, ["N", "CA", "C", "O"])
     sccoords = get_atom_coords_by_names(_res, sc_atom_names)
     coord_padding = np.zeros((NUM_PREDICTED_COORDS - len(bbcoords) - len(sccoords), 3))
     coord_padding[:] = GLOBAL_PAD_CHAR
@@ -505,7 +505,7 @@ def measure_bond_angles(residue, res_idx, all_res):
     return list(get_bond_angles(residue, next_res))
 
 
-def measure_phi_psi_omega(residue):
+def measure_phi_psi_omega(residue, include_OXT=False):
     """
     Returns phi, psi, omega for a residue, replacing out-of-bounds angles
     with GLOBAL_PAD_CHAR.
@@ -517,7 +517,20 @@ def measure_phi_psi_omega(residue):
     try:
         psi = pr.calcPsi(residue, radian=True, dist=None)
     except ValueError:
-        psi = GLOBAL_PAD_CHAR
+        # For the last residue, we can measure a "psi" angle that is actually
+        # the placement of the terminal oxygen. Currently, this is not utilized
+        # in the building of structures, but it is included in case the need
+        # arises in the future. Otherwise, this would simply become a pad
+        # character.
+        if include_OXT:
+            try:
+                psi = compute_single_dihedral(residue.select("name N CA C OXT"))
+            except ValueError:
+                psi = GLOBAL_PAD_CHAR
+            except IndexError:
+                psi = GLOBAL_PAD_CHAR
+        else:
+            psi = GLOBAL_PAD_CHAR
     try:
         omega = pr.calcOmega(residue, radian=True, dist=None)
     except ValueError:

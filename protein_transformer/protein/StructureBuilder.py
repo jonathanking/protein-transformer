@@ -10,8 +10,14 @@ from protein_transformer.protein.Structure import nerf, NUM_PREDICTED_COORDS, \
 
 
 class StructureBuilder(object):
-    """ 
+    """
     Given angles and protein sequence, reconstructs a single protein's structure.
+
+    The hydroxyl-oxygen of terminal residues is not placed because this would
+    mean that the number of coordinates per residue would not be constant, or
+    cause other complications (i.e. what if the last atom of a structure is not
+    really a terminal atom because it's tail is masked out?). It is simpler to
+    ignore this atom for now.
     """
     def __init__(self, seq, ang, device=torch.device("cpu")):
         """
@@ -39,9 +45,28 @@ class StructureBuilder(object):
         self.pdb_creator = None
         self.seq_as_str = None
 
-    def iter_residues(self, start=0):
+    def __len__(self):
+        return len(self.seq)
+
+    def iter_resname_angs(self, start=0):
         for resname, angles in zip(self.seq[start:], self.ang[start:]):
-            yield ResidueBuilder(resname, angles, self.prev_bb, self.prev_ang)
+            yield resname, angles
+
+    def build_first_two_residues(self):
+        """ Constructs the first two residues of the protein. """
+        resname_ang_iter = self.iter_resname_angs()
+        first_resname, first_ang = next(resname_ang_iter)
+        second_resname, second_ang = next(resname_ang_iter)
+        first_res = ResidueBuilder(first_resname, first_ang, prev_res=None, next_res=None)
+        second_res = ResidueBuilder(second_resname, second_ang, prev_res=first_res, next_res=None)
+
+        # After building both backbones, use the second residue's N to build the first's CB
+        first_res.build_bb()
+        second_res.build()
+        first_res.next_res = second_res
+        first_res.build_sc()
+
+        return first_res, second_res
 
     def build(self):
         """
@@ -49,27 +74,18 @@ class StructureBuilder(object):
         for the first residue in the sequence in order to place its CB, if
         present.
         """
-        # Initialize the first and second residues' backbones
-        residue_iterator = self.iter_residues()
-        first_res = next(residue_iterator)
-        first_res.build_bb()
-        self.prev_bb, self.prev_ang = first_res.bb, first_res.ang
-        second_res = next(residue_iterator)
-        second_res.build()
-        self.prev_bb, self.prev_ang = second_res.bb, second_res.ang
-
-        # Use the second residue's bb to build the first's CB
-        first_res.next_bb = second_res.bb
-        first_res.build_sc()
+        # Build the first and second residues, a special case
+        first, second = self.build_first_two_residues()
 
         # Combine the coordinates and build the rest of the protein
-        self.coords = first_res.stack_coords() + second_res.stack_coords()
+        self.coords = first.stack_coords() + second.stack_coords()
 
-        for residue in self.iter_residues(start=2):
-            residue.build()
-            self.coords += residue.coords
-            self.prev_ang = residue.ang
-            self.prev_bb = residue.bb
+        # Build the rest of the structure
+        prev_res = second
+        for i, (resname, ang) in enumerate(self.iter_resname_angs(start=2)):
+            res = ResidueBuilder(resname, ang, prev_res=prev_res, next_res=None)
+            self.coords += res.build()
+            prev_res = res
 
         self.coords = torch.stack(self.coords)
 
@@ -94,7 +110,7 @@ class StructureBuilder(object):
 
 class ResidueBuilder(object):
 
-    def __init__(self, name, angles, prev_bb, prev_ang, device=torch.device("cpu")):
+    def __init__(self, name, angles, prev_res, next_res, device=torch.device("cpu")):
         """Initialize a residue builder. If prev_{bb, ang} are None, then this
         is the first residue.
 
@@ -114,10 +130,9 @@ class ResidueBuilder(object):
             angles = torch.tensor(angles, dtype=torch.float32)
         self.name = name
         self.ang = angles.squeeze()
-        self.prev_bb = prev_bb
-        self.prev_ang = prev_ang
+        self.prev_res = prev_res
+        self.next_res = next_res
         self.device = device
-        self.next_bb = None
 
         self.bb = []
         self.sc = []
@@ -131,26 +146,31 @@ class ResidueBuilder(object):
 
     def build_bb(self):
         """ Builds backbone for residue. """
-        if self.prev_ang is None and self.prev_bb is None:
+        if self.prev_res is None:
             self.bb = self.init_bb()
         else:
-            pts = [self.prev_bb[-3], self.prev_bb[-2], self.prev_bb[-1]]
-            for j in range(3):
+            pts = [self.prev_res.bb[0], self.prev_res.bb[1], self.prev_res.bb[2]]
+            for j in range(4):
                 if j == 0:
                     # Placing N
-                    t = self.prev_ang[4]         # thetas["ca-c-n"]
+                    t = self.prev_res.ang[4]         # thetas["ca-c-n"]
                     b = BB_BUILD_INFO["BONDLENS"]["c-n"]
-                    dihedral = self.prev_ang[1]  # psi of previous residue
+                    dihedral = self.prev_res.ang[1]  # psi of previous residue
                 elif j == 1:
                     # Placing Ca
-                    t = self.prev_ang[5]         # thetas["c-n-ca"]
+                    t = self.prev_res.ang[5]         # thetas["c-n-ca"]
                     b = BB_BUILD_INFO["BONDLENS"]["n-ca"]
-                    dihedral = self.prev_ang[2]  # omega of previous residue
-                else:
+                    dihedral = self.prev_res.ang[2]  # omega of previous residue
+                elif j == 2:
                     # Placing C
                     t = self.ang[3]              # thetas["n-ca-c"]
                     b = BB_BUILD_INFO["BONDLENS"]["ca-c"]
                     dihedral = self.ang[0]       # phi of current residue
+                else:
+                    # Placing O
+                    t = torch.tensor(BB_BUILD_INFO["BONDANGS"]["ca-c-o"])
+                    b = BB_BUILD_INFO["BONDLENS"]["c-o"]
+                    dihedral = self.ang[1] - np.pi      # opposite to psi of current residue
 
                 next_pt = nerf(pts[-3], pts[-2], pts[-1], b, t, dihedral)
                 pts.append(next_pt)
@@ -160,12 +180,15 @@ class ResidueBuilder(object):
 
     def init_bb(self):
         """ Initialize the first 3 points of the protein's backbone. Placed in an arbitrary plane (z = .001). """
-        a1 = torch.tensor([0, 0, 0.001], device=self.device)
-        a2 = a1 + torch.tensor([BB_BUILD_INFO["BONDLENS"]["n-ca"], 0, 0], device=self.device)
-        a3x = torch.cos(np.pi - self.ang[3]) * BB_BUILD_INFO["BONDLENS"]["ca-c"]
-        a3y = torch.sin(np.pi - self.ang[3]) * BB_BUILD_INFO["BONDLENS"]['ca-c']
-        a3 = a2 + torch.tensor([a3x, a3y, 0], device=self.device, dtype=torch.float32)
-        return [a1, a2, a3]
+        n = torch.tensor([0, 0, 0.001], device=self.device)
+        ca = n + torch.tensor([BB_BUILD_INFO["BONDLENS"]["n-ca"], 0, 0], device=self.device)
+        cx = torch.cos(np.pi - self.ang[3]) * BB_BUILD_INFO["BONDLENS"]["ca-c"]
+        cy = torch.sin(np.pi - self.ang[3]) * BB_BUILD_INFO["BONDLENS"]['ca-c']
+        c = ca + torch.tensor([cx, cy, 0], device=self.device, dtype=torch.float32)
+        o = nerf(n, ca, c, torch.tensor(BB_BUILD_INFO["BONDLENS"]["c-o"]),
+                           torch.tensor(BB_BUILD_INFO["BONDANGS"]["ca-c-o"]),
+                           self.ang[1] - np.pi) # opposite to current residue's psi
+        return [n, ca, c, o]
 
     def build_sc(self):
         """
@@ -179,25 +202,27 @@ class ResidueBuilder(object):
         self.pts = {"N": self.bb[0],
                     "CA": self.bb[1],
                     "C": self.bb[2]}
-        if self.next_bb:
-            self.pts["N+"] = self.next_bb[0]
+        if self.next_res:
+            self.pts["N+"] = self.next_res.bb[0]
         else:
-            self.pts["C-"] = self.prev_bb[-1]
+            self.pts["C-"] = self.prev_res.bb[2]
 
         last_torsion = None
         for i, (bond_len, angle, torsion, atom_names) in enumerate(get_residue_build_iter(self.name, SC_BUILD_INFO)):
-
-            if self.next_bb and i == 0:
+            # Select appropriate 3 points to build from
+            if self.next_res and i == 0:
                 a, b, c = self.pts["N+"], self.pts["C"], self.pts["CA"]
             elif i == 0:
                 a, b, c = self.pts["C-"], self.pts["N"], self.pts["CA"]
             else:
                 a, b, c = (self.pts[an] for an in atom_names[:-1])
 
+            # Select appropriate torsion angle, or infer it if it's part of a planar configuration
             if type(torsion) is str and torsion == "p":
                 torsion = self.ang[SC_ANGLE_START_POS + i]
             elif type(torsion) is str and torsion == "i" and last_torsion:
                 torsion = last_torsion - np.pi
+
             new_pt = nerf(a, b, c, bond_len, angle, torsion)
             self.pts[atom_names[-1]] = new_pt
             self.sc.append(new_pt)
@@ -211,7 +236,7 @@ class ResidueBuilder(object):
         return self.coords
 
     def __repr__(self):
-        return f"ResidueBuilder({VOCAB.int2char(self.name)})"
+        return f"ResidueBuilder({VOCAB.int2char(int(self.name))})"
 
 def get_residue_build_iter(res, build_dictionary):
     """
