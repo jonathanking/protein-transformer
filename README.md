@@ -61,6 +61,7 @@ usage: train.py [-h] [--data DATA] [--name NAME] [-lr LEARNING_RATE]
                 [--batching_order {descending,ascending,binned-random}]
                 [--backbone_loss] [--sequential_drmsd_loss] [--bins BINS]
                 [--train_eval_downsample TRAIN_EVAL_DOWNSAMPLE]
+                [--automatically_determine_batch_size AUTOMATICALLY_DETERMINE_BATCH_SIZE]
                 [-m {enc-dec,enc-only,enc-only-linear-out}] [-dm D_MODEL]
                 [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT]
                 [--postnorm] [--angle_mean_path ANGLE_MEAN_PATH]
@@ -151,6 +152,9 @@ Training Args:
   --bins BINS           Number of bins for protein dataset batching.
   --train_eval_downsample TRAIN_EVAL_DOWNSAMPLE
                         Fraction of training set to evaluate on each epoch.
+  --automatically_determine_batch_size AUTOMATICALLY_DETERMINE_BATCH_SIZE, -adbs AUTOMATICALLY_DETERMINE_BATCH_SIZE
+                        Experimentally determinethe maximum allowable
+                        batchsize for training.
 
 Model Args:
   -m {enc-dec,enc-only,enc-only-linear-out}, --model {enc-dec,enc-only,enc-only-linear-out}
