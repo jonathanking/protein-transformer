@@ -224,7 +224,7 @@ def measure_res_coordinates(_res):
     Given a ProDy residue, measure all relevant coordinates.
     """
     sc_atom_names = determine_sidechain_atomnames(_res)
-    bbcoords = get_atom_coords_by_names(_res, ["N", "CA", "C"])
+    bbcoords = get_atom_coords_by_names(_res, ["N", "CA", "C", "O"])
     sccoords = get_atom_coords_by_names(_res, sc_atom_names)
     coord_padding = np.zeros((NUM_PREDICTED_COORDS - len(bbcoords) - len(sccoords), 3))
     coord_padding[:] = GLOBAL_PAD_CHAR
@@ -521,7 +521,15 @@ def measure_phi_psi_omega(residue):
     try:
         omega = pr.calcOmega(residue, radian=True, dist=None)
     except ValueError:
-        omega = GLOBAL_PAD_CHAR
+        try:
+            # For the last residue, we measure an "omega" angle that is actually
+            # the placement of the terminal oxygen. This is considered part
+            # of the backbone.
+            omega = compute_single_dihedral(residue.select("name N CA C OXT"))
+        except ValueError:
+            omega = GLOBAL_PAD_CHAR
+        except IndexError:
+            omega = GLOBAL_PAD_CHAR
     return [phi, psi, omega]
 
 
