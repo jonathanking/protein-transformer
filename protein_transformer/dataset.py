@@ -227,7 +227,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
                     batch_sampler=SimilarLengthBatchSampler(train_dataset,
                                                             args.batch_size,
                                                             dynamic_batch=args.batch_size * MAX_SEQ_LEN,
-                                                            optimize_batch_for_cpus=args.loss in ["combined", "drmsd", "ln-drmsd"]))
+                                                            optimize_batch_for_cpus=args.loss in ["combined", "drmsd",
+                                                                                                  "ln-drmsd"]))
     train_eval_loader = torch.utils.data.DataLoader(
                     train_dataset,
                     num_workers=num_workers,
@@ -235,7 +236,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
                     batch_sampler=SimilarLengthBatchSampler(train_dataset,
                                                             args.batch_size,
                                                             dynamic_batch=args.batch_size * MAX_SEQ_LEN,
-                                                            optimize_batch_for_cpus=args.loss in ["combined", "drmsd", "ln-drmsd"]))
+                                                            optimize_batch_for_cpus=args.loss in ["combined", "drmsd",
+                                                                                                  "ln-drmsd"]))
 
     valid_loaders = {}
     for split in VALID_SPLITS:
