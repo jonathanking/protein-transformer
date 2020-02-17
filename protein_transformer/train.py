@@ -54,37 +54,6 @@ def train_epoch(model, training_data, validation_datasets, optimizer, device, ar
     return metrics
 
 
-def first_train_epoch(model, training_data, validation_datasets, optimizer, device, args, log_writer, metrics,
-                      pool=None):
-    """
-    One complete training epoch.
-    """
-    model.train()
-    metrics = reset_metrics_for_epoch(metrics, "train")
-    batch_iter = tqdm(training_data, leave=False, unit="batch", dynamic_ncols=True)
-    for step, batch in enumerate(batch_iter):
-        optimizer.zero_grad()
-        src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
-        pred = model(src_seq, tgt_ang)
-        loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool)
-
-        # Clip gradients
-        if args.clip:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
-
-        # Update parameters
-        optimizer.step()
-
-        # Record performance metrics
-        metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
-                                         log_writer, batch_iter, START_TIME, pred, tgt_crds, step, validation_datasets,
-                                         model, device)
-
-    metrics = update_metrics_end_of_epoch(metrics, "train")
-
-    return metrics
-
-
 def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True):
     """
     Returns the computed losses/metrics for a batch. The variable 'loss'
