@@ -199,7 +199,7 @@ Saving Args:
 
 ```
 
-## Notes on Training Data
+## Training Data[]
 
 The training data is based on Mohammed AlQuraishi's [ProteinNet](https://github.com/aqlaboratory/proteinnet). Preprocessed  data from the CASP12 competition that has been modified to work with this project can be downloaded [here (13GB)](https://pitt.box.com/s/tmcav6x5am54lqbe11d96ceqgd7q42hw) and [here (~3GB, a 30% thinning of the previous dataset)](https://pitt.box.com/s/xjigkqj4i02dx74ults12x3adu04utam). 
 
