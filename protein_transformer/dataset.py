@@ -239,7 +239,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1, use_largest_bin=
                     batch_sampler=SimilarLengthBatchSampler(train_dataset,
                                                             args.batch_size,
                                                             dynamic_batch=args.batch_size * MAX_SEQ_LEN,
-                                                            optimize_batch_for_cpus=args.loss in ["combined", "drmsd",
+                                                            optimize_batch_for_cpus=not use_largest_bin and \
+                                                                                    args.loss in ["combined", "drmsd",
                                                                                                   "ln-drmsd"],
                                                             use_largest_bin=use_largest_bin))
     train_eval_loader = torch.utils.data.DataLoader(

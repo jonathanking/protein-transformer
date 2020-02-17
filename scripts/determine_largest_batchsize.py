@@ -52,15 +52,16 @@ def first_train_epoch(model, training_data, optimizer, device, args, pool=None):
     """
     Complete 3 training steps to ensure model can train with the specified batch size.
     """
-    print(f"Testing batch size {args.batch_size: >3}", end="")
+    print(f"Testing batch size {args.batch_size: >2} [", end="")
     model.train()
     batch_iter = training_data
-    max_step = 3
+    max_step = 2
     for step, batch in enumerate(batch_iter):
         if step == max_step:
             break
         optimizer.zero_grad()
         src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
+        print(f"({src_seq.shape[0]})", end="")
         pred = model(src_seq, tgt_ang)
         loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool, log=False)
 
@@ -70,9 +71,8 @@ def first_train_epoch(model, training_data, optimizer, device, args, pool=None):
 
         # Update parameters
         optimizer.step()
-        print(".", end="")
 
-    print("success.")
+    print("] success.")
     return True
 
 
