@@ -194,9 +194,9 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
                     # Make the batch size a multiple of the number of availble CPUs for fast drmsd loss computation
                     if self.optimize_batch_for_cpus:
                         largest_possible = int(self.dynamic_batch / self.data_source.hist_bins[bin])
-                        this_batch_size = largest_possible - (largest_possible % self.cpu_count)
+                        this_batch_size = max(1, largest_possible - (largest_possible % self.cpu_count))
                     else:
-                        this_batch_size = int(self.dynamic_batch / self.data_source.hist_bins[bin])
+                        this_batch_size = max(1, int(self.dynamic_batch / self.data_source.hist_bins[bin]))
                 else:
                     this_batch_size = self.batch_size
                 wandb.log({"Batch size": this_batch_size}, commit=False)

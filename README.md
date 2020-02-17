@@ -40,7 +40,7 @@ This script takes as arguments a plethora of different architecture and training
 
 #### Example:
 ```
-python train.py data/proteinnet/casp12.pt model01 -lr -0.01 -e 30 -b 12 -cl -cg 1 -dm 50 
+python train.py --data data/proteinnet/casp12.pt --name model01 -lr -0.01 -e 30 -b 12 -m enc-only -dm 256 -l drmsd 
 ```
 
 #### Usage:
@@ -59,7 +59,7 @@ usage: train.py [-h] [--data DATA] [--name NAME] [-lr LEARNING_RATE]
                 [--repeat_train REPEAT_TRAIN] [-s SEED]
                 [--combined_drmsd_weight COMBINED_DRMSD_WEIGHT]
                 [--batching_order {descending,ascending,binned-random}]
-                [--backbone_loss] [--sequential_drmsd_loss]
+                [--backbone_loss] [--sequential_drmsd_loss] [--bins BINS]
                 [-m {enc-dec,enc-only,enc-only-linear-out}] [-dm D_MODEL]
                 [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT]
                 [--postnorm] [--angle_mean_path ANGLE_MEAN_PATH]
@@ -147,6 +147,7 @@ Training Args:
   --sequential_drmsd_loss
                         Compute DRMSD loss without batch-level
                         parallelization.
+  --bins BINS           Number of bins for protein dataset batching.
 
 Model Args:
   -m {enc-dec,enc-only,enc-only-linear-out}, --model {enc-dec,enc-only,enc-only-linear-out}
@@ -218,6 +219,8 @@ data = {"train": {"seq": [seq1, seq2, ...],
         }
 ```
 
+## Other information
+Please visit my [Project Notes](docs/ProjectNotes.md) for more information.
 
 ### Copyright
 

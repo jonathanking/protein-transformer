@@ -171,7 +171,7 @@ def mse_over_angles(pred, true):
     batch then item padding before using torch's built-in MSE loss function.
 
     Args:
-        pred true (np.ndarray): 4-dimensional tensors
+        pred, true (np.ndarray): 4-dimensional tensors
 
     Returns:
         MSE loss between true and pred.
