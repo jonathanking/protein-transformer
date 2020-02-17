@@ -13,7 +13,6 @@ cleared when the process completes, leaving a completely free GPU available for 
 
 from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
 from protein_transformer.train import create_parser, setup_model_optimizer_scheduler, get_losses
-import torch
 
 
 def test_batch_size(args):
@@ -30,7 +29,9 @@ def test_batch_size(args):
             import torch
             device = torch.device('cuda' if args.cuda else 'cpu')
             model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
-            training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN, use_largest_bin=True)
+            training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args,
+                                                                                                      MAX_SEQ_LEN,
+                                                                                                      use_largest_bin=True)
             res = first_train_epoch(model, training_data, optimizer, device, args, pool=None)
 
             # Clean up
