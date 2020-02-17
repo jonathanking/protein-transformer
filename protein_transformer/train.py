@@ -598,7 +598,7 @@ def main():
                          "n_trainable_params": n_trainable_params,
                          "max_seq_len": MAX_SEQ_LEN})
     wandb.run.summary["stopped_training_early"] = False
-    wandb.run.summary["Determined Batch Size"] = args.batch_size
+    wandb.run.summary["max_batch_size"] = args.batch_size
     local_base_dir = wandb.run.dir
     args.structure_dir = os.path.join(local_base_dir, "structures")
     args.gltf_dir = f"../data/logs/structures/gltfs/{wandb.run.id}"
