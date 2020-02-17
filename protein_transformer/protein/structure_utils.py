@@ -505,7 +505,7 @@ def measure_bond_angles(residue, res_idx, all_res):
     return list(get_bond_angles(residue, next_res))
 
 
-def measure_phi_psi_omega(residue):
+def measure_phi_psi_omega(residue, include_OXT=False):
     """
     Returns phi, psi, omega for a residue, replacing out-of-bounds angles
     with GLOBAL_PAD_CHAR.
@@ -517,19 +517,24 @@ def measure_phi_psi_omega(residue):
     try:
         psi = pr.calcPsi(residue, radian=True, dist=None)
     except ValueError:
-        psi = GLOBAL_PAD_CHAR
+        # For the last residue, we can measure a "psi" angle that is actually
+        # the placement of the terminal oxygen. Currently, this is not utilized
+        # in the building of structures, but it is included in case the need
+        # arises in the future. Otherwise, this would simply become a pad
+        # character.
+        if include_OXT:
+            try:
+                psi = compute_single_dihedral(residue.select("name N CA C OXT"))
+            except ValueError:
+                psi = GLOBAL_PAD_CHAR
+            except IndexError:
+                psi = GLOBAL_PAD_CHAR
+        else:
+            psi = GLOBAL_PAD_CHAR
     try:
         omega = pr.calcOmega(residue, radian=True, dist=None)
     except ValueError:
-        try:
-            # For the last residue, we measure an "omega" angle that is actually
-            # the placement of the terminal oxygen. This is considered part
-            # of the backbone.
-            omega = compute_single_dihedral(residue.select("name N CA C OXT"))
-        except ValueError:
-            omega = GLOBAL_PAD_CHAR
-        except IndexError:
-            omega = GLOBAL_PAD_CHAR
+        omega = GLOBAL_PAD_CHAR
     return [phi, psi, omega]
 
 

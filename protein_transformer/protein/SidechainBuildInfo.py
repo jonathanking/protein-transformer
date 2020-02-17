@@ -577,9 +577,9 @@ BB_BUILD_INFO = {"BONDLENS": {'n-ca': 1.442,
                               'ca-c': 1.498,
                               'c-n' : 1.379,
                               'c-o' : 1.229,                    # From parm10.dat
-                              'c-oh': 1.364},                   # From parm10.dat
+                              'c-oh': 1.364},                   # From parm10.dat, for OXT
                  # For placing oxygens
                  "BONDANGS": {'ca-c-o':  2.0944,             # Approximated to be 2pi / 3; parm10.dat says 2.0350539
-                              'ca-c-oh': 2.0944},            # Equal to 'ca-c-o'
+                              'ca-c-oh': 2.0944},            # Equal to 'ca-c-o', for OXT
                  "BONDTORSIONS": {'n-ca-c-n': -0.785398163}    # A simple approximation, not meant to be exact.
                  }

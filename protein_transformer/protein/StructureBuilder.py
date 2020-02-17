@@ -10,8 +10,14 @@ from protein_transformer.protein.Structure import nerf, NUM_PREDICTED_COORDS, \
 
 
 class StructureBuilder(object):
-    """ 
+    """
     Given angles and protein sequence, reconstructs a single protein's structure.
+
+    The hydroxyl-oxygen of terminal residues is not placed because this would
+    mean that the number of coordinates per residue would not be constant, or
+    cause other complications (i.e. what if the last atom of a structure is not
+    really a terminal atom because it's tail is masked out?). It is simpler to
+    ignore this atom for now.
     """
     def __init__(self, seq, ang, device=torch.device("cpu")):
         """
@@ -77,7 +83,7 @@ class StructureBuilder(object):
         # Build the rest of the structure
         prev_res = second
         for i, (resname, ang) in enumerate(self.iter_resname_angs(start=2)):
-            res = ResidueBuilder(resname, ang, prev_res=prev_res, next_res=None, is_last_res=i == len(self) - 1)
+            res = ResidueBuilder(resname, ang, prev_res=prev_res, next_res=None)
             self.coords += res.build()
             prev_res = res
 
@@ -104,7 +110,7 @@ class StructureBuilder(object):
 
 class ResidueBuilder(object):
 
-    def __init__(self, name, angles, prev_res, next_res, is_last_res=False, device=torch.device("cpu")):
+    def __init__(self, name, angles, prev_res, next_res, device=torch.device("cpu")):
         """Initialize a residue builder. If prev_{bb, ang} are None, then this
         is the first residue.
 
@@ -126,7 +132,6 @@ class ResidueBuilder(object):
         self.ang = angles.squeeze()
         self.prev_res = prev_res
         self.next_res = next_res
-        self.is_last_res = is_last_res
         self.device = device
 
         self.bb = []
