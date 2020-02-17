@@ -217,7 +217,7 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
         return batch_generator()
 
 
-def prepare_dataloaders(data, args, max_seq_len, num_workers=1, use_largest_bin=False):
+def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
     """
     Using the pre-processed data, stored in a nested Python dictionary, this
     function returns train, validation, and test set dataloaders with 2 workers
@@ -239,10 +239,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1, use_largest_bin=
                     batch_sampler=SimilarLengthBatchSampler(train_dataset,
                                                             args.batch_size,
                                                             dynamic_batch=args.batch_size * MAX_SEQ_LEN,
-                                                            optimize_batch_for_cpus=not use_largest_bin and \
-                                                                                    args.loss in ["combined", "drmsd",
-                                                                                                  "ln-drmsd"],
-                                                            use_largest_bin=use_largest_bin))
+                                                            optimize_batch_for_cpus=args.loss in ["combined", "drmsd",
+                                                                                                  "ln-drmsd"]))
     train_eval_loader = torch.utils.data.DataLoader(
                     train_dataset,
                     num_workers=num_workers,

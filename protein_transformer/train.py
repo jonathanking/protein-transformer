@@ -520,7 +520,7 @@ def create_parser():
     return parser
 
 
-def determine_largest_batch_size(fraction_to_keep=0.9):
+def determine_largest_batch_size(fraction_to_keep=0.8):
     """
     Repeatedly tries a few training batches until the system runs out of memory. Returns the largest batch size
     found.

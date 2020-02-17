@@ -11,7 +11,7 @@ cleared when the process completes, leaving a completely free GPU available for 
     Date: 02/17/2020
 """
 
-from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
+from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN, BinnedProteinDataset, paired_collate_fn, SimilarLengthBatchSampler
 from protein_transformer.train import create_parser, setup_model_optimizer_scheduler, get_losses, init_worker_pool
 import torch
 
@@ -22,30 +22,66 @@ def test_batch_size(args):
     data = torch.load(args.data)
     pool = init_worker_pool(args)
 
+    def add_incrementer(n):
+        return n + 1
+
+    def mul_incrementer(n):
+        return n * 2
+
+    incrementer = mul_incrementer
+    first = True
+
     args.max_token_seq_len = data['settings']["max_len"]
+    for i in range(2):
+        while True:
+            try:
+                # Prepare model
+                import torch
+                device = torch.device('cuda' if args.cuda else 'cpu')
+                model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
 
-    while True:
-        try:
-            # Prepare model
-            import torch
-            device = torch.device('cuda' if args.cuda else 'cpu')
-            model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
-            training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args,
-                                                                                                      MAX_SEQ_LEN,
-                                                                                                      use_largest_bin=True)
-            res = first_train_epoch(model, training_data, optimizer, device, args, pool=pool)
+                train_dataset = BinnedProteinDataset(
+                    seqs=data['train']['seq'] * args.repeat_train,
+                    crds=data['train']['crd'] * args.repeat_train,
+                    angs=data['train']['ang'] * args.repeat_train,
+                    add_sos_eos=args.add_sos_eos, skip_missing_residues=args.skip_missing_res_train, bins=args.bins)
+                train_loader = torch.utils.data.DataLoader(
+                    train_dataset,
+                    num_workers=1,
+                    collate_fn=paired_collate_fn,
+                    batch_sampler=SimilarLengthBatchSampler(train_dataset,
+                                                            args.batch_size,
+                                                            dynamic_batch=args.batch_size * MAX_SEQ_LEN,
+                                                            optimize_batch_for_cpus=False,
+                                                            use_largest_bin=True))
+                res = first_train_epoch(model, train_loader, optimizer, device, args, pool=pool)
 
-            # Clean up
-            del device
-            del model, optimizer, scheduler
-            del training_data, training_eval_loader, validation_datasets, test_data
-            args.batch_size += 1
-            torch.cuda.empty_cache()
-            del torch
-            del res
-        except RuntimeError:
-            print("failed.")
-            return args.batch_size
+                # Clean up
+                del device
+                del model, optimizer, scheduler
+                del train_dataset, train_loader
+                args.batch_size = incrementer(args.batch_size)
+                torch.cuda.empty_cache()
+                del torch
+                del res
+            except RuntimeError:
+                print("(crash)")
+                if not first:
+                    return args.batch_size
+                first = False
+                incrementer = add_incrementer
+                try:
+                    del device
+                    del model, optimizer, scheduler
+                    del train_dataset, train_loader
+                    del res
+                except:
+                    pass
+
+                torch.cuda.empty_cache()
+                del torch
+                args.batch_size = int(args.batch_size // 2) + 1
+                break
 
 
 def first_train_epoch(model, training_data, optimizer, device, args, pool=None):
