@@ -155,7 +155,8 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
                    "Train Batch DRMSD": d_loss,
                    "Train Batch ln-DRMSD": ln_d_loss,
                    "Train Batch Combined Loss": c_loss,
-                   "Train Batch Speed": metrics["train"]["speed"]}, commit=not do_log_lr and not do_log_str)
+                   "Train Batch Speed": metrics["train"]["speed"],
+                   "Batch size": pred_angs.shape[0]}, commit=not do_log_lr and not do_log_str)
     if args.lr_scheduling == "noam":
         metrics["history-lr"].append(optimizer.cur_lr)
         if not step or step % args.log_wandb_step  == 0:

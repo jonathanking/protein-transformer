@@ -17,9 +17,7 @@ from tqdm import tqdm
 
 from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
 from protein_transformer.log import *
-from protein_transformer.losses import compute_batch_drmsd, \
-    mse_over_angles, \
-    combine_drmsd_mse
+from protein_transformer.losses import compute_batch_drmsd, mse_over_angles, combine_drmsd_mse
 from protein_transformer.models.encoder_only import EncoderOnlyTransformer
 from protein_transformer.models.transformer.Optimizer import ScheduledOptim
 from protein_transformer.models.transformer.Transformer import Transformer
@@ -56,7 +54,38 @@ def train_epoch(model, training_data, validation_datasets, optimizer, device, ar
     return metrics
 
 
-def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None):
+def first_train_epoch(model, training_data, validation_datasets, optimizer, device, args, log_writer, metrics,
+                      pool=None):
+    """
+    One complete training epoch.
+    """
+    model.train()
+    metrics = reset_metrics_for_epoch(metrics, "train")
+    batch_iter = tqdm(training_data, leave=False, unit="batch", dynamic_ncols=True)
+    for step, batch in enumerate(batch_iter):
+        optimizer.zero_grad()
+        src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
+        pred = model(src_seq, tgt_ang)
+        loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool)
+
+        # Clip gradients
+        if args.clip:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+
+        # Update parameters
+        optimizer.step()
+
+        # Record performance metrics
+        metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
+                                         log_writer, batch_iter, START_TIME, pred, tgt_crds, step, validation_datasets,
+                                         model, device)
+
+    metrics = update_metrics_end_of_epoch(metrics, "train")
+
+    return metrics
+
+
+def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True):
     """
     Returns the computed losses/metrics for a batch. The variable 'loss'
     will differ depending on the loss the user requested to train on.
@@ -68,7 +97,7 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None):
     if args.loss == "ln-drmsd":
         d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False,
                                                 pool=pool, backbone_only=args.backbone_loss)
-        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
+        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight, log=log)
         loss = ln_d_loss
 
     elif args.loss == "mse":
@@ -80,14 +109,14 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None):
     elif args.loss == "drmsd":
         d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False,
                                                 pool=pool, backbone_only=args.backbone_loss)
-        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
+        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight, log=log)
         loss = d_loss
 
     else:
         # Combined loss
         d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=True, pool=pool,
                                                 backbone_only=args.backbone_loss)
-        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
+        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight, log=log)
         loss = c_loss
         c_loss.backward()
 
@@ -117,8 +146,8 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
             c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
 
             # Record performance metrics
-            metrics = do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq,  args,  batch_iter,
-                           pred, tgt_crds, mode)
+            metrics = do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq,  args,
+                                            batch_iter, pred, tgt_crds, mode)
 
     do_eval_epoch_logging(metrics, mode)
 
@@ -336,20 +365,35 @@ def init_worker_pool(args):
     return torch.multiprocessing.Pool(mp.cpu_count()) if not args.sequential_drmsd_loss else None
 
 
-def main():
-    """
-    Argument parsing, model loading, and model training.
-    """
-    global LOGFILEHEADER
-    global START_EPOCH
-    global START_TIME
-    global MISSING_COORD_FILLER
+def setup_model_optimizer_scheduler(args, device):
+    model = make_model(args, device).to(device)
 
-    START_EPOCH = 0
-    START_TIME = time.time()
-    MISSING_COORD_FILLER = 0  # Used when teacher forcing with an encoder/decoder model
+    # Prepare optimizer
+    wd = 10e-3 if args.weight_decay else 0
+    if args.optimizer == "adam":
+        optimizer = optim.Adam(
+            filter(lambda x: x.requires_grad, model.parameters()),
+            betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate,
+            weight_decay=wd)
+    elif args.optimizer == "sgd":
+        optimizer = optim.SGD(
+            filter(lambda x: x.requires_grad, model.parameters()),
+            lr=args.learning_rate, weight_decay=wd)
 
-    torch.set_printoptions(precision=5, sci_mode=False)
+    # Prepare scheduler
+    if args.lr_scheduling == "noam":
+        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps)
+        scheduler = None
+    else:
+        # Construct an LR scheduler with patience = 5 and a factor of 1/10
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                               patience=args.patience,
+                                                               verbose=True,
+                                                               threshold=args.early_stopping_threshold)
+    return model, optimizer, scheduler
+
+
+def create_parser():
     parser = argparse.ArgumentParser()
 
     # Required args
@@ -363,20 +407,22 @@ def main():
     training.add_argument('-e', '--epochs', type=int, default=10)
     training.add_argument("-b", '--batch_size', type=int, default=8)
     training.add_argument('-es', '--early_stopping', type=int, default=20,
-                        help="Stops if training hasn't improved in X epochs")
+                          help="Stops if training hasn't improved in X epochs")
     training.add_argument('-nws', '--n_warmup_steps', type=int, default=10_000,
-                        help="Number of warmup training steps when using lr-scheduling as proposed in the original"
-                             "Transformer paper.")
+                          help="Number of warmup training steps when using lr-scheduling as proposed in the original"
+                               "Transformer paper.")
     training.add_argument('-cg', '--clip', type=float, default=1, help="Gradient clipping value.")
     training.add_argument('-l', '--loss', choices=["mse", "drmsd", "ln-drmsd", "combined"], default="combined",
-                        help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based root "
-                             "mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combinaation of "
-                             "RMSE and ln-DRMSD.")
+                          help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based "
+                               "root "
+                               "mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combinaation of "
+                               "RMSE and ln-DRMSD.")
     training.add_argument('--train_only', action='store_true',
-                        help="Train, validation, and testing sets are the same. Only report train accuracy.")
+                          help="Train, validation, and testing sets are the same. Only report train accuracy.")
     training.add_argument('--lr_scheduling', type=str, choices=['noam', 'plateau'], default='plateau',
-                        help='noam: Use learning rate scheduling as described in Transformer paper, plateau: Decrease '
-                             'learning rate after Validation loss plateaus.')
+                          help='noam: Use learning rate scheduling as described in Transformer paper, '
+                               'plateau: Decrease '
+                               'learning rate after Validation loss plateaus.')
     training.add_argument('--patience', type=int, default=10,
                           help="Number of epochs to wait before reducing LR for plateau scheduler.")
     training.add_argument('--early_stopping_threshold', type=float, default=0.001,
@@ -386,29 +432,30 @@ def main():
                                    for mode in ["train", "test"] + [f"valid-{split}" for split in VALID_SPLITS]],
                           default="train-mse", help="Metric observed for early stopping and LR scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
-                        help="Do not initialize the model with pre-computed angle means.")
+                          help="Do not initialize the model with pre-computed angle means.")
     training.add_argument('--eval_train', type=bool, default=False,
-                        help="Perform an evaluation of the entire training set after a training epoch.")
+                          help="Perform an evaluation of the entire training set after a training epoch.")
     training.add_argument('--eval_train_drmsd', type=bool, default=True,
                           help="Perform an evaluation of the entire training "
                                "set after a training epoch.")
     training.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='sgd',
-                        help="Training optimizer.")
+                          help="Training optimizer.")
     training.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
-                        help="Fraction of the time to use teacher forcing for every timestep of the batch. Model trains"
-                             "fastest when this is 1.")
+                          help="Fraction of the time to use teacher forcing for every timestep of the batch. Model "
+                               "trains"
+                               "fastest when this is 1.")
     training.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
-                        help="Fraction of the time to use teacher forcing on a per-timestep basis.")
+                          help="Fraction of the time to use teacher forcing on a per-timestep basis.")
     training.add_argument("--skip_missing_res_train", type=bool, default=False,
-                        help="When training, skip over batches that have missing residues. This can make training"
-                             "faster if using teacher forcing.")
+                          help="When training, skip over batches that have missing residues. This can make training"
+                               "faster if using teacher forcing.")
     training.add_argument("--repeat_train", type=int, default=1,
-                        help="Duplicate the training set X times. Useful for training on small datasets.")
+                          help="Duplicate the training set X times. Useful for training on small datasets.")
     training.add_argument("-s", "--seed", type=int, default=11_731,
                           help="The random number generator seed for numpy "
                                "and torch.")
     training.add_argument("--combined_drmsd_weight", type=float, default=0.5,
-                                help="When combining losses, use weight w for loss = w * drmsd + (1-w) * mse.")
+                          help="When combining losses, use weight w for loss = w * drmsd + (1-w) * mse.")
     training.add_argument("--batching_order", type=str, choices=["descending", "ascending", "binned-random"],
                           default="binned-random", help="Method for constructuing minibatches of proteins w.r.t. "
                                                         "sequence length. Batches can be provided in descending/"
@@ -419,31 +466,36 @@ def main():
     training.add_argument('--sequential_drmsd_loss', action="store_true",
                           help="Compute DRMSD loss without batch-level parallelization.")
     training.add_argument("--bins", type=int, default=-1, help="Number of bins for protein dataset batching. ")
-    training.add_argument("--train_eval_downsample", type=float, default=0.3, help="Fraction of training set to "
+    training.add_argument("--train_eval_downsample", type=float, default=0.15, help="Fraction of training set to "
                                                                                    "evaluate on each epoch.")
+    training.add_argument("--automatically_determine_batch_size", "-adbs", type=bool, help="Experimentally determine"
+                                                                                           "the maximum allowable batch"
+                                                                                           "size for training.",
+                          default=True)
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
     model_args.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only", "enc-only-linear-out"],
-                        default="enc-only", help="Model architecture type. Encoder only or encoder/decoder model.")
+                            default="enc-only", help="Model architecture type. Encoder only or encoder/decoder model.")
     model_args.add_argument('-dm', '--d_model', type=int, default=512,
-                        help="Dimension of each sequence item in the model. Each layer uses the same dimension for "
-                             "simplicity.")
+                            help="Dimension of each sequence item in the model. Each layer uses the same dimension for "
+                                 "simplicity.")
     model_args.add_argument('-dih', '--d_inner_hid', type=int, default=2048,
-                        help="Dimmension of the inner layer of the feed-forward layer at the end of every Transformer"
-                             " block.")
+                            help="Dimmension of the inner layer of the feed-forward layer at the end of every "
+                                 "Transformer"
+                                 " block.")
     model_args.add_argument('-nh', '--n_head', type=int, default=8, help="Number of attention heads.")
     model_args.add_argument('-nl', '--n_layers', type=int, default=6,
-                        help="Number of layers in the model. If using encoder/decoder model, the encoder and decoder"
-                             " both have this number of layers.")
+                            help="Number of layers in the model. If using encoder/decoder model, the encoder and "
+                                 "decoder"
+                                 " both have this number of layers.")
     model_args.add_argument('-do', '--dropout', type=float, default=0.1, help="Dropout applied between layers.")
     model_args.add_argument('--postnorm', action='store_true',
-                        help="Use post-layer normalization, as depicted in the original figure for the Transformer "
-                             "model. May not train as well as pre-layer normalization.")
+                            help="Use post-layer normalization, as depicted in the original figure for the Transformer "
+                                 "model. May not train as well as pre-layer normalization.")
     model_args.add_argument("--angle_mean_path", type=str, default="./protein/casp12_200207_30_angle_means.npy",
-                        help="Path to vector of means for every predicted angle. Used to initialize model output.")
-    model_args.add_argument("--weight_decay", type=bool, default=True,  help="Applies weight decay to model weights.")
-
+                            help="Path to vector of means for every predicted angle. Used to initialize model output.")
+    model_args.add_argument("--weight_decay", type=bool, default=True, help="Applies weight decay to model weights.")
 
     # Saving args
     saving_args = parser.add_argument_group("Saving Args")
@@ -461,11 +513,47 @@ def main():
     saving_args.add_argument('--restart_opt', action='store_true',
                              help="Resumes training but does not load the optimizer state. ")
     saving_args.add_argument("--checkpoint_time_interval", type=float, default=0,
-                          help="The amount of time (in hours) after which a model checkpoint is made, "
-                               "regardless of its performance. ")
+                             help="The amount of time (in hours) after which a model checkpoint is made, "
+                                  "regardless of its performance. ")
     saving_args.add_argument('--load_chkpt', type=str, default=None,
-                        help="Path from which to load a model checkpoint.")
+                             help="Path from which to load a model checkpoint.")
+    return parser
+
+
+def determine_largest_batch_size(fraction_to_keep=0.9):
+    """
+    Repeatedly tries a few training batches until the system runs out of memory. Returns the largest batch size
+    found.
+    """
+    import subprocess
+    from math import ceil
+    b = 1
+    start = time.time()
+    completed_process = subprocess.run(args=["python", "../scripts/determine_largest_batchsize.py", *sys.argv[1:],
+                                             "--experimental_batch_size", str(b)], encoding="utf-8")
+    b = int(completed_process.returncode)
+    max_batch_size = ceil((b * fraction_to_keep))
+    print(f"Maximum batch size found to be {b}. Will proceed with {max_batch_size}. {int((time.time() - start)//60)}"
+          f" min elapsed.")
+    return max_batch_size
+
+def main():
+    """
+    Argument parsing, model loading, and model training.
+    """
+    global LOGFILEHEADER
+    global START_EPOCH
+    global START_TIME
+    global MISSING_COORD_FILLER
+
+    START_EPOCH = 0
+    START_TIME = time.time()
+    MISSING_COORD_FILLER = 0  # Used when teacher forcing with an encoder/decoder model
+
+    torch.set_printoptions(precision=5, sci_mode=False)
+
     # Parse args
+    parser = create_parser()
     args = parser.parse_args()
     args.cuda = not args.no_cuda
     assert "_" not in args.name, "Please do not use a '_' in your model name. " \
@@ -475,6 +563,9 @@ def main():
     args.add_sos_eos = args.model == "enc-dec"
     LOGFILEHEADER = prepare_log_header(args)
     args.bins = "auto" if args.bins == -1 else args.bins
+
+    if args.automatically_determine_batch_size:
+        args.batch_size = determine_largest_batch_size()
 
     # Prepare torch
     drmsd_worker_pool = init_worker_pool(args)
@@ -487,25 +578,7 @@ def main():
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
-    model = make_model(args, device).to(device)
-
-    # Prepare optimizer
-    wd = 10e-3 if args.weight_decay else 0
-    if args.optimizer == "adam":
-        optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                               betas=(0.9, 0.98), eps=1e-09, lr=args.learning_rate, weight_decay=wd)
-    elif args.optimizer == "sgd":
-        optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()),
-                              lr=args.learning_rate, weight_decay=wd)
-
-    # Prepare scheduler
-    if args.lr_scheduling == "noam":
-        optimizer = ScheduledOptim(optimizer, args.d_model, args.n_warmup_steps)
-        scheduler = None
-    else:
-        # Construct an LR scheduler with patience = 5 and a factor of 1/10
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience,
-                                                               verbose=True, threshold=args.early_stopping_threshold)
+    model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
 
     # Prepare Weights and Biases logging
     wandb_dir = "/scr/jok120/wandb" if args.cluster and os.path.isdir("/scr") else None
@@ -525,6 +598,7 @@ def main():
                          "n_trainable_params": n_trainable_params,
                          "max_seq_len": MAX_SEQ_LEN})
     wandb.run.summary["stopped_training_early"] = False
+    wandb.run.summary["Determined Batch Size"] = args.batch_size
     local_base_dir = wandb.run.dir
     args.structure_dir = os.path.join(local_base_dir, "structures")
     args.gltf_dir = f"../data/logs/structures/gltfs/{wandb.run.id}"
@@ -553,12 +627,11 @@ def main():
     wandb.save(os.path.join(local_base_dir, "checkpoints/*"))
     wandb.save(os.path.join(local_base_dir, "*.train"))
 
-
-
     print(args, "\n")
-    del data
 
-    # Begin training
+    # Start training
+    training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
+    del data
     train(model, metrics, training_data, training_eval_loader, validation_datasets, test_data, optimizer,
           device, args, log_writer, scheduler, drmsd_worker_pool)
     log_f.close()

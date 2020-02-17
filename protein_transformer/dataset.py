@@ -173,13 +173,15 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
     i.e. if downsample = 0.3, then about 30% of the dataset is used.
     """
 
-    def __init__(self, data_source, batch_size, dynamic_batch, optimize_batch_for_cpus, downsample=None):
+    def __init__(self, data_source, batch_size, dynamic_batch, optimize_batch_for_cpus, downsample=None,
+                 use_largest_bin=False):
         self.data_source = data_source
         self.batch_size = batch_size
         self.dynamic_batch = dynamic_batch
         self.optimize_batch_for_cpus = optimize_batch_for_cpus
         self.cpu_count = torch.multiprocessing.cpu_count()
         self.downsample = downsample
+        self.use_largest_bin = use_largest_bin
 
     def __len__(self):
         # If batches are dynamically sized to contain the same number of residues,
@@ -197,7 +199,10 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
         def batch_generator():
             i = 0
             while i < len(self):
-                bin = np.random.choice(range(len(self.data_source.hist_bins)), p=self.data_source.bin_probs)
+                if self.use_largest_bin:
+                    bin = len(self.data_source.hist_bins) - 1
+                else:
+                    bin = np.random.choice(range(len(self.data_source.hist_bins)), p=self.data_source.bin_probs)
                 if self.dynamic_batch:
                     # Make the batch size a multiple of the number of availble CPUs for fast drmsd loss computation
                     if self.optimize_batch_for_cpus:
@@ -207,13 +212,12 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
                         this_batch_size = max(1, int(self.dynamic_batch / self.data_source.hist_bins[bin]))
                 else:
                     this_batch_size = self.batch_size
-                wandb.log({"Batch size": this_batch_size}, commit=False)
                 yield np.random.choice(self.data_source.bin_map[bin], size=this_batch_size)
                 i += 1
         return batch_generator()
 
 
-def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
+def prepare_dataloaders(data, args, max_seq_len, num_workers=1, use_largest_bin=False):
     """
     Using the pre-processed data, stored in a nested Python dictionary, this
     function returns train, validation, and test set dataloaders with 2 workers
@@ -236,7 +240,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
                                                             args.batch_size,
                                                             dynamic_batch=args.batch_size * MAX_SEQ_LEN,
                                                             optimize_batch_for_cpus=args.loss in ["combined", "drmsd",
-                                                                                                  "ln-drmsd"]))
+                                                                                                  "ln-drmsd"],
+                                                            use_largest_bin=use_largest_bin))
     train_eval_loader = torch.utils.data.DataLoader(
                     train_dataset,
                     num_workers=num_workers,
