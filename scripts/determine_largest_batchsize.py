@@ -120,6 +120,8 @@ if __name__ == '__main__':
     assert "_" not in args.name, "Please do not use a '_' in your model name. " \
                                  "Conflicts with structure files."
     args.buffering_mode = 1
+    if not args.early_stopping_metric:
+        args.early_stopping_metric = f"train-{args.loss}"
     args.es_mode, args.es_metric = args.early_stopping_metric.split("-")
     args.add_sos_eos = args.model == "enc-dec"
     args.bins = "auto" if args.bins == -1 else args.bins

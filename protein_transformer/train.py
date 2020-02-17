@@ -399,7 +399,7 @@ def create_parser():
     training.add_argument('-esm', '--early_stopping_metric',
                           choices=[f"{mode}-{metric}" for metric in ["mse", "drmsd", "ln-drmsd", "combined"]
                                    for mode in ["train", "test"] + [f"valid-{split}" for split in VALID_SPLITS]],
-                          default="train-mse", help="Metric observed for early stopping and LR scheduling.")
+                          default=None, help="Metric observed for early stopping and LR scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
                           help="Do not initialize the model with pre-computed angle means.")
     training.add_argument('--eval_train', type=bool, default=False,
@@ -529,6 +529,9 @@ def main():
     assert "_" not in args.name, "Please do not use a '_' in your model name. " \
                                  "Conflicts with structure files."
     args.buffering_mode = 1
+    # TODO modify early_stopping_metric to follow validation loss
+    if not args.early_stopping_metric:
+        args.early_stopping_metric = f"train-{args.loss}"
     args.es_mode, args.es_metric = args.early_stopping_metric.split("-")
     args.add_sos_eos = args.model == "enc-dec"
     LOGFILEHEADER = prepare_log_header(args)
