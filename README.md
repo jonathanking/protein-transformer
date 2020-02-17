@@ -40,7 +40,7 @@ This script takes as arguments a plethora of different architecture and training
 
 #### Example:
 ```
-python train.py data/proteinnet/casp12.pt model01 -lr -0.01 -e 30 -b 12 -cl -cg 1 -dm 50 
+python train.py --data data/proteinnet/casp12.pt --name model01 -lr -0.01 -e 30 -b 12 -m enc-only -dm 256 -l drmsd 
 ```
 
 #### Usage:
@@ -59,7 +59,8 @@ usage: train.py [-h] [--data DATA] [--name NAME] [-lr LEARNING_RATE]
                 [--repeat_train REPEAT_TRAIN] [-s SEED]
                 [--combined_drmsd_weight COMBINED_DRMSD_WEIGHT]
                 [--batching_order {descending,ascending,binned-random}]
-                [--backbone_loss] [--sequential_drmsd_loss]
+                [--backbone_loss] [--sequential_drmsd_loss] [--bins BINS]
+                [--train_eval_downsample TRAIN_EVAL_DOWNSAMPLE]
                 [-m {enc-dec,enc-only,enc-only-linear-out}] [-dm D_MODEL]
                 [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT]
                 [--postnorm] [--angle_mean_path ANGLE_MEAN_PATH]
@@ -147,6 +148,9 @@ Training Args:
   --sequential_drmsd_loss
                         Compute DRMSD loss without batch-level
                         parallelization.
+  --bins BINS           Number of bins for protein dataset batching.
+  --train_eval_downsample TRAIN_EVAL_DOWNSAMPLE
+                        Fraction of training set to evaluate on each epoch.
 
 Model Args:
   -m {enc-dec,enc-only,enc-only-linear-out}, --model {enc-dec,enc-only,enc-only-linear-out}
@@ -198,7 +202,7 @@ Saving Args:
 
 ```
 
-## Notes on Training Data
+## Training Data
 
 The training data is based on Mohammed AlQuraishi's [ProteinNet](https://github.com/aqlaboratory/proteinnet). Preprocessed  data from the CASP12 competition that has been modified to work with this project can be downloaded [here (13GB)](https://pitt.box.com/s/tmcav6x5am54lqbe11d96ceqgd7q42hw) and [here (~3GB, a 30% thinning of the previous dataset)](https://pitt.box.com/s/xjigkqj4i02dx74ults12x3adu04utam). 
 
@@ -218,6 +222,8 @@ data = {"train": {"seq": [seq1, seq2, ...],
         }
 ```
 
+## Other information
+Please visit my [Project Notes](docs/ProjectNotes.md) for more information.
 
 ### Copyright
 

@@ -168,21 +168,29 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
 
     When optimize_batch_for_cpus is True, the sampler will always yield batches
     that are a multiple of the number of available CPUs.
+
+    When downsample is a float, the dataset is effectively downsampled by that fraction.
+    i.e. if downsample = 0.3, then about 30% of the dataset is used.
     """
 
-    def __init__(self, data_source, batch_size, dynamic_batch, optimize_batch_for_cpus):
+    def __init__(self, data_source, batch_size, dynamic_batch, optimize_batch_for_cpus, downsample=None):
         self.data_source = data_source
         self.batch_size = batch_size
         self.dynamic_batch = dynamic_batch
         self.optimize_batch_for_cpus = optimize_batch_for_cpus
         self.cpu_count = torch.multiprocessing.cpu_count()
+        self.downsample = downsample
 
     def __len__(self):
         # If batches are dynamically sized to contain the same number of residues,
         # then the approximate number of batches is the total number of residues in the dataset
         # divided by the size of the dynamic batch.
+
         if self.dynamic_batch:
-            return int(np.ceil(sum(self.data_source.lens) / self.dynamic_batch))
+            lens_sum = sum(self.data_source.lens)
+            if self.downsample:
+                lens_sum *=  self.downsample
+            return int(np.ceil(lens_sum / self.dynamic_batch))
         return int(np.ceil(len(self.data_source) / self.batch_size))
 
     def __iter__(self):
@@ -194,9 +202,9 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
                     # Make the batch size a multiple of the number of availble CPUs for fast drmsd loss computation
                     if self.optimize_batch_for_cpus:
                         largest_possible = int(self.dynamic_batch / self.data_source.hist_bins[bin])
-                        this_batch_size = largest_possible - (largest_possible % self.cpu_count)
+                        this_batch_size = max(1, largest_possible - (largest_possible % self.cpu_count))
                     else:
-                        this_batch_size = int(self.dynamic_batch / self.data_source.hist_bins[bin])
+                        this_batch_size = max(1, int(self.dynamic_batch / self.data_source.hist_bins[bin]))
                 else:
                     this_batch_size = self.batch_size
                 wandb.log({"Batch size": this_batch_size}, commit=False)
@@ -227,11 +235,18 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
                     batch_sampler=SimilarLengthBatchSampler(train_dataset,
                                                             args.batch_size,
                                                             dynamic_batch=args.batch_size * MAX_SEQ_LEN,
-                                                            optimize_batch_for_cpus=args.loss in ["combined", "drmsd", "ln-drmsd"]))
+                                                            optimize_batch_for_cpus=args.loss in ["combined", "drmsd",
+                                                                                                  "ln-drmsd"]))
     train_eval_loader = torch.utils.data.DataLoader(
-                        train_dataset,
-                        collate_fn=paired_collate_fn,
-                        batch_size=args.batch_size)
+                    train_dataset,
+                    num_workers=num_workers,
+                    collate_fn=paired_collate_fn,
+                    batch_sampler=SimilarLengthBatchSampler(train_dataset,
+                                                            args.batch_size,
+                                                            dynamic_batch=args.batch_size * MAX_SEQ_LEN,
+                                                            optimize_batch_for_cpus=args.loss in ["combined", "drmsd",
+                                                                                                  "ln-drmsd"],
+                                                            downsample=args.train_eval_downsample))
 
     valid_loaders = {}
     for split in VALID_SPLITS:

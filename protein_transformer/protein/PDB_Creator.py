@@ -63,24 +63,7 @@ class PDB_Creator(object):
                          "charge": ""}
         assert self.coords.shape[0] % self.atoms_per_res == 0, f"Coords is not divisible by {atoms_per_res}. " \
                                                                f"{self.coords.shape}"
-        self.peptide_bond_full = np.asarray([[0.519, -2.968, 1.340],  # CA
-                                             [2.029, -2.951, 1.374],  # C
-                                             [2.654, -2.667, 2.392],  # O
-                                             [2.682, -3.244, 0.300]])  # next-N
-        self.peptide_bond_mobile = np.asarray([[0.519, -2.968, 1.340],  # CA
-                                               [2.029, -2.951, 1.374],  # C
-                                               [2.682, -3.244, 0.300]])  # next-N
 
-    def _get_oxy_coords(self, ca, c, n):
-        """
-        Given atomic coordinates for an alpha carbon, carbonyl carbon, and the
-        following nitrogen, this function aligns a peptide bond to those
-        atoms and returns the coordinates of the corresponding oxygen.
-        """
-        target_coords = np.array([ca, c, n])
-        t = calcTransformation(self.peptide_bond_mobile, target_coords)
-        aligned_peptide_bond = t.apply(self.peptide_bond_full)
-        return aligned_peptide_bond[2]
 
     def _coord_generator(self):
         """
@@ -88,16 +71,7 @@ class PDB_Creator(object):
         """
         coord_idx = 0
         while coord_idx < self.coords.shape[0]:
-            if coord_idx + self.atoms_per_res + 1 < self.coords.shape[0]:
-                next_n = self.coords[coord_idx + self.atoms_per_res + 1]
-            else:
-                n, ca, c = [self.coords[coord_idx + i: coord_idx + i + 1][0] for i in range(3)]
-                l = BB_BUILD_INFO["BONDLENS"]["c-n"]
-                theta = BB_BUILD_INFO["BONDANGS"]["ca-c-n"]
-                chi = BB_BUILD_INFO["BONDTORSIONS"]["n-ca-c-n"]
-                nerf_args = (map(torch.tensor, [n, ca, c, l, theta, chi]))
-                next_n = nerf(*nerf_args).numpy()
-            yield self.coords[coord_idx:coord_idx + self.atoms_per_res], next_n
+            yield self.coords[coord_idx:coord_idx + self.atoms_per_res]
             coord_idx += self.atoms_per_res
 
     def _get_line_for_atom(self, res_name, atom_name, atom_coords, missing=False):
@@ -130,7 +104,7 @@ class PDB_Creator(object):
                                       atom_name[0],
                                       self.defaults["charge"])
 
-    def _get_lines_for_residue(self, res_name, atom_names, coords, next_n):
+    def _get_lines_for_residue(self, res_name, atom_names, coords):
         """
         Returns PDB-formated lines for all atoms in this residue. Calls
         get_line_for_atom.
@@ -147,13 +121,6 @@ class PDB_Creator(object):
             #     continue
             residue_lines.append(self._get_line_for_atom(res_name, atom_name, atom_coord))
             self.atom_nbr += 1
-        if len(residue_lines) > 0:
-            try:
-                oxy_coords = self._get_oxy_coords(coords[1], coords[2], next_n)
-                residue_lines.append(self._get_line_for_atom(res_name, "O", oxy_coords))
-                self.atom_nbr += 1
-            except ValueError as e:
-                raise e
         return residue_lines
 
     def _get_lines_for_protein(self):
@@ -165,8 +132,8 @@ class PDB_Creator(object):
         self.res_nbr = 1
         self.atom_nbr = 1
         mapping_coords = zip(self.mapping, self._coord_generator())
-        for (res_name, atom_names), (res_coords, next_n) in mapping_coords:
-            self.lines.extend(self._get_lines_for_residue(res_name, atom_names, res_coords, next_n))
+        for (res_name, atom_names), res_coords in mapping_coords:
+            self.lines.extend(self._get_lines_for_residue(res_name, atom_names, res_coords))
             self.res_nbr += 1
         return self.lines
 
@@ -191,7 +158,7 @@ class PDB_Creator(object):
         """
         mapping = []
         for residue in self.seq:
-            mapping.append((residue, ATOM_MAP_13[residue]))
+            mapping.append((residue, ATOM_MAP_14[residue]))
         return mapping
 
     def save_pdb(self, path, title="test"):
@@ -244,11 +211,17 @@ class PDB_Creator(object):
         """
         return "".join([m[0] for m in self.mapping])
 
+if NUM_PREDICTED_COORDS == 13:
+    ATOM_MAP_13 = {}
+    for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
+        ATOM_MAP_13[one_letter] = ["N", "CA", "C"] + list(SC_BUILD_INFO[ONE_TO_THREE_LETTER_MAP[one_letter]]["atom-names"])
+        ATOM_MAP_13[one_letter].extend(["PAD"] * (13 - len(ATOM_MAP_13[one_letter])))
 
-ATOM_MAP_13 = {}
-for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
-    ATOM_MAP_13[one_letter] = ["N", "CA", "C"] + list(SC_BUILD_INFO[ONE_TO_THREE_LETTER_MAP[one_letter]]["atom-names"])
-    ATOM_MAP_13[one_letter].extend(["PAD"] * (13 - len(ATOM_MAP_13[one_letter])))
+if NUM_PREDICTED_COORDS == 14:
+    ATOM_MAP_14 = {}
+    for one_letter in ONE_TO_THREE_LETTER_MAP.keys():
+        ATOM_MAP_14[one_letter] = ["N", "CA", "C", "O"] + list(SC_BUILD_INFO[ONE_TO_THREE_LETTER_MAP[one_letter]]["atom-names"])
+        ATOM_MAP_14[one_letter].extend(["PAD"] * (14 - len(ATOM_MAP_14[one_letter])))
 
 def generate_pdbs_from_debug_dataset():
     import torch
@@ -328,12 +301,12 @@ if __name__ == "__main__":
     # make_debug_structure_dataset()
     # generate_pdbs_from_debug_dataset()
 
-    d = torch.load("/home/jok120/protein-transformer/data/proteinnet/casp12_200207_30.pt")
-    seq = d["train"]["seq"][5000]
-    ang = d["train"]["ang"][5000]
-    ang = inverse_trig_transform(torch.tensor(ang, dtype=torch.float32))
+    d = torch.load("/home/jok120/protein-transformer/data/proteinnet/casp12_200216_30.pt")
+    seq = d["train"]["seq"][10]
+    ang = d["train"]["ang"][10]
+    ang = inverse_trig_transform(torch.tensor(ang, dtype=torch.float32))[:,0,:]
     sb = StructureBuilder(seq, ang)
-    sb.to_pdb("200210.pdb")
+    sb.to_pdb("200210b.pdb")
 
 
 

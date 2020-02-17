@@ -234,7 +234,8 @@ def train(model, metrics, training_data, train_eval_loader, validation_datasets,
 
         # Train epoch
         start = time.time()
-        metrics = train_epoch(model, training_data, validation_datasets, optimizer, device, args, log_writer, metrics, pool=drmsd_worker_pool)
+        metrics = train_epoch(model, training_data, validation_datasets, optimizer, device, args, log_writer, metrics,
+                              pool=drmsd_worker_pool)
         if args.eval_train:
            metrics = eval_epoch(model, train_eval_loader, device, args, metrics, mode="train", pool=drmsd_worker_pool)
         print_end_of_epoch_status("train", (start, metrics))
@@ -244,7 +245,8 @@ def train(model, metrics, training_data, train_eval_loader, validation_datasets,
         if not args.train_only:
             for split, validation_data in validation_datasets.items():
                 start = time.time()
-                metrics = eval_epoch(model, validation_data, device, args, metrics, pool=drmsd_worker_pool, mode=f"valid-{split}")
+                metrics = eval_epoch(model, validation_data, device, args, metrics, pool=drmsd_worker_pool,
+                                     mode=f"valid-{split}")
                 print_end_of_epoch_status(f"valid-{split}", (start, metrics))
                 log_batch(log_writer, metrics, START_TIME, mode=f"valid-{split}", end_of_epoch=True)
             log_avg_validation_performance(metrics, validation_datasets)
@@ -469,7 +471,7 @@ def main():
 
     START_EPOCH = 0
     START_TIME = time.time()
-    MISSING_COORD_FILLER = 0
+    MISSING_COORD_FILLER = 0  # Used when teacher forcing with an encoder/decoder model
 
     torch.set_printoptions(precision=5, sci_mode=False)
     parser = argparse.ArgumentParser()
@@ -497,15 +499,16 @@ def main():
     training.add_argument('--train_only', action='store_true',
                         help="Train, validation, and testing sets are the same. Only report train accuracy.")
     training.add_argument('--lr_scheduling', type=str, choices=['noam', 'plateau'], default='plateau',
-                        help='noam: Use learning rate scheduling as described in Transformer paper, plateau: Decrease learning rate after Validation loss plateaus.')
+                        help='noam: Use learning rate scheduling as described in Transformer paper, plateau: Decrease '
+                             'learning rate after Validation loss plateaus.')
     training.add_argument('--patience', type=int, default=10,
                           help="Number of epochs to wait before reducing LR for plateau scheduler.")
-    training.add_argument('--early_stopping_threshold', type=float, default=0.0001,
+    training.add_argument('--early_stopping_threshold', type=float, default=0.001,
                           help="Threshold for considering improvements during training/lr scheduling.")
     training.add_argument('-esm', '--early_stopping_metric',
                           choices=[f"{mode}-{metric}" for metric in ["mse", "drmsd", "ln-drmsd", "combined"]
-                                   for mode in ["train", "test"] + [f"valid-{split}" for split in VALID_SPLITS]], default="train-mse",
-                          help="Metric observed for early stopping and LR scheduling.")
+                                   for mode in ["train", "test"] + [f"valid-{split}" for split in VALID_SPLITS]],
+                          default="train-mse", help="Metric observed for early stopping and LR scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
                         help="Do not initialize the model with pre-computed angle means.")
     training.add_argument('--eval_train', type=bool, default=False,
@@ -520,7 +523,7 @@ def main():
                              "fastest when this is 1.")
     training.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
                         help="Fraction of the time to use teacher forcing on a per-timestep basis.")
-    training.add_argument("--skip_missing_res_train", type=bool, default=True,
+    training.add_argument("--skip_missing_res_train", type=bool, default=False,
                         help="When training, skip over batches that have missing residues. This can make training"
                              "faster if using teacher forcing.")
     training.add_argument("--repeat_train", type=int, default=1,
@@ -540,6 +543,8 @@ def main():
     training.add_argument('--sequential_drmsd_loss', action="store_true",
                           help="Compute DRMSD loss without batch-level parallelization.")
     training.add_argument("--bins", type=int, default=-1, help="Number of bins for protein dataset batching. ")
+    training.add_argument("--train_eval_downsample", type=float, default=0.3, help="Fraction of training set to "
+                                                                                   "evaluate on each epoch.")
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
