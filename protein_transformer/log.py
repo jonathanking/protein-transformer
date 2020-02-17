@@ -182,7 +182,7 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
                 pred_coords = angles_to_coords(inverse_trig_transform(val_pred_angs)[0].cpu(), val_src_seq[0].cpu(),
                     remove_batch_padding=True)
                 log_structure_and_angs(args, val_pred_angs[0], pred_coords, val_tgt_crds[0], val_src_seq[0],
-                                       commit=False, log_angs=False, struct_name=f"V{split}[{val_idx}]")
+                                       commit=False, log_angs=False, struct_name=f"V{split}")
 
     if do_log_str:
         with torch.no_grad():
