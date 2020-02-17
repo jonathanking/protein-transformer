@@ -13,12 +13,12 @@ cleared when the process completes, leaving a completely free GPU available for 
 
 from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
 from protein_transformer.train import create_parser, setup_model_optimizer_scheduler, get_losses
-
+import torch
 
 def test_batch_size(args):
     """ Increases the batch size by one, stopping with the system runs out of memory. """
-    import torch
     # Load dataset
+    import torch
     data = torch.load(args.data)
 
     args.max_token_seq_len = data['settings']["max_len"]
