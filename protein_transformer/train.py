@@ -67,7 +67,7 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True, do_b
 
     if args.loss in ["ln-drmsd", "drmsd", "combined"] or eval_mode:
         ls = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=do_backwards,
-                                 retain_graph=False, pool=pool,
+                                 retain_graph=args.loss == "combined", pool=pool,
                                  backbone_only=args.backbone_loss,
                                  return_rmsd=return_rmsd)
         if return_rmsd:
