@@ -100,7 +100,7 @@ def first_train_epoch(model, training_data, optimizer, device, args, pool=None):
         src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
         print(f"({src_seq.shape[0]})", end="")
         pred = model(src_seq, tgt_ang)
-        loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool, log=False)
+        _ = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool, log=False)
 
         # Clip gradients
         if args.clip:

@@ -341,6 +341,7 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
                          f"{cur_struct_path}/{wandb.run.step:05}_pred.pdb",
                          gltf_out_path=gltf_out_path,
                          make_pse=True,
+                         make_png=args.save_pngs,
                          pse_out_path=f"{cur_struct_path}/{wandb.run.step:05}_both.pse")
 
     wandb.log({struct_name: wandb.Object3D(gltf_out_path),

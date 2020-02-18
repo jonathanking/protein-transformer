@@ -372,6 +372,8 @@ def setup_model_optimizer_scheduler(args, device, angle_means):
 
 
 def create_parser():
+    def my_bool(s):
+        return s != 'False'
     parser = argparse.ArgumentParser()
 
     # Required args
@@ -411,11 +413,8 @@ def create_parser():
                           default=None, help="Metric observed for early stopping and LR scheduling.")
     training.add_argument('--without_angle_means', action='store_true',
                           help="Do not initialize the model with pre-computed angle means.")
-    training.add_argument('--eval_train', type=bool, default=False,
+    training.add_argument('--eval_train', type=my_bool, default="False",
                           help="Perform an evaluation of the entire training set after a training epoch.")
-    training.add_argument('--eval_train_drmsd', type=bool, default=True,
-                          help="Perform an evaluation of the entire training "
-                               "set after a training epoch.")
     training.add_argument('-opt', '--optimizer', type=str, choices=['adam', 'sgd'], default='sgd',
                           help="Training optimizer.")
     training.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
@@ -424,7 +423,7 @@ def create_parser():
                                "fastest when this is 1.")
     training.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
                           help="Fraction of the time to use teacher forcing on a per-timestep basis.")
-    training.add_argument("--skip_missing_res_train", type=bool, default=False,
+    training.add_argument("--skip_missing_res_train", type=my_bool, default="False",
                           help="When training, skip over batches that have missing residues. This can make training"
                                "faster if using teacher forcing.")
     training.add_argument("--repeat_train", type=int, default=1,
@@ -446,10 +445,10 @@ def create_parser():
     training.add_argument("--bins", type=int, default=-1, help="Number of bins for protein dataset batching. ")
     training.add_argument("--train_eval_downsample", type=float, default=0.10, help="Fraction of training set to "
                                                                                    "evaluate on each epoch.")
-    training.add_argument("--automatically_determine_batch_size", "-adbs", type=bool, help="Experimentally determine"
+    training.add_argument("--automatically_determine_batch_size", "-adbs", type=my_bool, help="Experimentally determine"
                                                                                            "the maximum allowable batch"
                                                                                            "size for training.",
-                          default=False)
+                          default="False")
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
@@ -471,7 +470,7 @@ def create_parser():
     model_args.add_argument('--postnorm', action='store_true',
                             help="Use post-layer normalization, as depicted in the original figure for the Transformer "
                                  "model. May not train as well as pre-layer normalization.")
-    model_args.add_argument("--weight_decay", type=bool, default=True, help="Applies weight decay to model weights.")
+    model_args.add_argument("--weight_decay", type=my_bool, default="True", help="Applies weight decay to model weights.")
 
     # Saving args
     saving_args = parser.add_argument_group("Saving Args")
@@ -481,8 +480,9 @@ def create_parser():
                              help="During training, make predictions on 1 structure from every validation set.")
     saving_args.add_argument('--log_wandb_step', type=int, default=1,
                              help="Frequency of logging to wandb during training.")
+    saving_args.add_argument("--save_pngs", "-png", type=my_bool, default="True", help="Save images when making structures.")
     saving_args.add_argument('--no_cuda', action='store_true')
-    saving_args.add_argument('-c', '--cluster', type=bool, default=False,
+    saving_args.add_argument('-c', '--cluster', type=my_bool, default="False",
                              help="Set of parameters to facilitate training on a remote" +
                                   " cluster. Limited I/O, etc.")
     saving_args.add_argument('--restart', action='store_true', help="Does not resume training.")

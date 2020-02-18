@@ -183,7 +183,7 @@ class PDB_Creator(object):
         pymol.cmd.save(path, quiet=True)
         pymol.cmd.delete("all")
 
-    def save_gltfs(self, path1, path2, gltf_out_path, make_pse=False, pse_out_path=""):
+    def save_gltfs(self, path1, path2, gltf_out_path, make_pse=False, pse_out_path="", make_png=False):
         """
         This function first creates a PDB file, then converts it to a GLTF
         (3D Object) file. Used for visualizign with Weights and Biases. """
@@ -199,6 +199,7 @@ class PDB_Creator(object):
         if make_pse:
             pymol.cmd.show("lines")
             pymol.cmd.save(pse_out_path, quiet=True)
+        if make_png:
             pymol.cmd.png(gltf_out_path.replace("gltf", "png"), width=400, ray=0)
 
 
