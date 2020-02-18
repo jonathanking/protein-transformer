@@ -8,13 +8,15 @@ from protein_transformer.losses import *
 np. set_printoptions(precision=None, suppress=True)
 
 
-@pytest.mark.parametrize("drmsd, mse, w, expected",[
-    (0.01, 0.3, 0.5, 1),
-    (0.01, 0.6, 0, 2),
-    (0.02, 0.3, 1, 2)
+@pytest.mark.parametrize("drmsd, mse, w, lnorm, mnorm, expected",[
+    (0.01, 0.3, 0.5, 1, 1, 0.155),
+    (0.01, 0.6, 0, 1, 1, .6),
+    (0.02, 0.3, 1, 1, 1, 0.02),
+    (0.02, 0.3, 1, 0.02, 1, 1)
 ])
-def test_combine_drmsd_mse(drmsd, mse, w, expected):
-    assert combine_drmsd_mse(drmsd, mse, w) == expected
+def test_combine_drmsd_mse(drmsd, mse, w, lnorm, mnorm, expected):
+    """ Assert that drmsd and mse are combined correctly. """
+    assert combine_drmsd_mse(drmsd, mse, w, lnorm, mnorm, log=False) == expected
 
 def test_inverse_trig_transform():
     pass
@@ -96,6 +98,7 @@ def test_pairwise_internal_dist():
     print(pwd_result.shape)
     assert pytest.approx(pairwise_internal_dist(a)[0].numpy()) == distances
 
+
 def test_pairwise_internal_dist2():
     a = np.asarray([[0], [1], [2]])
     a = torch.tensor(a, dtype=torch.float32)
@@ -111,15 +114,10 @@ def test_mse_over_angles():
     pass
 
 
-
-
-
-
 def test_mse_loss2():
     a = np.zeros((8,10,24))
     b = a - .1
     assert mse_over_angles_numpy(a, b) == approx(0.01)
-
 
 
 def test_pairwise_internal_dist():
@@ -159,7 +157,6 @@ def test_drmsd_zero():
                     [0, 0, 0]])
     a = torch.tensor(a, dtype=torch.float)
     assert drmsd(a, a) == 0
-    assert drmsd(a, a, truncate_dist_matrix=False) == 0
 
 
 def test_drmsd_permutation():
@@ -175,54 +172,6 @@ def test_drmsd_permutation():
     a = torch.tensor(a, dtype=torch.float)
     b = torch.tensor(b, dtype=torch.float)
     assert drmsd(a, b) != 0
-    assert drmsd(a, b, truncate_dist_matrix=False) != 0
-
-
-@pytest.mark.parametrize(
-    "a,b",
-     [
-         (np.array([[0.  , 2.8 , 2.95],
-                    [2.45, 3.35, 4.4 ],
-                    [4.3 , 2.  , 0.55],
-                    [0.9 , 3.75, 2.05],
-                    [0.35, 3.  , 1.25]]),
-          np.array([[0.75, 4.5, 1.5],
-                    [2.85, 4.85, 0.9],
-                    [4.65, 1.7, 0.65],
-                    [1.55, 1.5, 1.15],
-                    [4.4, 1.15, 3.2]])
-          ),
-         (np.array([[ 6.1,  0.2,  6.4],
-                    [ 2.2,  4.6, -1.7],
-                    [ 4.5,  2.6,  3.1],
-                    [ 1.1, -0.3,  2.3],
-                    [-0.2,  7.3,  3.6]]),
-          np.array([[-1.1,  2.5,  6.1],
-                    [ 7.4, -1.6,  6.4],
-                    [ 1.3,  1.2,  1.7],
-                    [-0.7,  1.7,  6. ],
-                    [-0.4,  4.2,  2.9]])
-          )
-     ]
-)
-def test_drmsd_value_symmetric_distances(a, b):
-    """
-    Tests that DRMSD works when the symmetric distance matrix is not truncated.
-    """
-    a_dists = []
-    for c1 in a:
-        for c2 in a:
-            a_dists.append(np.linalg.norm(c1-c2))
-    b_dists = []
-    for c1 in b:
-        for c2 in b:
-            b_dists.append(np.linalg.norm(c1 - c2))
-    a_dists, b_dists = np.asarray(a_dists), np.asarray(b_dists)
-
-    mse = ((a_dists - b_dists) ** 2).mean()
-    expected_drmsd = np.sqrt(mse)
-
-    assert drmsd(torch.tensor(a), torch.tensor(b), truncate_dist_matrix=False).item() == approx(expected_drmsd)
 
 
 @pytest.mark.parametrize(
@@ -277,5 +226,4 @@ def test_drmsd_value_nonsymmetric_distances(a, b):
     mse = ((a_dists - b_dists)**2).mean()
     expected_drmsd = np.sqrt(mse)
 
-    assert drmsd(torch.tensor(a), torch.tensor(b),
-                 truncate_dist_matrix=True).item() == approx(expected_drmsd)
+    assert drmsd(torch.tensor(a), torch.tensor(b)).item() == approx(expected_drmsd)

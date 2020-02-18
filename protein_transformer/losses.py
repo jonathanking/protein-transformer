@@ -14,13 +14,13 @@ from .protein.structure_utils import get_backbone_from_full_coords
 LNDRMSD_TARGET_VAL = 0.02
 MSE_TARGET_VAL = 0.01
 
-def combine_drmsd_mse(d, mse, w=.5, log=True):
+def combine_drmsd_mse(d, mse, w=.5, lndrmsd_norm=0.02, mse_norm=0.01, log=True):
     """
     Returns a combination of drmsd and mse loss that first normalizes their
     zscales, and then computes w * drmsd + (1 - w) * mse.
     """
-    d = w * (d / LNDRMSD_TARGET_VAL)
-    mse = (1 - w) * (mse / MSE_TARGET_VAL)
+    d = w * (d / lndrmsd_norm)
+    mse = (1 - w) * (mse / mse_norm)
     if log: wandb.log({"MSE Weight": mse, "DRMSD Weight": d}, commit=False)
     return d + mse
 
@@ -222,7 +222,7 @@ def pairwise_internal_dist(x):
     return res
 
 
-def drmsd(a, b, truncate_dist_matrix=True):
+def drmsd(a, b):
     """ Returns distance root-mean-squared-deviation between tensors a and b.
 
     Given 2 coordinate tensors, returns the dRMSD between them. Both
@@ -230,8 +230,6 @@ def drmsd(a, b, truncate_dist_matrix=True):
 
     Args:
         a, b (torch.Tensor): coordinate tensor with shape (L x 3).
-        truncate_dist_matrix (bool): If False, only count each interatomic
-            distance once.
 
     Returns:
         res (torch.Tensor): DRMSD between a and b.
@@ -240,15 +238,9 @@ def drmsd(a, b, truncate_dist_matrix=True):
     a_ = pairwise_internal_dist(a)
     b_ = pairwise_internal_dist(b)
 
-    if truncate_dist_matrix:
-        i = torch.triu_indices(a_.shape[0], a_.shape[1], offset=1)
-        mse = torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float())
-        res = torch.sqrt(mse)
-    else:
-        # TODO remove this option for distance matrix norm
-        mse = torch.nn.functional.mse_loss(a_.float(),
-                                           b_.float())
-        res = torch.sqrt(mse)
+    i = torch.triu_indices(a_.shape[0], a_.shape[1], offset=1)
+    mse = torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float())
+    res = torch.sqrt(mse)
 
     return res
 
