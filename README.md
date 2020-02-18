@@ -227,18 +227,18 @@ data = {"train": {"seq": [seq1, seq2, ...],
 ```
 
 ## Other information
-Please visit my [Project Notes](docs/ProjectNotes.md) for more information.
+Please visit my [Project Notes](docs/ProjectNotes.md) for more project details.
+
+
+### Acknowledgements
+
+This repository was originally a fork from [https://github.com/jadore801120/attention-is-all-you-need-pytorch](https://github.com/jadore801120/attention-is-all-you-need-pytorch), but since then has been extensively rewritten to match the needs of this specific project as I have become more comfortable with Pytorch, Transformers, and the like. Many thanks for [jadore801120](https://github.com/jadore801120/) for the framework.
+
+I, Jonathan King, am a predoctoral trainee supported by NIH T32 training grant T32 EB009403 as part of the HHMI-NIBIB Interfaces Initiative.
+ 
+Project structure (continuous integration, docs, testing) based on the 
+[Computational Molecular Science Python Cookiecutter](https://github.com/molssi/cookiecutter-cms) version 1.1.
 
 ### Copyright
 
 Copyright (c) 2020, Jonathan King
-
-
-#### Acknowledgements
-
-This repository was originally a fork from [https://github.com/jadore801120/attention-is-all-you-need-pytorch](https://github.com/jadore801120/attention-is-all-you-need-pytorch), but since then has been extensively rewritten to match the needs of this specific project as I have become more comfortable with Pytorch, Transformers, and the like. Many thanks for [jadore801120](https://github.com/jadore801120/) for the framework.
-
-Jonathan King is predoctoral trainee supported by NIH T32 training grant T32 EB009403 as part of the HHMI-NIBIB Interfaces Initiative.
- 
-Project structure (continuous integration, docs, testing) based on the 
-[Computational Molecular Science Python Cookiecutter](https://github.com/molssi/cookiecutter-cms) version 1.1.
