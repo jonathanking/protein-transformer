@@ -21,6 +21,7 @@ def test_batch_size(args):
     import torch
     data = torch.load(args.data)
     pool = init_worker_pool(args)
+    angle_means = data["settings"]["angle_means"]
 
     def add_incrementer(n):
         return n + 1
@@ -38,7 +39,7 @@ def test_batch_size(args):
                 # Prepare model
                 import torch
                 device = torch.device('cuda' if args.cuda else 'cpu')
-                model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
+                model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device, angle_means)
 
                 train_dataset = BinnedProteinDataset(
                     seqs=data['train']['seq'] * args.repeat_train,
