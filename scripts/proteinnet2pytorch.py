@@ -285,7 +285,8 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
 def compute_angle_means(data):
     """ Computes and retuns the mean of the training data angle matrices. """
     train_angles_sincos = np.concatenate(data["train"]["ang"])
-    return np.nanmean(train_angles_sincos, axis=0)
+    means = np.nanmean(train_angles_sincos, axis=0)
+    return means
 
 
 def bin_sequence_data(seqs, maxlen):
@@ -382,6 +383,7 @@ def save_data_dict(data):
 
 
 def main():
+    lim = args.limit
     global PN_TRAIN_DICT, PN_VALID_DICT, PN_TEST_DICT
     train_pdb_ids, valid_ids, test_casp_ids = proteinnet_parsing.parse_raw_proteinnet(args.input_dir, TRAIN_FILE)
     print("IDs fetched.")
@@ -391,17 +393,20 @@ def main():
         os.path.join(args.input_dir, "torch", "testing.pt"))
     print(len(train_pdb_ids), len(valid_ids), len(test_casp_ids))
     # Download and preprocess all data from PDB IDs
-    lim = 100
     with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
         train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim]), dynamic_ncols=True))
+    if lim:
+        vlim = 1
+    else:
+        vlim = None
     valid_result_meta = {}
     for split, vids in group_validation_set(valid_ids).items():
         valid_result_meta[split] = []
-        for vid in tqdm.tqdm(vids, dynamic_ncols=True):
+        for vid in tqdm.tqdm(vids[:vlim], dynamic_ncols=True):
             valid_result_meta[split].append(work(vid))
 
     test_results = []
-    for tid in tqdm.tqdm(test_casp_ids, dynamic_ncols=True):
+    for tid in tqdm.tqdm(test_casp_ids[:vlim], dynamic_ncols=True):
         test_results.append(work(tid))
 
     print("Structures processed.")
@@ -488,6 +493,7 @@ if __name__ == "__main__":
                     "atom protein structure prediction.")
     parser.add_argument('input_dir', type=str, help='Path to ProteinNet raw records directory.')
     parser.add_argument('-o', '--out_file', type=str, help='Path to output file (.tch file)')
+    parser.add_argument('-l', '--limit', type=int, default=None, help='Limit size of training set for debugging.')
     parser.add_argument("--pdb_dir", default=os.path.expanduser("~/pdb/"), type=str,
                         help="Path for ProDy-downloaded PDB files.")
     parser.add_argument('--training_set', type=int, default=100, help='Which thinning of the training set to parse. '
