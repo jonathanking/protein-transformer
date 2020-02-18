@@ -6,7 +6,7 @@ from protein_transformer.protein.Sequence import VOCAB
 from protein_transformer.protein.SidechainBuildInfo import SC_BUILD_INFO, \
     BB_BUILD_INFO
 from protein_transformer.protein.Structure import nerf, NUM_PREDICTED_COORDS, \
-    SC_ANGLE_START_POS
+    SC_ANGLES_START_POS
 
 
 class StructureBuilder(object):
@@ -219,7 +219,7 @@ class ResidueBuilder(object):
 
             # Select appropriate torsion angle, or infer it if it's part of a planar configuration
             if type(torsion) is str and torsion == "p":
-                torsion = self.ang[SC_ANGLE_START_POS + i]
+                torsion = self.ang[SC_ANGLES_START_POS + i]
             elif type(torsion) is str and torsion == "i" and last_torsion:
                 torsion = last_torsion - np.pi
 

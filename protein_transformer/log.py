@@ -1,4 +1,7 @@
-""" A script to hold some utility functions for model logging. """
+""" A script to hold some utility functions for model logging.
+
+    Note that MSE is always recorded as MSE, and reported as RMSE.
+"""
 import sys
 import time
 import os
@@ -20,13 +23,13 @@ def print_train_batch_status(args, items):
     # Extract relevant metrics
     pbar, metrics, src_seq = items
     cur_lr = metrics["history-lr"][-1]
-    train_drmsd_loss = metrics["train"]["batch-drmsd"]
-    train_mse_loss = metrics["train"]["batch-mse"]
-    train_comb_loss = metrics["train"]["batch-combined"]
+    train_drmsd_loss = metrics["train"]["batch-drmsd-full"]
+    train_mse_loss = metrics["train"]["batch-mse-full"]
+    train_comb_loss = metrics["train"]["batch-combined-full"]
     if args.loss  == "combined":
         loss = train_comb_loss
     else:
-        loss = metrics["train"]["batch-ln-drmsd"]
+        loss = metrics["train"]["batch-lndrmsd-full"]
     lr_string = f", LR = {cur_lr:.7f}" if args.lr_scheduling == "noam" else ""
     speed_avg = np.mean(metrics["train"]["speeds"])
 
@@ -37,7 +40,7 @@ def print_train_batch_status(args, items):
         lr=lr_string,
         rmse=np.sqrt(float(train_mse_loss)),
         comb=float(train_comb_loss),
-        lnd=metrics["train"]["batch-ln-drmsd"],
+        lnd=metrics["train"]["batch-lndrmsd-full"],
         speed=speed_avg))
 
 
@@ -61,10 +64,10 @@ def print_end_of_epoch_status(mode, items):
     missing_str = "      "
     start, metrics = items
     cur_lr = metrics["history-lr"][-1]
-    drmsd_loss_str = "{:6.3f}".format(metrics[mode]["epoch-drmsd"]) if metrics[mode]["epoch-drmsd"] != 0 else missing_str
-    mse_loss = metrics[mode]["epoch-mse"]
-    rmsd_loss_str = "{:6.3f}".format(metrics[mode]["epoch-rmsd"]) if metrics[mode]["epoch-rmsd"] != 0 else missing_str
-    comb_loss_str = "{:6.3f}".format(metrics[mode]["epoch-combined"]) if metrics[mode]["epoch-combined"] != 0 else missing_str
+    drmsd_loss_str = "{:6.3f}".format(metrics[mode]["epoch-drmsd-full"]) if metrics[mode]["epoch-drmsd-full"] != 0 else missing_str
+    mse_loss = metrics[mode]["epoch-mse-full"]
+    rmsd_loss_str = "{:6.3f}".format(metrics[mode]["epoch-rmsd-full"]) if metrics[mode]["epoch-rmsd-full"] != 0 else missing_str
+    comb_loss_str = "{:6.3f}".format(metrics[mode]["epoch-combined-full"]) if metrics[mode]["epoch-combined-full"] != 0 else missing_str
     avg_speed = np.mean(metrics[mode]["speed-history"])
     print('\r  - ({mode})   drmsd: {d}, rmse: {m: 6.3f}, rmsd: {rmsd}, comb: {comb}, '
           'elapse: {elapse:3.3f} min, lr: {lr: {lr_precision}}, res/sec = {speed:.0f}'.format(
@@ -79,10 +82,10 @@ def print_end_of_epoch_status(mode, items):
         speed=avg_speed))
 
     # Log end of epoch stats with wandb
-    wandb.run.summary[f"final_epoch_{mode}_drmsd"] = metrics[mode]["epoch-drmsd"]
-    wandb.run.summary[f"final_epoch_{mode}_mse"] = metrics[mode]["epoch-mse"]
-    wandb.run.summary[f"final_epoch_{mode}_rmsd"] = metrics[mode]["epoch-rmsd"]
-    wandb.run.summary[f"final_epoch_{mode}_comb"] = metrics[mode]["epoch-combined"]
+    wandb.run.summary[f"final_epoch_{mode}_drmsd"] = metrics[mode]["epoch-drmsd-full"]
+    wandb.run.summary[f"final_epoch_{mode}_mse"] = metrics[mode]["epoch-mse-full"]
+    wandb.run.summary[f"final_epoch_{mode}_rmsd"] = metrics[mode]["epoch-rmsd-full"]
+    wandb.run.summary[f"final_epoch_{mode}_comb"] = metrics[mode]["epoch-combined-full"]
     wandb.run.summary[f"final_epoch_{mode}_speed"] = avg_speed
 
 
@@ -91,7 +94,7 @@ def update_loss_trackers(args, epoch_i, metrics):
     Updates the current loss to compare according to an early stopping policy.
     """
 
-    loss_to_compare = metrics[args.es_mode][f"epoch-{args.es_metric}"]
+    loss_to_compare = metrics[args.es_mode][f"epoch-{args.es_metric}-full"]
     losses_to_compare = metrics[args.es_mode][f"epoch-history-{args.es_metric}"]
 
     if metrics["best_valid_loss_so_far"] - loss_to_compare > args.early_stopping_threshold:
@@ -122,13 +125,13 @@ def log_batch(log_writer, metrics, start_time,  mode="valid", end_of_epoch=False
         be = "batch"
     if "speed" not in m.keys():
         m["speed"] =0
-    log_writer.writerow([m[f"{be}-drmsd"], m[f"{be}-ln-drmsd"], np.sqrt(m[f"{be}-mse"]),
-                         m[f"{be}-rmsd"], m[f"{be}-combined"], metrics["history-lr"][-1],
+    log_writer.writerow([m[f"{be}-drmsd-full"], m[f"{be}-lndrmsd-full"], np.sqrt(m[f"{be}-mse-full"]),
+                         m[f"{be}-rmsd-full"], m[f"{be}-combined-full"], metrics["history-lr"][-1],
                          mode, "epoch", round(t - start_time, 4), m["speed"]])
 
 
-def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args, log_writer, pbar,
-                           start_time, pred_angs, tgt_coords, step, validation_datasets, model, device):
+def do_train_batch_logging(metrics, losses, src_seq, optimizer, args, log_writer, pbar, start_time, pred_angs,
+                           tgt_coords, step, validation_datasets, model, device):
     """
     Performs all necessary logging at the end of a batch in the training epoch.
     Updates custom metrics dictionary and wandb logs. Prints status of training.
@@ -141,22 +144,32 @@ def do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, 
         4. Updates the training progress bar (`print_train_batch_status`).
         5. Logs structures.
 
-    """
+    Parameters
+    ----------
+    losses
 
-    metrics = update_metrics(metrics, "train", d_loss, ln_d_loss, m_loss,
-                             c_loss, src_seq,
-                             tracking_loss=loss, batch_level=True)
+    """
+    d_loss, ln_d_loss, m_loss_full, c_loss, loss = losses["drmsd-full"], losses["lndrmsd-full"], losses["mse-full"], \
+                                              losses["combined-full"], losses["loss"]
+    d_bb_loss, d_bb_ln_loss = losses["drmsd-bb"], losses["lndrmsd-bb"]
+
+    metrics = update_metrics(metrics, losses, "train", src_seq, tracking_loss=loss, batch_level=True)
 
     do_log_str = not step or step % args.log_structure_step == 0
     do_log_lr  = args.lr_scheduling == "noam" and (not step or args.log_wandb_step % step == 0)
 
     if not step or step % args.log_wandb_step == 0:
-        wandb.log({"Train Batch RMSE": np.sqrt(m_loss.item()),
+        wandb.log({"Train Batch RMSE": np.sqrt(m_loss_full.item()),
                    "Train Batch DRMSD": d_loss,
                    "Train Batch ln-DRMSD": ln_d_loss,
                    "Train Batch Combined Loss": c_loss,
                    "Train Batch Speed": metrics["train"]["speed"],
-                   "Batch size": pred_angs.shape[0]}, commit=not do_log_lr and not do_log_str)
+                   "Batch size": pred_angs.shape[0],
+
+                   "Train Batch DRMSD Backbone": losses["drmsd-bb"],
+                   "Train Batch ln-DRMSD Backbone": losses["lndrmsd-bb"],
+                   "Train Batch RMSE Backbone": np.sqrt(losses["mse-bb"].item()),
+                   "Train Batch RMSE Sidechain": np.sqrt(losses["mse-sc"].item())}, commit=not do_log_lr and not do_log_str)
     if args.lr_scheduling == "noam":
         metrics["history-lr"].append(optimizer.cur_lr)
         if not step or step % args.log_wandb_step  == 0:
@@ -214,8 +227,7 @@ def log_angle_distributions(args, pred_ang, src_seq):
                        wandb.Histogram(np_histogram=np.histogram(inv_ang[0,:,rad_idx]))}, commit=False)
 
 
-def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq,  args,  pbar,
-                           pred_angs, tgt_coords, mode, log_structures=False):
+def do_eval_batch_logging(metrics, losses, src_seq, args, pbar, pred_angs, tgt_coords, mode, log_structures=False):
     """
        Performs all necessary logging at the end of a batch in an eval epoch.
        Updates custom metrics dictionary and wandb logs. Prints status of
@@ -229,9 +241,9 @@ def do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, sr
         5. Logs structures.
 
     """
-    metrics = update_metrics(metrics, mode, d_loss, ln_d_loss, m_loss,
-                             c_loss, src_seq, rmsd=r_loss, batch_level=True)
-    print_eval_batch_status(args, (pbar, d_loss, mode, m_loss, c_loss))
+    
+    metrics = update_metrics(metrics, losses, mode, src_seq, batch_level=True)
+    print_eval_batch_status(args, (pbar, losses["drmsd-full"], mode, losses["mse-full"], losses["combined-full"]))
 
     if log_structures:
         with torch.no_grad():
@@ -246,22 +258,34 @@ def log_avg_validation_performance(metrics, validation_datasets):
     After evaluating performance on all validation sets, this method records
     the average validation performance to wandb.
     """
-    rmse, rmsd, drmsd, lndrmsd, combined = 0, 0, 0, 0, 0
+    rmse_full, rmse_bb, rmse_sc, rmsd_full, drmsd_full, drmsd_bb, lndrmsd_full, lndrmsd_bb, combined_full = 0, 0, 0, 0, 0, 0, 0, 0, 0
     n = 0.
     for split, validation_data in validation_datasets.items():
         mode = f"valid-{split}"
-        rmse += np.sqrt(metrics[mode]["epoch-mse"])
-        rmsd += metrics[mode]["epoch-rmsd"]
-        drmsd += metrics[mode]["epoch-drmsd"]
-        lndrmsd += metrics[mode]["epoch-ln-drmsd"]
-        combined += metrics[mode]["epoch-combined"]
+        rmse_full += np.sqrt(metrics[mode]["epoch-mse-full"])
+        rmsd_full += metrics[mode]["epoch-rmsd-full"]
+        drmsd_full += metrics[mode]["epoch-drmsd-full"]
+        lndrmsd_full += metrics[mode]["epoch-lndrmsd-full"]
+        combined_full += metrics[mode]["epoch-combined-full"]
+
+        rmse_bb += np.sqrt(metrics[mode]["epoch-mse-bb"])
+        rmse_sc += np.sqrt(metrics[mode]["epoch-mse-sc"])
+        drmsd_bb += metrics[mode]["epoch-drmsd-bb"]
+        lndrmsd_bb += metrics[mode]["epoch-lndrmsd-bb"]
+
         n += 1
 
-    wandb.log({"Valid-Avg Epoch RMSE": rmse/n,
-               "Valid-Avg Epoch RMSD": rmsd/n,
-               "Valid-Avg Epoch DRMSD": drmsd/n,
-               "Valid-Avg Epoch ln-DRMSD": lndrmsd/n,
-               "Valid-Avg Epoch Combined Loss": combined/n}, commit=False)
+    wandb.log({"Valid-Avg Epoch RMSE": rmse_full/n,
+               "Valid-Avg Epoch RMSD": rmsd_full/n,
+               "Valid-Avg Epoch DRMSD": drmsd_full/n,
+               "Valid-Avg Epoch ln-DRMSD": lndrmsd_full/n,
+               "Valid-Avg Epoch Combined Loss": combined_full/n,
+
+               "Valid-Avg Epoch RMSE Backbone": rmse_bb / n,
+               "Valid-Avg Epoch RMSE Sidechain": rmse_sc / n,
+               "Valid-Avg Epoch DRMSD Backbone": drmsd_bb / n,
+               "Valid-Avg Epoch ln-DRMSD Backbone": lndrmsd_bb / n,
+               }, commit=False)
 
 
 def do_eval_epoch_logging(metrics, mode):
@@ -271,11 +295,16 @@ def do_eval_epoch_logging(metrics, mode):
     """
     metrics = update_metrics_end_of_epoch(metrics, mode)
 
-    wandb.log({f"{mode.title()} Epoch RMSE": np.sqrt(metrics[mode]["epoch-mse"]),
-               f"{mode.title()} Epoch RMSD": metrics[mode]["epoch-rmsd"],
-               f"{mode.title()} Epoch DRMSD": metrics[mode]["epoch-drmsd"],
-               f"{mode.title()} Epoch ln-DRMSD": metrics[mode]["epoch-ln-drmsd"],
-               f"{mode.title()} Epoch Combined Loss": metrics[mode]["epoch-combined"]}, commit=False)
+    wandb.log({f"{mode.title()} Epoch RMSE": np.sqrt(metrics[mode]["epoch-mse-full"]),
+               f"{mode.title()} Epoch RMSD": metrics[mode]["epoch-rmsd-full"],
+               f"{mode.title()} Epoch DRMSD": metrics[mode]["epoch-drmsd-full"],
+               f"{mode.title()} Epoch ln-DRMSD": metrics[mode]["epoch-lndrmsd-full"],
+               f"{mode.title()} Epoch Combined Loss": metrics[mode]["epoch-combined-full"],
+
+               f"{mode.title()} Epoch ln-DRMSD Backbone": metrics[mode]["epoch-lndrmsd-bb"],
+               f"{mode.title()} Epoch DRMSD Backbone": metrics[mode]["epoch-drmsd-bb"],
+               f"{mode.title()} Epoch RMSE Backbone": np.sqrt(metrics[mode]["epoch-mse-bb"]),
+               f"{mode.title()} Epoch RMSE Sidechain": np.sqrt(metrics[mode]["epoch-mse-sc"]),}, commit=False)
 
 
 def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, commit, log_angs=True, struct_name="train"):
@@ -324,11 +353,11 @@ def init_metrics(args):
     """
     metrics = {"train": {"epoch-history-drmsd": [],
                          "epoch-history-combined": [],
-                         "epoch-history-ln-drmsd": [],
+                         "epoch-history-lndrmsd": [],
                          "epoch-history-mse": []},
                "test":  {"epoch-history-drmsd": [],
                          "epoch-history-combined": [],
-                         "epoch-history-ln-drmsd": [],
+                         "epoch-history-lndrmsd": [],
                          "epoch-history-mse": []},
                "history-lr": [],
                "epoch_last_improved": -1,
@@ -340,7 +369,7 @@ def init_metrics(args):
     for split in VALID_SPLITS:
         v_metrics[f"valid-{split}"] = {"epoch-history-drmsd": [],
                                        "epoch-history-combined": [],
-                                       "epoch-history-ln-drmsd": [],
+                                       "epoch-history-lndrmsd": [],
                                        "epoch-history-mse": []}
     metrics.update(v_metrics)
     if args.lr_scheduling != "noam":
@@ -348,25 +377,38 @@ def init_metrics(args):
     return metrics
 
 
-def update_metrics(metrics, mode, drmsd, ln_drmsd, mse, combined, src_seq, rmsd=None, tracking_loss=None, batch_level=True):
+def update_metrics(metrics, losses, mode, src_seq, tracking_loss=None, batch_level=True):
     """
     Records relevant metrics in the metrics data structure while training.
     If batch_level is true, this means the loss for the current batch is
     recorded in addition to the running epoch loss.
+
+    Parameters
+    ----------
+    losses
     """
+    drmsd, ln_drmsd, mse, combined, rmsd = losses["drmsd-full"], losses["lndrmsd-full"], losses["mse-full"], losses["combined-full"], losses["rmsd-full"]
     # Update loss values
     if batch_level:
         metrics["n_batches"] += 1
-        metrics[mode]["batch-drmsd"] = drmsd.item()
-        metrics[mode]["batch-ln-drmsd"] = ln_drmsd.item()
-        metrics[mode]["batch-mse"] = mse.item()
-        metrics[mode]["batch-combined"] = combined.item()
-        if rmsd: metrics[mode]["batch-rmsd"] = rmsd.item()
-    metrics[mode]["epoch-drmsd"] += drmsd.item()
-    metrics[mode]["epoch-ln-drmsd"] += ln_drmsd.item()
-    metrics[mode]["epoch-mse"] += mse.item()
-    metrics[mode]["epoch-combined"] += combined.item()
-    if rmsd: metrics[mode]["epoch-rmsd"] += rmsd.item()
+        metrics[mode]["batch-drmsd-full"] = drmsd.item()
+        metrics[mode]["batch-lndrmsd-full"] = ln_drmsd.item()
+        metrics[mode]["batch-mse-full"] = mse.item()
+        metrics[mode]["batch-combined-full"] = combined.item()
+        if rmsd: metrics[mode]["batch-rmsd-full"] = rmsd.item()
+        metrics[mode]["batch-drmsd-bb"] = losses["drmsd-bb"].item()
+        metrics[mode]["batch-mse-bb"] = losses["mse-bb"].item()
+        metrics[mode]["batch-mse-sc"] = losses["mse-sc"].item()
+        metrics[mode]["batch-lndrmsd-bb"] = losses["lndrmsd-bb"].item()
+    metrics[mode]["epoch-drmsd-full"] += drmsd.item()
+    metrics[mode]["epoch-lndrmsd-full"] += ln_drmsd.item()
+    metrics[mode]["epoch-mse-full"] += mse.item()
+    metrics[mode]["epoch-combined-full"] += combined.item()
+    if rmsd: metrics[mode]["epoch-rmsd-full"] += rmsd.item()
+    metrics[mode]["epoch-drmsd-bb"] = losses["drmsd-bb"].item()
+    metrics[mode]["epoch-mse-bb"] = losses["mse-bb"].item()
+    metrics[mode]["epoch-mse-sc"] = losses["mse-sc"].item()
+    metrics[mode]["epoch-lndrmsd-bb"] = losses["lndrmsd-bb"].item()
 
     # Compute and update speed
     num_res = (src_seq != VOCAB.pad_id).sum().item()
@@ -387,11 +429,17 @@ def reset_metrics_for_epoch(metrics, mode):
     """
     Resets the running and batch-specific metrics for a new epoch.
     """
-    metrics[mode]["epoch-drmsd"] = metrics[mode]["batch-drmsd"] = 0
-    metrics[mode]["epoch-ln-drmsd"] = metrics[mode]["batch-ln-drmsd"] = 0
-    metrics[mode]["epoch-mse"] = metrics[mode]["batch-mse"] = 0
-    metrics[mode]["epoch-combined"] = metrics[mode]["batch-combined"] = 0
-    metrics[mode]["epoch-rmsd"] = metrics[mode]["batch-rmsd"] = 0
+    metrics[mode]["epoch-drmsd-full"] = metrics[mode]["batch-drmsd-full"] = 0
+    metrics[mode]["epoch-lndrmsd-full"] = metrics[mode]["batch-lndrmsd-full"] = 0
+    metrics[mode]["epoch-mse-full"] = metrics[mode]["batch-mse-full"] = 0
+    metrics[mode]["epoch-combined-full"] = metrics[mode]["batch-combined-full"] = 0
+    metrics[mode]["epoch-rmsd-full"] = metrics[mode]["batch-rmsd-full"] = 0
+
+    metrics[mode]["epoch-drmsd-bb"] = metrics[mode]["batch-drmsd-bb"] = 0
+    metrics[mode]["epoch-lndrmsd-bb"] = metrics[mode]["batch-lndrmsd-bb"] = 0
+    metrics[mode]["epoch-mse-sc"] = metrics[mode]["batch-mse-sc"] = 0
+    metrics[mode]["epoch-mse-bb"] = metrics[mode]["batch-mse-bb"] = 0
+
     metrics[mode]["batch-history"] = []
     metrics[mode]["batch-time"] = time.time()
     metrics[mode]["speed-history"] = []
@@ -404,18 +452,25 @@ def update_metrics_end_of_epoch(metrics, mode):
     Averages the running metrics over an epoch
     """
     n_batches = metrics["n_batches"]
-    metrics[mode]["epoch-drmsd"] /= n_batches
-    metrics[mode]["epoch-ln-drmsd"] /= n_batches
-    metrics[mode]["epoch-mse"] /= n_batches
-    if metrics[mode]["epoch-drmsd"] == 0:
-        metrics[mode]["epoch-combined"] = 0
+    metrics[mode]["epoch-drmsd-full"] /= n_batches
+    metrics[mode]["epoch-lndrmsd-full"] /= n_batches
+    metrics[mode]["epoch-mse-full"] /= n_batches
+
+    metrics[mode]["epoch-drmsd-bb"] /= n_batches
+    metrics[mode]["epoch-lndrmsd-bb"] /= n_batches
+    metrics[mode]["epoch-mse-bb"] /= n_batches
+    metrics[mode]["epoch-mse-sc"] /= n_batches
+
+    if metrics[mode]["epoch-drmsd-full"] == 0:
+        metrics[mode]["epoch-combined-full"] = 0
     else:
-        metrics[mode]["epoch-combined"] /= n_batches
-    metrics[mode]["epoch-rmsd"] /= n_batches
-    metrics[mode]["epoch-history-combined"].append(metrics[mode]["epoch-combined"])
-    metrics[mode]["epoch-history-drmsd"].append(metrics[mode]["epoch-drmsd"])
-    metrics[mode]["epoch-history-mse"].append(metrics[mode]["epoch-mse"])
-    metrics[mode]["epoch-history-ln-drmsd"].append(metrics[mode]["epoch-ln-drmsd"])
+        metrics[mode]["epoch-combined-full"] /= n_batches
+
+    metrics[mode]["epoch-rmsd-full"] /= n_batches
+    metrics[mode]["epoch-history-combined"].append(metrics[mode]["epoch-combined-full"])
+    metrics[mode]["epoch-history-drmsd"].append(metrics[mode]["epoch-drmsd-full"])
+    metrics[mode]["epoch-history-mse"].append(metrics[mode]["epoch-mse-full"])
+    metrics[mode]["epoch-history-lndrmsd"].append(metrics[mode]["epoch-lndrmsd-full"])
 
 
     return metrics
