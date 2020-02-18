@@ -8,11 +8,9 @@ import wandb
 import protein_transformer.protein.Structure
 from protein_transformer.protein.Sequence import VOCAB
 from protein_transformer.protein.Structure import NUM_PREDICTED_ANGLES, \
-    NUM_PREDICTED_COORDS
+    NUM_PREDICTED_COORDS, SC_ANGLES_START_POS
 from .protein.structure_utils import get_backbone_from_full_coords
 
-LNDRMSD_TARGET_VAL = 0.02
-MSE_TARGET_VAL = 0.01
 
 def combine_drmsd_mse(d, mse, w=.5, lndrmsd_norm=0.02, mse_norm=0.01, log=True):
     """
@@ -81,14 +79,23 @@ def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, bac
     loss = drmsd(pred_crds_masked, true_crds_masked)
     l_normed = loss / pred_crds_masked.shape[0]
 
+    # Repeat above for bb only
+    pred_crd_bb = get_backbone_from_full_coords(pred_crd)
+    true_crd_bb = get_backbone_from_full_coords(true_crd)
+    true_crd_bb_non_nan = torch.isnan(true_crd_bb).eq(0)
+    pred_crd_bb_masked = pred_crd_bb[true_crd_bb_non_nan].reshape(-1, 3)
+    true_crd_bb_masked = true_crd_bb[true_crd_bb_non_nan].reshape(-1, 3)
+    bb_loss = drmsd(pred_crd_bb_masked, true_crd_bb_masked)
+    bb_loss_normed = bb_loss / pred_crd_bb_masked.shape[0]
+
     if do_backward:
         l_normed.backward()
 
     if return_rmsd:
-        return starting_ang.grad, loss.item(), l_normed.item(), rmsd(pred_crds_masked.data.numpy(),
-                                                                     true_crds_masked.data.numpy())
+        return starting_ang.grad, loss.item(), l_normed.item(), bb_loss.item(), bb_loss_normed.item(), \
+               rmsd(pred_crds_masked.data.numpy(), true_crds_masked.data.numpy())
     else:
-        return starting_ang.grad, loss.item(), l_normed.item()
+        return starting_ang.grad, loss.item(), l_normed.item(), bb_loss.item(), bb_loss_normed.item()
 
 
 def angles_to_coords(angles, seq, remove_batch_padding=False):
@@ -143,27 +150,29 @@ def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("c
                               for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
 
     # Unpack the multiprocessing results
-    grads, losses, len_normalized_losses, rmsds = [], [], [], []
+    grads, losses, ln_losses, bb_losses, bb_ln_losses, rmsds = [], [], [], [], [], []
     for r in results:
-        if len(r) == 4:
-            grad, l, ln, rmsd_val = r
+        if len(r) == 6:
+            grad, l, ln, bb_l, bb_ln, rmsd_val = r
             rmsds.append(rmsd_val)
         else:
-            grad, l, ln = r
+            grad, l, ln, bb_l, bb_ln = r
         grads.append(grad)
         losses.append(l)
-        len_normalized_losses.append(ln)
+        ln_losses.append(ln)
+        bb_losses.append(bb_l)
+        bb_ln_losses.append(bb_ln)
 
     if do_backward:
         pred_angs.backward(gradient=torch.stack(grads), retain_graph=retain_graph)
 
     if return_rmsd:
-        return np.mean(losses), np.mean(len_normalized_losses), np.mean(rmsds)
+        return np.mean(losses), np.mean(ln_losses), np.mean(bb_losses), np.mean(bb_ln_losses), np.mean(rmsds)
     else:
-        return np.mean(losses), np.mean(len_normalized_losses)
+        return np.mean(losses), np.mean(ln_losses), np.mean(bb_losses), np.mean(bb_ln_losses)
 
 
-def mse_over_angles(pred, true):
+def mse_over_angles(pred, true, bb_only=False, sc_only=False):
     """Returns the mean squared error between two tensor batches.
 
     Given a predicted angle tensor and a true angle tensor (batch-padded with
@@ -176,9 +185,31 @@ def mse_over_angles(pred, true):
     Returns:
         MSE loss between true and pred.
     """
+    assert len(pred.shape) == 3, "This function must operate on a batch of angles."
 
+    # Slice off appropriate angles for evaluation, depending on whether or not
+    # the input is in sin/cos terms, or radians
+    if bb_only and pred.shape[-1] == NUM_PREDICTED_ANGLES * 2:
+        pred = pred[:,:,:SC_ANGLES_START_POS*2]
+        true = true[:,:,:SC_ANGLES_START_POS*2]
+    elif bb_only and pred.shape[-1] == NUM_PREDICTED_ANGLES:
+        pred = pred[:,:,:SC_ANGLES_START_POS]
+        true = true[:,:,:SC_ANGLES_START_POS]
+    elif sc_only and pred.shape[-1] == NUM_PREDICTED_ANGLES * 2:
+        pred = pred[:,:,SC_ANGLES_START_POS * 2:]
+        true = true[:,:,SC_ANGLES_START_POS * 2:]
+    elif sc_only and pred.shape[-1] == NUM_PREDICTED_ANGLES:
+        pred = pred[:, :, SC_ANGLES_START_POS:]
+        true = true[:, :, SC_ANGLES_START_POS:]
+    elif not (not bb_only and not sc_only):
+        print(pred.shape)
+        raise Exception("Unknown angle tensor shape.")
+
+    # Remove batch padding
     ang_non_zero = true.ne(0).any(dim=2)
     tgt_ang_non_zero = true[ang_non_zero]
+
+    # Remove missing angles
     ang_non_nans = torch.isnan(tgt_ang_non_zero).eq(0)
     return torch.nn.functional.mse_loss(pred[ang_non_zero][ang_non_nans], true[ang_non_zero][ang_non_nans])
 
@@ -226,7 +257,9 @@ def drmsd(a, b):
     """ Returns distance root-mean-squared-deviation between tensors a and b.
 
     Given 2 coordinate tensors, returns the dRMSD between them. Both
-    tensors must be the exact same shape.
+    tensors must be the exact same shape. It works by creating a mask of the
+    upper-triangular indices of the pairwise distance matrix (excluding the
+    diagonal). Then, the resulting values are compared with Pytorch's MSE loss.
 
     Args:
         a, b (torch.Tensor): coordinate tensor with shape (L x 3).

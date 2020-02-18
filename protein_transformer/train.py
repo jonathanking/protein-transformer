@@ -35,7 +35,7 @@ def train_epoch(model, training_data, validation_datasets, optimizer, device, ar
         optimizer.zero_grad()
         src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
         pred = model(src_seq, tgt_ang)
-        loss, d_loss, ln_d_loss, m_loss, c_loss = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool)
+        losses = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool)
 
         # Clip gradients
         if args.clip:
@@ -45,51 +45,68 @@ def train_epoch(model, training_data, validation_datasets, optimizer, device, ar
         optimizer.step()
 
         # Record performance metrics
-        metrics = do_train_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, src_seq, loss, optimizer, args,
-                                         log_writer, batch_iter, START_TIME, pred, tgt_crds, step, validation_datasets,
-                                         model, device)
+        metrics = do_train_batch_logging(metrics, losses, src_seq, optimizer, args, log_writer, batch_iter, START_TIME,
+                                         pred, tgt_crds, step, validation_datasets, model, device)
 
     metrics = update_metrics_end_of_epoch(metrics, "train")
 
     return metrics
 
 
-def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True):
+def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True, do_backwards=True, return_rmsd=False, eval_mode=False):
     """
     Returns the computed losses/metrics for a batch. The variable 'loss'
     will differ depending on the loss the user requested to train on.
     """
     # TODO remove outdated reference to loss
     # Always compute MSE loss b/c it's computationally cheap.
-    m_loss = mse_over_angles(pred, tgt_ang)
+    m_loss_full = mse_over_angles(pred, tgt_ang)
+    m_loss_bb = mse_over_angles(pred, tgt_ang, bb_only=True)
+    m_loss_sc = mse_over_angles(pred, tgt_ang, sc_only=True)
 
-    if args.loss == "ln-drmsd":
-        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False,
-                                                pool=pool, backbone_only=args.backbone_loss)
-        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight, log=log)
-        loss = ln_d_loss
+
+    if args.loss in ["ln-drmsd", "drmsd", "combined"] or eval_mode:
+        ls = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=do_backwards,
+                                 retain_graph=args.loss == "combined", pool=pool,
+                                 backbone_only=args.backbone_loss,
+                                 return_rmsd=return_rmsd)
+        if return_rmsd:
+            d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, rmsd_loss = ls
+        else:
+            d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, rmsd_loss = *ls, None
+        c_loss = combine_drmsd_mse(ln_d_loss, m_loss_full, w=args.combined_drmsd_weight, log=log)
+        if args.loss == "ln-drmsd":
+            loss = ln_d_loss
+        elif args.loss == "drmsd":
+            loss = d_loss
+        elif args.loss == "combined":
+            loss = c_loss
+            if do_backwards:
+                c_loss.backward()
+        elif args.loss == "mse":
+            loss = m_loss_full
 
     elif args.loss == "mse":
         # Other losses are not computed for computational efficiency.
-        d_loss, ln_d_loss, c_loss = torch.tensor(0), torch.tensor(0), torch.tensor(0)
-        loss = m_loss
-        m_loss.backward()
+        d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, c_loss, rmsd_loss = torch.tensor(0), torch.tensor(0), torch.tensor(0), \
+                                                             torch.tensor(0), torch.tensor(0), None
+        loss = m_loss_full
+        if do_backwards:
+            m_loss_full.backward()
 
-    elif args.loss == "drmsd":
-        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=False,
-                                                pool=pool, backbone_only=args.backbone_loss)
-        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight, log=log)
-        loss = d_loss
 
-    else:
-        # Combined loss
-        d_loss, ln_d_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=True, retain_graph=True, pool=pool,
-                                                backbone_only=args.backbone_loss)
-        c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight, log=log)
-        loss = c_loss
-        c_loss.backward()
+    losses = {"loss": loss,
+              "drmsd-full": d_loss,
+              "lndrmsd-full": ln_d_loss,
+              "drmsd-bb": d_bb_loss,
+              "lndrmsd-bb": d_bb_ln_loss,
+              "combined-full": c_loss,
+              "mse-full": m_loss_full,
+              "mse-bb": m_loss_bb,
+              "mse-sc": m_loss_sc,
+              "rmsd-full": rmsd_loss}
 
-    return loss, d_loss, ln_d_loss, m_loss, c_loss
+    return losses
 
 
 def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool=None):
@@ -100,23 +117,15 @@ def eval_epoch(model, validation_data, device, args, metrics, mode="valid", pool
     metrics = reset_metrics_for_epoch(metrics, mode)
     batch_iter = tqdm(validation_data, mininterval=.5, leave=False, unit="batch", dynamic_ncols=True)
 
-    if args.loss == "mse" and mode == "train" and not args.eval_train_drmsd:
-        d_loss, ln_d_loss, r_loss = torch.tensor(0.), torch.tensor(0.), torch.tensor(0.)
-
     with torch.no_grad():
         for batch in batch_iter:
             src_seq, tgt_ang, tgt_crds = map(lambda x: x.to(device), batch)
             pred = model(src_seq, tgt_ang)
 
-            if not (args.loss == "mse" and mode == "train" and not args.eval_train_drmsd) :
-                d_loss, ln_d_loss, r_loss = compute_batch_drmsd(pred, tgt_crds, src_seq, return_rmsd=True,
-                                                            do_backward=False, pool=pool)
-            m_loss = mse_over_angles(pred, tgt_ang)
-            c_loss = combine_drmsd_mse(ln_d_loss, m_loss, w=args.combined_drmsd_weight)
+            losses = get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=pool, do_backwards=False, eval_mode=True, return_rmsd=True)
 
             # Record performance metrics
-            metrics = do_eval_batch_logging(metrics, d_loss, ln_d_loss, m_loss, c_loss, r_loss, src_seq,  args,
-                                            batch_iter, pred, tgt_crds, mode)
+            metrics = do_eval_batch_logging(metrics, losses, src_seq, args, batch_iter, pred, tgt_crds, mode)
 
     do_eval_epoch_logging(metrics, mode)
 
@@ -153,7 +162,7 @@ def train(model, metrics, training_data, train_eval_loader, validation_datasets,
 
         # Update LR
         if scheduler:
-            scheduler.step(metrics[args.es_mode][f"epoch-{args.es_metric}"])
+            scheduler.step(metrics[args.es_mode][f"epoch-{args.es_metric}-full"])
 
         # Checkpointing
         try:
