@@ -277,8 +277,15 @@ def create_data_dict(train_seq, test_seq, train_ang, test_ang, train_crd, test_c
     data["settings"]["max_len"] = max(list(map(len, train_seq + test_seq)) + [max_val_len])
 
     data["settings"]["bin-data"] = bin_sequence_data(train_seq, maxlen=MAX_SEQ_LEN)
+    data["settings"]["angle_means"] = compute_angle_means(data)
     validate_data_dict(data)
     return data
+
+
+def compute_angle_means(data):
+    """ Computes and retuns the mean of the training data angle matrices. """
+    train_angles_sincos = np.concatenate(data["train"]["ang"])
+    return np.nanmean(train_angles_sincos, axis=0)
 
 
 def bin_sequence_data(seqs, maxlen):
@@ -384,7 +391,7 @@ def main():
         os.path.join(args.input_dir, "torch", "testing.pt"))
     print(len(train_pdb_ids), len(valid_ids), len(test_casp_ids))
     # Download and preprocess all data from PDB IDs
-    lim = None
+    lim = 100
     with multiprocessing.Pool(multiprocessing.cpu_count()) as p:
         train_results = list(tqdm.tqdm(p.imap(work, train_pdb_ids[:lim]), total=len(train_pdb_ids[:lim]), dynamic_ncols=True))
     valid_result_meta = {}

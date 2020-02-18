@@ -260,7 +260,7 @@ def load_model(model, optimizer, scheduler, args):
     return model, optimizer, scheduler, True, checkpoint['metrics']
 
 
-def make_model(args, device):
+def make_model(args, device, angle_means):
     """
     Returns requested model architecture. Currently only enc-only and enc-dec
     are supported.
@@ -273,7 +273,7 @@ def make_model(args, device):
                                        max_seq_len=MAX_SEQ_LEN,
                                        dropout=args.dropout,
                                        vocab=VOCAB,
-                                       angle_mean_path=args.angle_mean_path,
+                                       angle_means=angle_means,
                                        use_tanh_out=True)
     elif args.model == "enc-only-linear-out":
         model = EncoderOnlyTransformer(nlayers=args.n_layers,
@@ -283,7 +283,7 @@ def make_model(args, device):
                                        max_seq_len=MAX_SEQ_LEN,
                                        dropout=args.dropout,
                                        vocab=VOCAB,
-                                       angle_mean_path=args.angle_mean_path,
+                                       angle_means=angle_means,
                                        use_tanh_out=False)
     elif args.model == "enc-dec":
         model = Transformer(dm=args.d_model,
@@ -300,7 +300,7 @@ def make_model(args, device):
                             dropout=args.dropout,
                             fraction_complete_tf=args.fraction_complete_tf,
                             fraction_subseq_tf=args.fraction_subseq_tf,
-                            angle_mean_path=args.angle_mean_path)
+                            angle_means=angle_means)
     else:
         raise argparse.ArgumentError("Model architecture not implemented.")
     return model
@@ -334,8 +334,8 @@ def init_worker_pool(args):
     return torch.multiprocessing.Pool(mp.cpu_count()) if not args.sequential_drmsd_loss else None
 
 
-def setup_model_optimizer_scheduler(args, device):
-    model = make_model(args, device).to(device)
+def setup_model_optimizer_scheduler(args, device, angle_means):
+    model = make_model(args, device, angle_means).to(device)
 
     # Prepare optimizer
     wd = 10e-3 if args.weight_decay else 0
@@ -462,8 +462,6 @@ def create_parser():
     model_args.add_argument('--postnorm', action='store_true',
                             help="Use post-layer normalization, as depicted in the original figure for the Transformer "
                                  "model. May not train as well as pre-layer normalization.")
-    model_args.add_argument("--angle_mean_path", type=str, default="./protein/casp12_200207_30_angle_means.npy",
-                            help="Path to vector of means for every predicted angle. Used to initialize model output.")
     model_args.add_argument("--weight_decay", type=bool, default=True, help="Applies weight decay to model weights.")
 
     # Saving args
@@ -547,11 +545,12 @@ def main():
     # Load dataset
     data = torch.load(args.data)
     args.max_token_seq_len = data['settings']["max_len"]
-    training_data, training_eval_loader, validation_datasets, test_data = prepare_dataloaders(data, args, MAX_SEQ_LEN)
+    angle_means = data["settings"]["angle_means"]
+
 
     # Prepare model
     device = torch.device('cuda' if args.cuda else 'cpu')
-    model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device)
+    model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device, angle_means)
 
     # Prepare Weights and Biases logging
     wandb_dir = "/scr/jok120/wandb" if args.cluster and os.path.isdir("/scr") else None
