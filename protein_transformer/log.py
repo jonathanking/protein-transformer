@@ -343,9 +343,10 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
                          make_pse=True,
                          make_png=args.save_pngs,
                          pse_out_path=f"{cur_struct_path}/{wandb.run.step:05}_both.pse")
-
-    wandb.log({struct_name: wandb.Object3D(gltf_out_path),
-               struct_name + "_img": wandb.Image(gltf_out_path.replace("gltf", "png"))}, commit=commit)
+    log_items = {struct_name: wandb.Object3D(gltf_out_path)}
+    if args.save_pngs:
+        log_items[struct_name + "_img"]  = wandb.Image(gltf_out_path.replace("gltf", "png"))
+    wandb.log(log_items, commit=commit)
 
 
 def init_metrics(args):

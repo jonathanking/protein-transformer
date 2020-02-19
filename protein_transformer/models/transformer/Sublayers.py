@@ -62,6 +62,17 @@ class PositionalEncoding(torch.nn.Module):
         return self.dropout(x)
 
 
+class Embeddings(torch.nn.Module):
+    def __init__(self, vocab, d_model):
+        super(Embeddings, self).__init__()
+        self.emb = torch.nn.Embedding(vocab, d_model)
+        self.d_model = d_model
+
+    def forward(self, x):
+        return self.emb(x) * np.sqrt(self.d_model)
+
+
+
 if __name__ == "__main__":
     seq = torch.ones(8, 7, 64)
     penc = PositionalEncoding(64, 300)

@@ -174,7 +174,7 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
     """
 
     def __init__(self, data_source, batch_size, dynamic_batch, optimize_batch_for_cpus, downsample=None,
-                 use_largest_bin=False):
+                 use_largest_bin=False, repeat_train=None):
         self.data_source = data_source
         self.batch_size = batch_size
         self.dynamic_batch = dynamic_batch
@@ -182,6 +182,7 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
         self.cpu_count = torch.multiprocessing.cpu_count()
         self.downsample = downsample
         self.use_largest_bin = use_largest_bin
+        self.repeat_train =  repeat_train if repeat_train else 1
 
     def __len__(self):
         # If batches are dynamically sized to contain the same number of residues,
@@ -189,11 +190,11 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
         # divided by the size of the dynamic batch.
 
         if self.dynamic_batch:
-            lens_sum = sum(self.data_source.lens)
+            lens_sum = sum(self.data_source.lens) * self.repeat_train
             if self.downsample:
                 lens_sum *=  self.downsample
             return int(np.ceil(lens_sum / self.dynamic_batch))
-        return int(np.ceil(len(self.data_source) / self.batch_size))
+        return int(np.ceil(len(self.data_source) * self.repeat_train / self.batch_size))
 
     def __iter__(self):
         def batch_generator():
@@ -228,9 +229,9 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
         raise NotImplementedError("Descending and ascending order have not been reimplemented.")
 
     train_dataset = BinnedProteinDataset(
-            seqs=data['train']['seq']*args.repeat_train,
-            crds=data['train']['crd']*args.repeat_train,
-            angs=data['train']['ang']*args.repeat_train,
+            seqs=data['train']['seq'],
+            crds=data['train']['crd'],
+            angs=data['train']['ang'],
             add_sos_eos=args.add_sos_eos, skip_missing_residues=args.skip_missing_res_train, bins=args.bins)
     train_loader = torch.utils.data.DataLoader(
                     train_dataset,
@@ -240,7 +241,8 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=1):
                                                             args.batch_size,
                                                             dynamic_batch=args.batch_size * MAX_SEQ_LEN,
                                                             optimize_batch_for_cpus=args.loss in ["combined", "drmsd",
-                                                                                                  "ln-drmsd"]))
+                                                                                                  "ln-drmsd"],
+                                                            repeat_train=args.repeat_train))
     train_eval_loader = torch.utils.data.DataLoader(
                     train_dataset,
                     num_workers=num_workers,

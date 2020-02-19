@@ -2,12 +2,13 @@ import torch
 
 from .Attention import MultiHeadedAttention
 from .Sublayers import PositionwiseFeedForward, PositionalEncoding, \
-    SublayerConnection
+    SublayerConnection, Embeddings
 
 
 class Decoder(torch.nn.Module):
     """
     Transformer decoder model.
+    # TODO evaluate correctness of using Embeddings layer vs linear (probably correct as is)
     """
 
     def __init__(self, dout, dm, dff, n_heads, n_dec_layers, max_seq_len, dropout=0.1):
@@ -20,7 +21,7 @@ class Decoder(torch.nn.Module):
 
         self.emb_dropout = torch.nn.Dropout(dropout)
         self.positional_enc = PositionalEncoding(dm, dropout, max_seq_len)
-        self.input_embedding = torch.nn.Linear(self.dout, self.dm)
+        self.input_embedding = torch.nn.Linear(self.dout, self.dm)  # Embeddings(self.dout, self.dm)
         self.dec_layers = torch.nn.ModuleList([DecoderLayer(dm, dff, n_heads, dropout) for _ in range(self.n_dec_layers)])
 
     def forward(self, dec_input, enc_output, tgt_mask, src_mask):

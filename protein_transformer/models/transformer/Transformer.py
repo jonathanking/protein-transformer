@@ -14,7 +14,7 @@ class Transformer(torch.nn.Module):
     """
     def __init__(self, dm, dff, din, dout, n_heads, n_enc_layers, n_dec_layers,
                  max_seq_len, pad_char, missing_coord_filler, device, dropout, fraction_complete_tf,
-                 fraction_subseq_tf, angle_mean_path):
+                 fraction_subseq_tf, angle_means):
         super(Transformer, self).__init__()
         self.din = din
         self.dout = dout
@@ -29,7 +29,7 @@ class Transformer(torch.nn.Module):
         self.device = device
         self.fraction_subseq_tf = fraction_subseq_tf
         self.fraction_complete_tf = fraction_complete_tf
-        self.angle_mean_path = angle_mean_path
+        self.angle_means = angle_means
 
         self.decoder_sos_char = -0.1
 
@@ -109,8 +109,7 @@ class Transformer(torch.nn.Module):
             if p.dim() > 1:
                 torch.nn.init.xavier_uniform_(p)
         # Initialize final projection layer to predict mean of angle distribution
-        angle_means = np.load(self.angle_mean_path)
-        self.output_projection.bias = torch.nn.Parameter(torch.FloatTensor(np.arctanh(angle_means)))
+        self.output_projection.bias = torch.nn.Parameter(torch.FloatTensor(self.angle_means))
         torch.nn.init.xavier_uniform_(self.output_projection.weight, gain=0.00001)
 
 

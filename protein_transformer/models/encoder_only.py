@@ -25,7 +25,12 @@ class EncoderOnlyTransformer(nn.Module):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-        self.output_projection.bias = nn.Parameter(torch.tensor(np.arctanh(self.angle_means), dtype=torch.float32))
+        if self.use_tanh_out:
+            am = np.arctanh(self.angle_means)
+        else:
+            am = self.angle_means
+        self.output_projection.bias = nn.Parameter(torch.tensor(am, dtype=torch.float32))
+
         nn.init.zeros_(self.output_projection.weight)
 
     def forward(self, enc_input, dec_input=None):

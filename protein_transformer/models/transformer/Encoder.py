@@ -2,7 +2,7 @@ import torch
 
 from .Attention import MultiHeadedAttention
 from .Sublayers import PositionwiseFeedForward, PositionalEncoding, \
-    SublayerConnection
+    SublayerConnection, Embeddings
 
 
 class Encoder(torch.nn.Module):
@@ -20,7 +20,7 @@ class Encoder(torch.nn.Module):
         self.max_seq_len = max_seq_len
 
         self.emb_dropout = torch.nn.Dropout(dropout)
-        self.input_embedding = torch.nn.Embedding(self.din, self.dm)
+        self.input_embedding = Embeddings(self.din, self.dm)
         self.positional_enc = PositionalEncoding(dm, dropout, max_seq_len)
 
         self.enc_layers = torch.nn.ModuleList([EncoderLayer(dm, dff, n_heads, dropout) for _ in range(self.n_enc_layers)])
