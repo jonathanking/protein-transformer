@@ -419,8 +419,7 @@ def create_parser():
                           help="Training optimizer.")
     training.add_argument("-fctf", "--fraction_complete_tf", type=float, default=1,
                           help="Fraction of the time to use teacher forcing for every timestep of the batch. Model "
-                               "trains"
-                               "fastest when this is 1.")
+                               "trains fastest when this is 1.")
     training.add_argument("-fsstf", "--fraction_subseq_tf", type=float, default=1,
                           help="Fraction of the time to use teacher forcing on a per-timestep basis.")
     training.add_argument("--skip_missing_res_train", type=my_bool, default="False",

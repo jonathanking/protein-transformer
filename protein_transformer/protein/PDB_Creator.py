@@ -40,7 +40,7 @@ class PDB_Creator(object):
         if seq and not mapping:
             assert len(seq) == coords.shape[0] / atoms_per_res, "The sequence length must match the coordinate length" \
                                                                 " and contain 1 letter AA codes." + \
-                                                                str(coords.shape[0]) + " " + str(len(seq))
+                                                                str(coords.shape[0] / atoms_per_res) + " " + str(len(seq))
             self.seq = seq
             self.mapping = self._make_mapping_from_seq()
         elif not seq and not mapping:

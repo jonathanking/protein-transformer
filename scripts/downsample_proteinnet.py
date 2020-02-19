@@ -16,7 +16,7 @@ def down_sample_data(d, n=96):
     for subset in [d["train"], d["test"]] + [d[f"valid-{split}"] for split in VALID_SPLITS]:
         num_items = len(subset["seq"])
         num_ids = n if num_items > n else num_items
-        ids = np.random.choice(np.arange(0, num_items), size=num_ids, replace=False)
+        ids = sorted(np.random.choice(np.arange(0, num_items), size=num_ids, replace=False))
         new_subset_dict = {"ang": downsample_list(subset["ang"], ids),
                            "ids": downsample_list(subset["ids"], ids),
                            "crd": downsample_list(subset["crd"], ids),
