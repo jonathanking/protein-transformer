@@ -65,7 +65,7 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True, do_b
     m_loss_sc = mse_over_angles(pred, tgt_ang, sc_only=True)
 
 
-    if args.loss in ["ln-drmsd", "drmsd", "combined"] or eval_mode:
+    if args.loss in ["lndrmsd", "drmsd", "combined"] or eval_mode:
         ls = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=do_backwards,
                                  retain_graph=args.loss == "combined", pool=pool,
                                  backbone_only=args.backbone_loss,
@@ -75,7 +75,7 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True, do_b
         else:
             d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, rmsd_loss = *ls, None
         c_loss = combine_drmsd_mse(ln_d_loss, m_loss_full, w=args.combined_drmsd_weight, log=log)
-        if args.loss == "ln-drmsd":
+        if args.loss == "lndrmsd":
             loss = ln_d_loss
         elif args.loss == "drmsd":
             loss = d_loss
@@ -393,7 +393,7 @@ def create_parser():
                           help="Number of warmup training steps when using lr-scheduling as proposed in the original"
                                "Transformer paper.")
     training.add_argument('-cg', '--clip', type=float, default=1, help="Gradient clipping value.")
-    training.add_argument('-l', '--loss', choices=["mse", "drmsd", "ln-drmsd", "combined"], default="combined",
+    training.add_argument('-l', '--loss', choices=["mse", "drmsd", "lndrmsd", "combined"], default="combined",
                           help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based "
                                "root mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combination"
                                " of RMSE and ln-DRMSD.")
@@ -408,7 +408,7 @@ def create_parser():
     training.add_argument('--early_stopping_threshold', type=float, default=0.001,
                           help="Threshold for considering improvements during training/lr scheduling.")
     training.add_argument('-esm', '--early_stopping_metric',
-                          choices=[f"{mode}-{metric}" for metric in ["mse", "drmsd", "ln-drmsd", "combined"]
+                          choices=[f"{mode}-{metric}" for metric in ["mse", "drmsd", "lndrmsd", "combined"]
                                    for mode in ["train", "test"] + [f"valid-{split}" for split in VALID_SPLITS]],
                           default=None, help="Metric observed for early stopping and LR scheduling.")
     training.add_argument('--without_angle_means', action='store_true',

@@ -42,7 +42,7 @@ parameters:
     value: sgd
   eval_train:
     distribution: constant
-    value: "true"
+    value: "True"
   d_inner_hid:
     distribution: categorical
     values:
@@ -66,13 +66,24 @@ parameters:
   loss:
     distribution: categorical
     values:
-      - ln-drmsd
+      - lndrmsd
       - mse
       - combined
   seed:
     distribution: int_uniform
     min: 1
     max: 23462
+  automatically_determine_batch_size:
+    distribution: constant
+    value: "True"
+  log_val_struct_step:
+    distribution: constant
+    value: 1000
+  combined_drmsd_weight:
+    distribution: categorical
+    values:
+      - 0.5
+      - 0.9
 early_terminate:
   type: hyperband
   eta: 5
