@@ -564,7 +564,7 @@ def main():
     wandb_dir = "/scr/jok120/wandb" if args.cluster and os.path.isdir("/scr") else None
     if wandb_dir:
         os.makedirs(wandb_dir, exist_ok=True)
-    wandb.init(project="protein-transformer-feb2020", entity="jonathanking", dir=wandb_dir)
+    wandb.init(project="protein-transformer", entity="koes-group", dir=wandb_dir)
     wandb.watch(model, "all")
     wandb.config.update(args, allow_val_change=True)
     if type(data["date"]) == set:
