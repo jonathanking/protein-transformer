@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=new-sweep
 #SBATCH --nodes=1
-#SBATCH --gres=gpus:1
+#SBATCH --gres=gpu:1
 #SBATCH -C "C6"
 #SBATCH --cpus-per-gpu=16
 #SBATCH --time=14-00:00:00
