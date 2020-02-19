@@ -88,8 +88,9 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True, do_b
 
     elif args.loss == "mse":
         # Other losses are not computed for computational efficiency.
-        d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, c_loss, rmsd_loss = torch.tensor(0), torch.tensor(0), torch.tensor(0), \
-                                                             torch.tensor(0), torch.tensor(0), None
+        d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, c_loss, rmsd_loss = torch.tensor(0), torch.tensor(0), \
+                                                                        torch.tensor(0), torch.tensor(0), \
+                                                                        torch.tensor(0), None
         loss = m_loss_full
         if do_backwards:
             m_loss_full.backward()
@@ -394,9 +395,8 @@ def create_parser():
     training.add_argument('-cg', '--clip', type=float, default=1, help="Gradient clipping value.")
     training.add_argument('-l', '--loss', choices=["mse", "drmsd", "ln-drmsd", "combined"], default="combined",
                           help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based "
-                               "root "
-                               "mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combinaation of "
-                               "RMSE and ln-DRMSD.")
+                               "root mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combination"
+                               " of RMSE and ln-DRMSD.")
     training.add_argument('--train_only', action='store_true',
                           help="Train, validation, and testing sets are the same. Only report train accuracy.")
     training.add_argument('--lr_scheduling', type=str, choices=['noam', 'plateau'], default='plateau',
@@ -499,7 +499,7 @@ def create_parser():
 def determine_largest_batch_size(fraction_to_keep=0.8):
     """
     Repeatedly tries a few training batches until the system runs out of memory. Returns the largest batch size
-    found.
+    found. Uses a completely separate script in order to avoid issues with CUDA memory not being cleared.
     """
     import subprocess
     from math import ceil
