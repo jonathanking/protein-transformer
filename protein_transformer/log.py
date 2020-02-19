@@ -13,7 +13,8 @@ import wandb
 from protein_transformer.protein.Sequence import VOCAB
 from .dataset import  VALID_SPLITS, paired_collate_fn
 from .protein.PDB_Creator import PDB_Creator
-from .losses import angles_to_coords, inverse_trig_transform
+from .losses import angles_to_coords, inverse_trig_transform, remove_sos_eos_from_input
+from protein_transformer.protein.Structure import NUM_PREDICTED_COORDS
 
 def print_train_batch_status(args, items):
     """
@@ -200,10 +201,15 @@ def do_train_batch_logging(metrics, losses, src_seq, optimizer, args, log_writer
 
     if do_log_str:
         with torch.no_grad():
+            single_src_seq = src_seq[-1]
+            batch_mask = single_src_seq != VOCAB.pad_id
+            single_src_seq = single_src_seq[batch_mask]
+            single_src_seq = remove_sos_eos_from_input(single_src_seq.clone())
             pred_coords = angles_to_coords(inverse_trig_transform(pred_angs)[-1].cpu(), src_seq[-1].cpu(),
                                            remove_batch_padding=True)
-        tgt_coords_unpadded = tgt_coords[-1:, :pred_coords.shape[0]]
-        log_structure_and_angs(args, pred_angs[-1], pred_coords, tgt_coords_unpadded[-1], src_seq[-1], commit=True)
+        tgt_coords_unpadded = tgt_coords[-1, :pred_coords.shape[0]]
+        pred_angs_unpadded = pred_angs[-1, :single_src_seq.shape[0]]
+        log_structure_and_angs(args, pred_angs_unpadded, pred_coords, tgt_coords_unpadded, single_src_seq, commit=True)
     return metrics
 
 
@@ -311,6 +317,9 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
     """
     Logs a 3D structure prediction to wandb.
     """
+    if args.add_sos_eos:
+        src_seq = remove_sos_eos_from_input(src_seq.clone())
+
     if log_angs:
         log_angle_distributions(args, pred_ang, src_seq)
 

@@ -13,8 +13,8 @@ class Transformer(torch.nn.Module):
     # TODO why are masks created in/outside of the transformer?
     """
     def __init__(self, dm, dff, din, dout, n_heads, n_enc_layers, n_dec_layers,
-                 max_seq_len, pad_char, missing_coord_filler, device, dropout, fraction_complete_tf,
-                 fraction_subseq_tf, angle_means):
+                 max_seq_len, pad_char, dec_padding, device, dropout, fraction_complete_tf,
+                 fraction_subseq_tf, angle_means, treat_missing_residues_differently, use_tanh):
         super(Transformer, self).__init__()
         self.din = din
         self.dout = dout
@@ -25,18 +25,21 @@ class Transformer(torch.nn.Module):
         self.n_dec_laers = n_dec_layers
         self.max_seq_len = max_seq_len
         self.pad_char = pad_char
-        self.missing_coord_filler = missing_coord_filler
+        self.dec_padding = dec_padding
         self.device = device
         self.fraction_subseq_tf = fraction_subseq_tf
         self.fraction_complete_tf = fraction_complete_tf
         self.angle_means = angle_means
+        self.treat_missing_residues_differently = treat_missing_residues_differently
+        self.use_tanh = use_tanh
 
         self.decoder_sos_char = -0.1
 
         self.encoder = Encoder(self.din, dm, dff, n_heads, n_enc_layers, max_seq_len, dropout)
         self.decoder = Decoder(self.dout, dm, dff, n_heads, n_dec_layers, max_seq_len, dropout)
         self.output_projection = torch.nn.Linear(dm, self.dout)
-        self.tanh = torch.nn.Tanh()
+        if self.use_tanh:
+            self.tanh = torch.nn.Tanh()
         self._init_parameters()
 
     def forward_tf(self, enc_input, dec_input):
@@ -45,21 +48,29 @@ class Transformer(torch.nn.Module):
         Includes Encoder, Decoder, and output projection.
         """
         src_mask = (enc_input != self.pad_char).unsqueeze(-2)
-        tgt_mask = (dec_input != self.pad_char).any(dim=-1).unsqueeze(-2) & self.subsequent_mask(dec_input.shape[1])
+        tgt_mask = (dec_input != self.dec_padding).any(dim=-1).unsqueeze(-2) & self.subsequent_mask(dec_input.shape[1])
         enc_output = self.encoder(enc_input, src_mask)
         dec_output = self.decoder(dec_input, enc_output, tgt_mask, src_mask)
         logits = self.output_projection(dec_output)
-        return self.tanh(logits)
+        if self.use_tanh:
+            return self.tanh(logits)
+        else:
+            return logits
 
 
-    def forward(self, enc_input, dec_input):
+    def forward(self, enc_input, dec_input_):
         """
         Makes predictions using teacher forcing, if requested. Otherwise,
         uses sequential decoding.
         """
         # Replace nans with missing character
-        dec_input[torch.isnan(dec_input)] = self.missing_coord_filler
-        has_missing_residues = torch.isnan(dec_input).all(dim=-1).any().byte()
+        dec_input = dec_input_.clone()
+        if self.treat_missing_residues_differently:
+            has_missing_residues = torch.isnan(dec_input).all(dim=-1).any().byte()
+        else:
+            has_missing_residues = False
+        dec_input[torch.isnan(dec_input)] = self.dec_padding
+
 
         # Decoder input only receives time steps SOS..t-1
         dec_input[:, 1:] = dec_input.clone()[:, :-1]
@@ -76,28 +87,32 @@ class Transformer(torch.nn.Module):
         # Otherwise, proceed with a method that will use sub-sequence level teacher forcing
         src_mask = (enc_input != self.pad_char).unsqueeze(-2)
         enc_output = self.encoder(enc_input, src_mask)
-        max_len = enc_input.shape[1]
+        max_len = enc_input.shape[1] - 1
 
         # Construct a placeholder for the predictions, starting w/the true angles (augmented with an SOS char)
         working_input_seq = dec_input.clone()
+        working_output_seq = Variable(dec_input.clone()[:,0:1])
 
         for t in range(1, max_len):
             # Slice the relevant subset of the output to provide as input. t == 1 : SOS, else: decoder output
             dec_input = Variable(working_input_seq.data[:, :t])
-            tgt_mask = (dec_input != self.pad_char).any(dim=-1).unsqueeze(-2) & self.subsequent_mask(dec_input.shape[1])
+            tgt_mask = (dec_input != self.dec_padding).any(dim=-1).unsqueeze(-2) & self.subsequent_mask(dec_input.shape[1])
 
             # Using the output so far (dec_input), run the decoder one step
             dec_output = self.decoder(dec_input, enc_output, tgt_mask, src_mask)
             angles = self.output_projection(dec_output[:, -1])
-            angles = self.tanh(angles)
+            if self.use_tanh:
+                angles = self.tanh(angles)
 
             # Update the next timestep in the placeholder with predicted angle randomly or if next residue is missing
-            feed_prediction = t + 1 < max_len and ((np.random.random() > self.fraction_subseq_tf) or
-                                                   dec_input[:, t].all(dim=-1) == self.missing_coord_filler)
+            feed_prediction = t + 1 < max_len and ((np.random.random() < self.fraction_subseq_tf) or
+                                                   dec_input[:, t].all(dim=-1) == self.dec_padding)
             if t + 1 < max_len and feed_prediction:
                 working_input_seq.data[:, t] = angles.data
 
-        return self.tanh(self.output_projection(dec_output))
+            working_output_seq = torch.cat([working_output_seq, angles.view(-1, 1, angles.shape[-1])], dim=1)
+
+        return working_output_seq[:, 1:]
 
 
     def _init_parameters(self):
@@ -109,7 +124,10 @@ class Transformer(torch.nn.Module):
             if p.dim() > 1:
                 torch.nn.init.xavier_uniform_(p)
         # Initialize final projection layer to predict mean of angle distribution
-        self.output_projection.bias = torch.nn.Parameter(torch.FloatTensor(self.angle_means))
+        if self.use_tanh:
+            self.output_projection.bias = torch.nn.Parameter(torch.FloatTensor(np.arctanh(self.angle_means)))
+        else:
+            self.output_projection.bias = torch.nn.Parameter(torch.FloatTensor(self.angle_means))
         torch.nn.init.xavier_uniform_(self.output_projection.weight, gain=0.00001)
 
 
@@ -126,6 +144,7 @@ class Transformer(torch.nn.Module):
         """
         Makes predictions with self-recursive decoding.
         """
+        raise Exception("Re-implement with or without tanh.")
         src_mask = (enc_input != self.pad_char).unsqueeze(-2)
         enc_output = self.encoder(enc_input, src_mask)
         max_len = enc_input.shape[1]

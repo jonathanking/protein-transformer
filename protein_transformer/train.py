@@ -21,6 +21,7 @@ from protein_transformer.losses import compute_batch_drmsd, mse_over_angles, com
 from protein_transformer.models.encoder_only import EncoderOnlyTransformer
 from protein_transformer.models.transformer.Optimizer import ScheduledOptim
 from protein_transformer.models.transformer.Transformer import Transformer
+from protein_transformer.protein.Sequence import ProteinVocabulary
 from protein_transformer.protein.Structure import NUM_PREDICTED_ANGLES
 
 
@@ -295,7 +296,11 @@ def make_model(args, device, angle_means):
                                        vocab=VOCAB,
                                        angle_means=angle_means,
                                        use_tanh_out=False)
-    elif args.model == "enc-dec":
+    elif args.model == "enc-dec" or args.model == "enc-dec-linear-out":
+        if args.model == "enc-dec":
+            tanh = False
+        else:
+            tanh = True
         model = Transformer(dm=args.d_model,
                             dff=args.d_inner_hid,
                             din=len(VOCAB),
@@ -305,12 +310,14 @@ def make_model(args, device, angle_means):
                             n_dec_layers=args.n_layers,
                             max_seq_len=MAX_SEQ_LEN,
                             pad_char=VOCAB.pad_id,
-                            missing_coord_filler=MISSING_COORD_FILLER,
+                            dec_padding=MISSING_ANGLE_FILLER,
                             device=device,
                             dropout=args.dropout,
                             fraction_complete_tf=args.fraction_complete_tf,
                             fraction_subseq_tf=args.fraction_subseq_tf,
-                            angle_means=angle_means)
+                            angle_means=angle_means,
+                            treat_missing_residues_differently=args.treat_missing_residues_differently,
+                            use_tanh_out=tanh)
     else:
         raise argparse.ArgumentError("Model architecture not implemented.")
     return model
@@ -448,10 +455,13 @@ def create_parser():
                                                                                            "the maximum allowable batch"
                                                                                            "size for training.",
                           default="False")
+    training.add_argument("--treat_missing_residues_differently", "-tmrd", type=my_bool, default="False",
+                          help="When training an encoder-decoder model, be sure not to teacher force with missing "
+                               "residues.")
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
-    model_args.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only", "enc-only-linear-out"],
+    model_args.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only", "enc-only-linear-out", "enc-dec-linear-out"],
                             default="enc-only", help="Model architecture type. Encoder only or encoder/decoder model.")
     model_args.add_argument('-dm', '--d_model', type=int, default=512,
                             help="Dimension of each sequence item in the model. Each layer uses the same dimension for "
@@ -520,11 +530,12 @@ def main():
     global LOGFILEHEADER
     global START_EPOCH
     global START_TIME
-    global MISSING_COORD_FILLER
+    global MISSING_ANGLE_FILLER
+    global VOCAB
 
     START_EPOCH = 0
     START_TIME = time.time()
-    MISSING_COORD_FILLER = 0  # Used when teacher forcing with an encoder/decoder model
+    MISSING_ANGLE_FILLER = 0  # Used when teacher forcing with an encoder/decoder model
 
     torch.set_printoptions(precision=5, sci_mode=False)
 
@@ -542,6 +553,8 @@ def main():
     args.add_sos_eos = args.model == "enc-dec"
     LOGFILEHEADER = prepare_log_header(args)
     args.bins = "auto" if args.bins == -1 else args.bins
+    if args.model == "enc-dec":
+        VOCAB = ProteinVocabulary(add_sos_eos=True)
 
     if args.automatically_determine_batch_size:
         args.batch_size = determine_largest_batch_size()

@@ -61,6 +61,7 @@ class ProteinDataset(torch.utils.data.Dataset):
     """
     def __init__(self, seqs=None, angs=None, crds=None, add_sos_eos=True,
                  sort_by_length=True, reverse_sort=True, skip_missing_residues=True):
+        self.vocab = ProteinVocabulary(add_sos_eos=add_sos_eos)
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
@@ -69,7 +70,7 @@ class ProteinDataset(torch.utils.data.Dataset):
             if np.isnan(angs[i]).all(axis=-1).any() and skip_missing_residues:
                 continue
             else:
-                self._seqs.append(VOCAB.str2ints(seqs[i], add_sos_eos))
+                self._seqs.append(self.vocab.str2ints(seqs[i], add_sos_eos))
                 self._angs.append(angs[i])
                 self._crds.append(crds[i])
 
@@ -111,13 +112,13 @@ class BinnedProteinDataset(torch.utils.data.Dataset):
 
         assert seqs is not None
         assert (angs is None) or (len(seqs) == len(angs) and len(angs) == len(crds))
-        self.vocab = ProteinVocabulary()
+        self.vocab = ProteinVocabulary(add_sos_eos=add_sos_eos)
         self._seqs, self._angs, self._crds = [], [], []
         for i in range(len(seqs)):
             if np.isnan(angs[i]).all(axis=-1).any() and skip_missing_residues:
                 continue
             else:
-                self._seqs.append(VOCAB.str2ints(seqs[i], add_sos_eos))
+                self._seqs.append(self.vocab.str2ints(seqs[i], add_sos_eos))
                 self._angs.append(angs[i])
                 self._crds.append(crds[i])
 

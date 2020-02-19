@@ -4,7 +4,7 @@ class ProteinVocabulary(object):
     Includes pad, sos, eos, and unknown characters as well as the 20 standard
     amino acids.
     """
-    def __init__(self, add_sos_eos=False):
+    def __init__(self, add_sos_eos=True):
         self.pad_char = "_"  # Pad character
         self.unk_char = "?"  # unknown character
         self.sos_char = "<"  # SOS character
@@ -19,9 +19,10 @@ class ProteinVocabulary(object):
         for aa in self.stdaas:
             self.add(aa)
 
+        self.add_sos_eos = add_sos_eos
         self.add(self.pad_char)
-        self.add(self.unk_char)
-        if add_sos_eos:
+        # self.add(self.unk_char)
+        if self.add_sos_eos:
             self.add(self.sos_char)
             self.add(self.eos_char)
 
@@ -30,7 +31,7 @@ class ProteinVocabulary(object):
         self.eos_id =self[self.eos_char]
 
     def __getitem__(self, aa):
-        return self._char2int.get(aa, self._char2int[self.unk_char])
+        return self._char2int.get(aa, self._char2int[self.pad_char])
 
     def __contains__(self, aa):
         return aa in self._char2int
@@ -58,7 +59,9 @@ class ProteinVocabulary(object):
         else:
             return self[aa]
 
-    def str2ints(self, seq, add_sos_eos=True):
+    def str2ints(self, seq, add_sos_eos=None):
+        if not add_sos_eos:
+            add_sos_eos = self.add_sos_eos
         if add_sos_eos:
             return [self["<"]] + [self[aa] for aa in seq] + [self[">"]]
         else:

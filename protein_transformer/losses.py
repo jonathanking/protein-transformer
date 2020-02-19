@@ -62,7 +62,9 @@ def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, bac
     # Remove batch-level masking
     batch_mask = input_seq.ne(VOCAB.pad_id)
     input_seq = input_seq[batch_mask]
+    input_seq = remove_sos_eos_from_input(input_seq)
     true_crd = true_crd[:input_seq.shape[0] * NUM_PREDICTED_COORDS]
+    pred_ang = pred_ang[:input_seq.shape[0]]
 
     # Compute coordinates
     pred_crd = angles_to_coords(pred_ang, input_seq)
