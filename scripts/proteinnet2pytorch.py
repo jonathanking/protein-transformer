@@ -13,7 +13,6 @@ import multiprocessing
 import os
 import re
 import sys
-from multiprocessing import Pool
 
 import numpy as np
 import prody as pr
@@ -23,58 +22,15 @@ import tqdm
 from protein_transformer.dataset import MAX_SEQ_LEN
 
 sys.path.append(".")
-from protein_transformer.protein.structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
-    no_nans_infs_allzeros, parse_astral_summary_file, \
-    get_chain_from_astral_id, get_header_seq_from_astral_id, GLOBAL_PAD_CHAR
+from protein_transformer.protein.structure_utils import angle_list_to_sin_cos, get_seq_and_masked_coords_and_angles, \
+    no_nans_infs_allzeros, parse_astral_summary_file, get_chain_from_astral_id, GLOBAL_PAD_CHAR
 import proteinnet_parsing
-from protein_transformer.protein.structure_exceptions import \
-    IncompleteStructureError, NonStandardAminoAcidError, SequenceError, \
-    ContigMultipleMatchingError, ShortStructureError, MissingAtomsError,\
-    NoneStructureError
-
-
+from protein_transformer.protein.structure_exceptions import  NonStandardAminoAcidError, SequenceError, \
+    ContigMultipleMatchingError, ShortStructureError, MissingAtomsError, NoneStructureError
+from proteinnet_errors import ERRORS
 
 pr.confProDy(verbosity='error')
-m = multiprocessing.Manager()
-ERROR_CODES = ["SEQUENCE_ERRORS", "MULTIPLE_CONTIG_ERRORS", "FAILED_ASTRAL_IDS", "PARSING_ERRORS", "NSAA_ERRORS", "MISSING_ASTRAL_IDS", "SHORT_ERRORS", "PARSING_ERROR_ATTRIBUTE", "PARSING_ERROR", "PARSING_ERROR_OSERROR", "UNKNOWN_EXCEPTIONS", "MISSING_ATOMS_ERROR", "NONE_STRUCTURE_ERRORS", "NONE_CHAINS", "NO_PBD_FILE"]
 
-class ProteinErrors(object):
-    """ A simple, flexible class to record and report errors when parsing. """
-    def __init__(self):
-        self.descr_to_codes = {}
-        self.counts = None
-        for e in ERROR_CODES:
-            self[e]
-
-    def __getitem__(self, error_descr):
-        """
-        Returns the error code for a certain error description. If not
-        present, it adds the error to its dictionary.
-        """
-        if error_descr in self.descr_to_codes:
-            return self.descr_to_codes[error_descr]
-        else:
-            self.descr_to_codes[error_descr] = len(self.descr_to_codes)
-            return self.descr_to_codes[error_descr]
-
-    def count(self, ec, pnid):
-        """ Creates a record of a certain PNID exhibiting a certain error. """
-        if not self.counts:
-            self.counts = {ec: [] for ec in self.descr_to_codes.values()}
-
-        self.counts[ec].append(pnid)
-
-
-    def summarize(self):
-        """ Prints a summary of all errors that have been recorded."""
-        assert self.counts, "Errors must be counted before being summarized."
-        self.error_codes_inv = {v: k for k, v in self.descr_to_codes.items()}
-        for error_code, count_list in self.counts.items():
-            if len(count_list) > 0:
-                print(f"{len(count_list)} {self.error_codes_inv[error_code]}")
-
-
-ERRORS = ProteinErrors()
 
 def get_chain_from_trainid(proteinnet_id):
     """
@@ -120,8 +76,7 @@ def get_chain_from_trainid(proteinnet_id):
         if chain.numCoordsets() > 1:
             chain.setACSIndex(int(model_id))
     except IndexError:
-        # TODO is this appropriate to pass? make global variable that returns same kinda error as above. happens a lot
-        pass
+        return ERRORS["COORDSET_INDEX_ERROR"]
 
     return chain
 
@@ -136,7 +91,7 @@ def get_chain_from_testid(proteinnet_id):
     try:
         pdb_hv = pr.parsePDB(os.path.join(args.input_dir, "targets", caspid + ".pdb")).getHierView() # TODO change to pr.parseCIF?
     except AttributeError:
-        return ERRORS["PARSING_ERRORS"]
+        return ERRORS["TEST_PARSING_ERRORS"]
     try:
         assert pdb_hv.numChains() == 1
     except:
@@ -178,14 +133,8 @@ def work(pdbid_chain):
     computes its angles, coordinates, and sequence. The angles and coordinates contain
     GLOBAL_PAD_CHARs where there was missing data.
     """
-    try:
-        true_seq = get_proteinnet_seq_from_id(pdbid_chain) # TODO replace this function that returns chain from file w/ seq
-    except KeyError:
-        return ERRORS["UNABLE_TO_LOCATE_PN_SEQ"]
-    try:
-        chain = get_chain_from_proteinnetid(pdbid_chain)  # Returns ProDy chain object
-    except OSError:
-        return ERRORS["MISSING_TEST_FILE_ERROR"]
+    true_seq = get_proteinnet_seq_from_id(pdbid_chain) # TODO replace this function that returns chain from file w/ seq
+    chain = get_chain_from_proteinnetid(pdbid_chain)  # Returns ProDy chain object
     if not chain:
         return ERRORS["NONE_STRUCTURE_ERRORS"]
     elif type(chain) == int:
@@ -211,6 +160,7 @@ def work(pdbid_chain):
     dihedrals, coords, sequence = dihedrals_coords_sequence
 
     return dihedrals, coords, sequence, pdbid_chain
+
 
 def unpack_processed_results(results, pnids):
     """
@@ -438,7 +388,7 @@ def main():
         valid_result_meta[split] = unpack_processed_results(results, vids[:vlim])
     print("Test set:\t\t", end="")
     test_ohs, test_angs, test_strs, test_ids = unpack_processed_results(test_results, test_casp_ids[:vlim])
-    print_failure_summary()
+    ERRORS.summarize()
 
     # Split into train, test and validation sets. Report sizes.
     data = create_data_dict(train_ohs, test_ohs, train_angs, test_angs, train_strs, test_strs, train_ids, test_ids,
@@ -446,51 +396,6 @@ def main():
     data = add_proteinnetID_to_idx_mapping(data)
     save_data_dict(data)
 
-
-def print_failure_summary():
-    """ Summarizes failures associated with the processing of ProteinNet ID data. """
-    ERRORS.summarize()
-
-    # os.makedirs("errors/", exist_ok=True)
-    # with open('errors/MISSING_ASTRAL_IDS.txt', 'w') as f:
-    #     f.write('\n'.join(MISSING_ASTRAL_IDS))
-    # with open('errors/FAILED_ASTRAL_IDS.txt', 'w') as f:
-    #     f.write('\n'.join(FAILED_ASTRAL_IDS))
-    # with open('errors/MULTIPLE_CONTIG_ERRORS.txt', 'w') as f:
-    #     f.write('\n'.join(MULTIPLE_CONTIG_ERRORS))
-    # with open('errors/SEQUENCE_ERRORS.txt', 'w') as f:
-    #     f.write('\n'.join(SEQUENCE_ERRORS))
-    # with open('errors/NSAA_ERRORS.txt', 'w') as f:
-    #     f.write('\n'.join(NSAA_ERRORS))
-    # with open('errors/SHORT_ERRORS.txt', 'w') as f:
-    #     f.write('\n'.join(SHORT_ERRORS))
-    # #Total number of parsing errors, may not be needed
-    # with open('errors/PARSING_ERRORS.txt', 'w') as f:
-    #     f.write('\n'.join(PARSING_ERRORS))
-    # #Added to split up the three category of parsing errors, this one handles attribute errors
-    # with open('errors/PARSING_ERROR_ATTRIBUTE.txt', 'w') as f:
-    #     f.write('\n'.join(PARSING_ERROR_ATTRIBUTE))
-    # #Added to handle 'regular' parsing errors
-    # with open('errors/PARSING_ERROR.txt', 'w') as f:
-    #     f.write('\n'.join(PARSING_ERROR))
-    # #Added to handle OS related parsing errors
-    # with open('errors/PARSING_ERROR_OSERROR.txt', 'w') as f:
-    #     f.write('\n'.join(PARSING_ERROR_OSERROR))
-
-    # #Added for cases where pr.parseCIF returned unknown exception in function get_chain_from_trainid(proteinnet_id)
-    # with open('errors/UNKNOWN_EXCEPTION.txt', 'w') as f:
-    #     f.write('\n'.join(UNKNOWN_EXCEPTIONS))
-    # #Added for cases where measure_phi_psi_omega or measure_bond_angles fail due to missing atom information
-    # with open('errors/MISSING_ATOMS_ERRORS.txt', 'w') as f:
-    #     f.write('\n'.join(MISSING_ATOMS_ERROR))
-    # #Added when chain variable returned 'none' in function get_chain_from_trainid(proteinnet_id)
-    # with open('errors/NONE_CHAINS.txt', 'w') as f:
-    #     f.write('\n'.join(NONE_CHAINS))
-    # #Added to handle when no PDB file existed for entry
-    # with open('errors/NO_PDB_FILE.txt', 'w') as f:
-    #     f.write('\n'.join(NO_PBD_FILE))
-    # with open('errors/NONE_STRUCTURE_ERRORS.txt', 'w') as f:
-    #     f.write('\n'.join(NONE_STRUCTURE_ERRORS))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -522,5 +427,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print_failure_summary()
+        ERRORS.summarize()
         raise e
