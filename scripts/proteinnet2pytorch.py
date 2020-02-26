@@ -36,14 +36,14 @@ from protein_transformer.protein.structure_exceptions import \
 
 pr.confProDy(verbosity='error')
 m = multiprocessing.Manager()
-ERRORS = ["SEQUENCE_ERRORS", "MULTIPLE_CONTIG_ERRORS", "FAILED_ASTRAL_IDS", "PARSING_ERRORS", "NSAA_ERRORS", "MISSING_ASTRAL_IDS", "SHORT_ERRORS", "PARSING_ERROR_ATTRIBUTE", "PARSING_ERROR", "PARSING_ERROR_OSERROR", "UNKNOWN_EXCEPTIONS", "MISSING_ATOMS_ERROR", "NONE_STRUCTURE_ERRORS", "NONE_CHAINS", "NO_PBD_FILE"]
+ERROR_CODES = ["SEQUENCE_ERRORS", "MULTIPLE_CONTIG_ERRORS", "FAILED_ASTRAL_IDS", "PARSING_ERRORS", "NSAA_ERRORS", "MISSING_ASTRAL_IDS", "SHORT_ERRORS", "PARSING_ERROR_ATTRIBUTE", "PARSING_ERROR", "PARSING_ERROR_OSERROR", "UNKNOWN_EXCEPTIONS", "MISSING_ATOMS_ERROR", "NONE_STRUCTURE_ERRORS", "NONE_CHAINS", "NO_PBD_FILE"]
 
 class ProteinErrors(object):
     """ A simple, flexible class to record and report errors when parsing. """
     def __init__(self):
         self.descr_to_codes = {}
         self.counts = None
-        for e in ERRORS:
+        for e in ERROR_CODES:
             self[e]
 
     def __getitem__(self, error_descr):
@@ -70,7 +70,8 @@ class ProteinErrors(object):
         assert self.counts, "Errors must be counted before being summarized."
         self.error_codes_inv = {v: k for k, v in self.descr_to_codes.items()}
         for error_code, count_list in self.counts.items():
-            print(f"{len(count_list)} {self.error_codes_inv[error_code]}")
+            if len(count_list) > 0:
+                print(f"{len(count_list)} {self.error_codes_inv[error_code]}")
 
 
 ERRORS = ProteinErrors()
@@ -177,10 +178,19 @@ def work(pdbid_chain):
     computes its angles, coordinates, and sequence. The angles and coordinates contain
     GLOBAL_PAD_CHARs where there was missing data.
     """
-    true_seq = get_proteinnet_seq_from_id(pdbid_chain) # TODO replace this function that returns chain from file w/ seq
-    chain = get_chain_from_proteinnetid(pdbid_chain)  # Returns ProDy chain object
+    try:
+        true_seq = get_proteinnet_seq_from_id(pdbid_chain) # TODO replace this function that returns chain from file w/ seq
+    except KeyError:
+        return ERRORS["UNABLE_TO_LOCATE_PN_SEQ"]
+    try:
+        chain = get_chain_from_proteinnetid(pdbid_chain)  # Returns ProDy chain object
+    except OSError:
+        return ERRORS["MISSING_TEST_FILE_ERROR"]
     if not chain:
         return ERRORS["NONE_STRUCTURE_ERRORS"]
+    elif type(chain) == int:
+        # This indicates there was an issue parsing the chain
+        return chain
     try:
         dihedrals_coords_sequence = get_seq_and_masked_coords_and_angles(chain, true_seq)
     except NonStandardAminoAcidError:
@@ -217,6 +227,7 @@ def unpack_processed_results(results, pnids):
         if type(r) == int:
             # PDB failed to download
             ERRORS.count(r, pnid)
+            continue
         ang, coords, seq, i = r
         if  no_nans_infs_allzeros(ang) and no_nans_infs_allzeros(coords):
             all_ohs.append(seq)
