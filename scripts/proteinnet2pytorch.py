@@ -13,7 +13,6 @@ import multiprocessing
 import os
 import re
 import sys
-from multiprocessing import Pool
 
 import numpy as np
 import prody as pr
@@ -23,34 +22,15 @@ import tqdm
 from protein_transformer.dataset import MAX_SEQ_LEN
 
 sys.path.append(".")
-from protein_transformer.protein.structure_utils import angle_list_to_sin_cos, seq_to_onehot, get_seq_and_masked_coords_and_angles, \
-    no_nans_infs_allzeros, parse_astral_summary_file, \
-    get_chain_from_astral_id, get_header_seq_from_astral_id, GLOBAL_PAD_CHAR
+from protein_transformer.protein.structure_utils import angle_list_to_sin_cos, get_seq_and_masked_coords_and_angles, \
+    no_nans_infs_allzeros, parse_astral_summary_file, get_chain_from_astral_id, GLOBAL_PAD_CHAR
 import proteinnet_parsing
-from protein_transformer.protein.structure_exceptions import \
-    IncompleteStructureError, NonStandardAminoAcidError, SequenceError, \
-    ContigMultipleMatchingError, ShortStructureError, MissingAtomsError,\
-    NoneStructureError
-
-
+from protein_transformer.protein.structure_exceptions import  NonStandardAminoAcidError, SequenceError, \
+    ContigMultipleMatchingError, ShortStructureError, MissingAtomsError, NoneStructureError
+from proteinnet_errors import ERRORS
 
 pr.confProDy(verbosity='error')
-m = multiprocessing.Manager()
-SEQUENCE_ERRORS = m.list()
-MULTIPLE_CONTIG_ERRORS = m.list()
-FAILED_ASTRAL_IDS = m.list()
-PARSING_ERRORS = m.list()
-NSAA_ERRORS = m.list()
-MISSING_ASTRAL_IDS = m.list()
-SHORT_ERRORS = m.list()
-PARSING_ERROR_ATTRIBUTE = m.list()
-PARSING_ERROR = m.list()
-PARSING_ERROR_OSERROR = m.list()
-UNKNOWN_EXCEPTIONS = m.list()
-MISSING_ATOMS_ERROR = m.list()
-NONE_STRUCTURE_ERRORS = m.list()
-NONE_CHAINS = m.list()
-NO_PBD_FILE = m.list()
+
 
 def get_chain_from_trainid(proteinnet_id):
     """
@@ -67,14 +47,11 @@ def get_chain_from_trainid(proteinnet_id):
             pdbid, astral_id = proteinnet_id.split("_")
             return get_chain_from_astral_id(astral_id.replace("-", "_"), ASTRAL_ID_MAPPING)
         except KeyError:
-            MISSING_ASTRAL_IDS.append(proteinnet_id)
-            return None
+            return ERRORS["MISSING_ASTRAL_IDS"]
         except ValueError:
-            FAILED_ASTRAL_IDS.append(proteinnet_id)
-            return None
+            return ERRORS["FAILED_ASTRAL_IDS"]
         except:
-            FAILED_ASTRAL_IDS.append(proteinnet_id)
-            return None
+            return ERRORS["FAILED_ASTRAL_IDS"]
 
     # Continue loading the chain, given the PDB ID
     try:
@@ -83,29 +60,23 @@ def get_chain_from_trainid(proteinnet_id):
         try:
             chain = pr.parseCIF(pdbid, chain=chid) # changed pr.parsePDB to pr.parseCIF, removed heirarchal view
         except AttributeError:
-            PARSING_ERROR_ATTRIBUTE.append(proteinnet_id)
-            return None
+            return ERRORS["PARSING_ERROR_ATTRIBUTE"]
         except pr.proteins.pdbfile.PDBParseError:
-            PARSING_ERROR.append(proteinnet_id)
-            return None
+            return ERRORS["PARSING_ERROR"]
         except OSError:
-            PARSING_ERROR_OSERROR.append(proteinnet_id)
-            return None
+            return ERRORS["PARSING_ERROR_OSERROR"]
         except Exception as e:
-            UNKNOWN_EXCEPTIONS.append(str(e) + " " + proteinnet_id)
-            return None
+            return ERRORS["UNKNOWN_EXCEPTIONS"]
 
     if chain is None:
         print(proteinnet_id)
-        NONE_CHAINS.append(proteinnet_id)
-        return None
+        return ERRORS["NONE_CHAINS"]
     # Attempt to select a coordset
     try:
         if chain.numCoordsets() > 1:
             chain.setACSIndex(int(model_id))
     except IndexError:
-        # TODO is this appropriate to pass? make global variable that returns same kinda error as above. happens a lot
-        pass
+        return ERRORS["COORDSET_INDEX_ERROR"]
 
     return chain
 
@@ -120,8 +91,7 @@ def get_chain_from_testid(proteinnet_id):
     try:
         pdb_hv = pr.parsePDB(os.path.join(args.input_dir, "targets", caspid + ".pdb")).getHierView() # TODO change to pr.parseCIF?
     except AttributeError:
-        PARSING_ERRORS.append(proteinnet_id)
-        return None
+        return ERRORS["TEST_PARSING_ERRORS"]
     try:
         assert pdb_hv.numChains() == 1
     except:
@@ -166,36 +136,33 @@ def work(pdbid_chain):
     true_seq = get_proteinnet_seq_from_id(pdbid_chain) # TODO replace this function that returns chain from file w/ seq
     chain = get_chain_from_proteinnetid(pdbid_chain)  # Returns ProDy chain object
     if not chain:
-        NONE_STRUCTURE_ERRORS.append(pdbid_chain)
-        return None
+        return ERRORS["NONE_STRUCTURE_ERRORS"]
+    elif type(chain) == int:
+        # This indicates there was an issue parsing the chain
+        return chain
     try:
         dihedrals_coords_sequence = get_seq_and_masked_coords_and_angles(chain, true_seq)
     except NonStandardAminoAcidError:
-        NSAA_ERRORS.append(pdbid_chain)
-        return None
+        return ERRORS["NSAA_ERRORS"]
     except NoneStructureError:
-        NONE_STRUCTURE_ERRORS.append(pdbid_chain)
-        return None
+        return ERRORS["NONE_STRUCTURE_ERRORS"]
     except ContigMultipleMatchingError:
-        MULTIPLE_CONTIG_ERRORS.append(pdbid_chain)
-        return None
+        return ERRORS["MULTIPLE_CONTIG_ERRORS"]
     except ShortStructureError:
-        SHORT_ERRORS.append(pdbid_chain)
-        return None
+        return ERRORS["SHORT_ERRORS"]
     except MissingAtomsError:
-        MISSING_ATOMS_ERROR.append(pdbid_chain)
-        return None
+        return ERRORS["MISSING_ATOMS_ERROR"]
     except SequenceError:
         print("Not fixed.", pdbid_chain)
-        SEQUENCE_ERRORS.append(pdbid_chain)
-        return None
+        return ERRORS["SEQUENCE_ERRORS"]
 
     # If we've made it this far, we can unpack the data and return it
     dihedrals, coords, sequence = dihedrals_coords_sequence
 
     return dihedrals, coords, sequence, pdbid_chain
 
-def unpack_processed_results(results):
+
+def unpack_processed_results(results, pnids):
     """
     Given an iterable of processed results containing angles, sequences, and PDB IDs,
     this function separates out the components (sequences as one-hot vectors, angle matrices,
@@ -206,9 +173,10 @@ def unpack_processed_results(results):
     all_crds = []
     all_ids = []
     c = 0
-    for r in results:
-        if not r:
+    for r, pnid in zip(results, pnids):
+        if type(r) == int:
             # PDB failed to download
+            ERRORS.count(r, pnid)
             continue
         ang, coords, seq, i = r
         if  no_nans_infs_allzeros(ang) and no_nans_infs_allzeros(coords):
@@ -410,16 +378,17 @@ def main():
         test_results.append(work(tid))
 
     print("Structures processed.")
-    print_failure_summary()
+    
 
     # Unpack results
     print("Training set:\t", end="")
-    train_ohs, train_angs, train_strs, train_ids = unpack_processed_results(train_results)
-    for split, results in valid_result_meta.items():
+    train_ohs, train_angs, train_strs, train_ids = unpack_processed_results(train_results, train_pdb_ids[:lim])
+    for (split, results), vids in zip(valid_result_meta.items(), group_validation_set(valid_ids).values()):
         print(f"Valid set {split}%:\t", end="")
-        valid_result_meta[split] = unpack_processed_results(results)
+        valid_result_meta[split] = unpack_processed_results(results, vids[:vlim])
     print("Test set:\t\t", end="")
-    test_ohs, test_angs, test_strs, test_ids = unpack_processed_results(test_results)
+    test_ohs, test_angs, test_strs, test_ids = unpack_processed_results(test_results, test_casp_ids[:vlim])
+    ERRORS.summarize()
 
     # Split into train, test and validation sets. Report sizes.
     data = create_data_dict(train_ohs, test_ohs, train_angs, test_angs, train_strs, test_strs, train_ids, test_ids,
@@ -427,65 +396,6 @@ def main():
     data = add_proteinnetID_to_idx_mapping(data)
     save_data_dict(data)
 
-
-def print_failure_summary():
-    """ Summarizes failures associated with the processing of ProteinNet ID data. """
-    print(f"{len(MISSING_ASTRAL_IDS)} ASTRAL IDs were missing from the file.")
-    print(f"{len(FAILED_ASTRAL_IDS)} ASTRAL IDs failed to download for another reason.")
-    print(f"{len(MULTIPLE_CONTIG_ERRORS)} ProteinNet IDs failed because of multiple matching contigs.")
-    print(f"{len(SEQUENCE_ERRORS)} ProteinNet IDs failed because of mismatching sequence errors.")
-    print(f"{len(NSAA_ERRORS)} ProteinNet IDs failed because of non-std AAs.")
-    print(f"{len(SHORT_ERRORS)} ProteinNet IDs failed because their length was <= 2.")
-    print(f"{len(PARSING_ERRORS)} ProteinNet IDs failed because of parsing errors.")
-    print(f"{len(PARSING_ERROR_ATTRIBUTE)} ProteinNet IDs failed because of attribute errors.")
-    print(f"{len(PARSING_ERROR)} ProteinNet IDs failed because of standard parsing error.")
-    print(f"{len(PARSING_ERROR_OSERROR)} ProteinNet IDs failed because of OSError.")
-    print(f"{len(UNKNOWN_EXCEPTIONS)} ProteinNet IDs failed because of unknown OSError.")
-    print(f"{len(MISSING_ATOMS_ERROR)} ProteinNet IDs failed because residues were missing N, CA1, or C atoms.")
-    print(f"{len(NONE_CHAINS)} ProteinNet IDs failed because no chain existed.")
-    print(f"{len(NO_PBD_FILE)} ProteinNet IDs failed because no PDB file exists and they probably have .CIF instead.")
-    print(f"{len(NONE_STRUCTURE_ERRORS)} ProteinNet IDs failed because chain become `None`.")
-
-    os.makedirs("errors/", exist_ok=True)
-    with open('errors/MISSING_ASTRAL_IDS.txt', 'w') as f:
-        f.write('\n'.join(MISSING_ASTRAL_IDS))
-    with open('errors/FAILED_ASTRAL_IDS.txt', 'w') as f:
-        f.write('\n'.join(FAILED_ASTRAL_IDS))
-    with open('errors/MULTIPLE_CONTIG_ERRORS.txt', 'w') as f:
-        f.write('\n'.join(MULTIPLE_CONTIG_ERRORS))
-    with open('errors/SEQUENCE_ERRORS.txt', 'w') as f:
-        f.write('\n'.join(SEQUENCE_ERRORS))
-    with open('errors/NSAA_ERRORS.txt', 'w') as f:
-        f.write('\n'.join(NSAA_ERRORS))
-    with open('errors/SHORT_ERRORS.txt', 'w') as f:
-        f.write('\n'.join(SHORT_ERRORS))
-    #Total number of parsing errors, may not be needed
-    with open('errors/PARSING_ERRORS.txt', 'w') as f:
-        f.write('\n'.join(PARSING_ERRORS))
-    #Added to split up the three category of parsing errors, this one handles attribute errors
-    with open('errors/PARSING_ERROR_ATTRIBUTE.txt', 'w') as f:
-        f.write('\n'.join(PARSING_ERROR_ATTRIBUTE))
-    #Added to handle 'regular' parsing errors
-    with open('errors/PARSING_ERROR.txt', 'w') as f:
-        f.write('\n'.join(PARSING_ERROR))
-    #Added to handle OS related parsing errors
-    with open('errors/PARSING_ERROR_OSERROR.txt', 'w') as f:
-        f.write('\n'.join(PARSING_ERROR_OSERROR))
-
-    #Added for cases where pr.parseCIF returned unknown exception in function get_chain_from_trainid(proteinnet_id)
-    with open('errors/UNKNOWN_EXCEPTION.txt', 'w') as f:
-        f.write('\n'.join(UNKNOWN_EXCEPTIONS))
-    #Added for cases where measure_phi_psi_omega or measure_bond_angles fail due to missing atom information
-    with open('errors/MISSING_ATOMS_ERRORS.txt', 'w') as f:
-        f.write('\n'.join(MISSING_ATOMS_ERROR))
-    #Added when chain variable returned 'none' in function get_chain_from_trainid(proteinnet_id)
-    with open('errors/NONE_CHAINS.txt', 'w') as f:
-        f.write('\n'.join(NONE_CHAINS))
-    #Added to handle when no PDB file existed for entry
-    with open('errors/NO_PDB_FILE.txt', 'w') as f:
-        f.write('\n'.join(NO_PBD_FILE))
-    with open('errors/NONE_STRUCTURE_ERRORS.txt', 'w') as f:
-        f.write('\n'.join(NONE_STRUCTURE_ERRORS))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -517,5 +427,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print_failure_summary()
+        ERRORS.summarize()
         raise e
