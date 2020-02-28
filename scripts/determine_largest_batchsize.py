@@ -23,8 +23,12 @@ def test_batch_size(args):
     pool = init_worker_pool(args)
     angle_means = data["settings"]["angle_means"]
 
-    def add_incrementer(n):
-        return n + 1
+    def make_add_incrementer(failed_batch_size):
+        """ Performs about 10 steps between the previous batch size and the maximum. """
+        step = max(1, int(failed_batch_size / 10))
+        def add_incrementer(n):
+            return n + step
+        return add_incrementer
 
     def mul_incrementer(n):
         return n * 2
@@ -70,7 +74,7 @@ def test_batch_size(args):
                 if not first:
                     return args.batch_size
                 first = False
-                incrementer = add_incrementer
+                incrementer = make_add_incrementer(args.batch_size)
                 try:
                     del device
                     del model, optimizer, scheduler
