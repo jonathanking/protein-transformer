@@ -28,6 +28,7 @@ will be free to import any classes or subroutines into your own training script 
 * ProDy
 * Pytorch
 * numpy
+* scipy
 * tqdm
 * [wandb](https://docs.wandb.com)
 
