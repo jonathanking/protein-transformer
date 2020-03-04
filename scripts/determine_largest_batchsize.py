@@ -69,7 +69,7 @@ def test_batch_size(args):
                 torch.cuda.empty_cache()
                 del torch
                 del res
-                if args.loss != "mse" and args.batchsize >= torch.multiprocessing.cpu_count():
+                if args.loss != "mse" and args.batch_size >= torch.multiprocessing.cpu_count():
                     args.batch_size = torch.multiprocessing.cpu_count()
                     break
             except RuntimeError:
