@@ -89,6 +89,7 @@ def test_batch_size(args):
                 torch.cuda.empty_cache()
                 del torch
                 args.batch_size = int(args.batch_size // 2) + 1
+                args.batch_size = incrementer(args.batch_size)
                 break
 
 
