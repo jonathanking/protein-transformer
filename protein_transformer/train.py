@@ -522,6 +522,11 @@ def main():
     global START_TIME
     global MISSING_COORD_FILLER
 
+    # Fix file descriptor issue: https://github.com/pytorch/pytorch/issues/973
+    import resource
+    rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
+
     START_EPOCH = 0
     START_TIME = time.time()
     MISSING_COORD_FILLER = 0  # Used when teacher forcing with an encoder/decoder model
@@ -535,14 +540,12 @@ def main():
     assert "_" not in args.name, "Please do not use a '_' in your model name. " \
                                  "Conflicts with structure files."
     args.buffering_mode = 1
-    # TODO modify early_stopping_metric to follow validation loss
     if not args.early_stopping_metric:
         args.early_stopping_metric = f"train-{args.loss}"
     args.es_mode, args.es_metric = args.early_stopping_metric.split("-")
     args.add_sos_eos = args.model == "enc-dec"
     LOGFILEHEADER = prepare_log_header(args)
     args.bins = "auto" if args.bins == -1 else args.bins
-
     if args.automatically_determine_batch_size:
         args.batch_size = determine_largest_batch_size()
 
