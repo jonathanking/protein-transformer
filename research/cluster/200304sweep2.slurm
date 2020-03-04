@@ -24,7 +24,7 @@ cd /scr/jok120
 if ! [[ -d protein-transformer ]]
 then
     git clone git@github.com:jonathanking/protein-transformer.git
-    cp /net/pulsar/home/koes/jok120/protein-transformer/data/proteinnet/casp12_200218_30.pt protein-transformer/data/proteinnet
+    rsync /net/pulsar/home/koes/jok120/protein-transformer/data/proteinnet/casp12_200218_30.pt protein-transformer/data/proteinnet
 fi
 cd protein-transformer/protein_transformer
 
