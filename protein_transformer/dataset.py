@@ -243,18 +243,14 @@ def prepare_dataloaders(data, args, max_seq_len, num_workers=0):
                                                             optimize_batch_for_cpus=args.loss in ["combined", "drmsd",
                                                                                                   "ln-drmsd"],
                                                             repeat_train=args.repeat_train))
-    # Don't use a dynamic batch size when evaluating structures, for speed
-    if args.loss == "mse":
-        db = args.batch_size * MAX_SEQ_LEN
-    else:
-        db = None
+    # Don't use a dynamic batch size when evaluating structures, for comparison
     train_eval_loader = torch.utils.data.DataLoader(
                     train_dataset,
                     num_workers=num_workers,
                     collate_fn=paired_collate_fn,
                     batch_sampler=SimilarLengthBatchSampler(train_dataset,
                                                             args.batch_size,
-                                                            dynamic_batch=db,
+                                                            dynamic_batch=None,
                                                             optimize_batch_for_cpus=args.loss in ["combined", "drmsd",
                                                                                                   "ln-drmsd"],
                                                             downsample=args.train_eval_downsample))
