@@ -69,8 +69,8 @@ def test_batch_size(args):
                 torch.cuda.empty_cache()
                 del torch
                 del res
-                if args.loss != "mse" and args.batch_size >= torch.multiprocessing.cpu_count():
-                    args.batch_size = torch.multiprocessing.cpu_count()
+                if args.loss != "mse" and args.batch_size >= CPUS:
+                    args.batch_size = CPUS
                     break
             except RuntimeError:
                 print("(crash)")
@@ -134,6 +134,8 @@ if __name__ == '__main__':
     args.add_sos_eos = args.model == "enc-dec"
     args.bins = "auto" if args.bins == -1 else args.bins
     args.batch_size = args.experimental_batch_size
+    import torch.multiprocessing as mp
+    CPUS = mp.cpu_count()
 
     result = test_batch_size(args)
     exit(result)
