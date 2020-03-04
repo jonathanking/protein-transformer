@@ -2,7 +2,8 @@
 #SBATCH --job-name=new-sweep
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
-#SBATCH -C "C6"200219sweep2.slurm
+#SBATCH -C "C6"
+#SBATCH --cpus-per-gpu=16
 #SBATCH --time=14-00:00:00
 #SBATCH --partition=dept_gpu
 #SBATCH --output="../research/cluster/slurm/200219slurm-%A_%a.out"
