@@ -346,7 +346,7 @@ def init_worker_pool(args):
 
 def setup_model_optimizer_scheduler(args, device, angle_means):
     model = make_model(args, device, angle_means).to(device)
-
+    print("made model")
     # Prepare optimizer
     wd = 10e-3 if args.weight_decay else 0
     if args.optimizer == "adam":
@@ -358,6 +358,7 @@ def setup_model_optimizer_scheduler(args, device, angle_means):
         optimizer = optim.SGD(
             filter(lambda x: x.requires_grad, model.parameters()),
             lr=args.learning_rate, weight_decay=wd)
+    print("made optimizer")
 
     # Prepare scheduler
     if args.lr_scheduling == "noam":
