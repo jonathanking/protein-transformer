@@ -24,10 +24,14 @@ mkdir -p /scr/jok120
 cd /scr/jok120
 if ! [[ -d protein-transformer ]]
 then
+    echo "Cloning repo."
     git clone git@github.com:jonathanking/protein-transformer.git
     rsync /net/pulsar/home/koes/jok120/protein-transformer/data/proteinnet/casp12_200218_30.pt protein-transformer/data/proteinnet
+    cd protein-transformer/protein_transformer
+else
+    cd protein-transformer/protein_transformer
+    git pull
 fi
-cd protein-transformer/protein_transformer
 
 
 ############################
