@@ -49,6 +49,7 @@ def test_batch_size(args):
                 import torch
                 print("inner import")
                 device = torch.device('cuda' if args.cuda else 'cpu')
+                print("made device")
                 model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device, angle_means)
                 print("made opts")
                 train_dataset = BinnedProteinDataset(
