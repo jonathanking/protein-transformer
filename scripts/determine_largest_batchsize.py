@@ -14,13 +14,18 @@ cleared when the process completes, leaving a completely free GPU available for 
 from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN, BinnedProteinDataset, paired_collate_fn, SimilarLengthBatchSampler
 from protein_transformer.train import create_parser, setup_model_optimizer_scheduler, get_losses, init_worker_pool
 import torch
+print("made it past imports")
 
 def test_batch_size(args):
     """ Increases the batch size by one, stopping with the system runs out of memory. """
     # Load dataset
+    print("Start test")
     import torch
+    print("after import")
     data = torch.load(args.data)
+    print("after data load")
     pool = init_worker_pool(args)
+    print("made pool")
     angle_means = data["settings"]["angle_means"]
 
     def make_add_incrementer(failed_batch_size):
@@ -42,9 +47,10 @@ def test_batch_size(args):
             try:
                 # Prepare model
                 import torch
+                print("inner import")
                 device = torch.device('cuda' if args.cuda else 'cpu')
                 model, optimizer, scheduler = setup_model_optimizer_scheduler(args, device, angle_means)
-
+                print("made opts")
                 train_dataset = BinnedProteinDataset(
                     seqs=data['train']['seq'] * args.repeat_train,
                     crds=data['train']['crd'] * args.repeat_train,
@@ -52,13 +58,14 @@ def test_batch_size(args):
                     add_sos_eos=args.add_sos_eos, skip_missing_residues=args.skip_missing_res_train, bins=args.bins)
                 train_loader = torch.utils.data.DataLoader(
                     train_dataset,
-                    num_workers=1,
+                    num_workers=0,
                     collate_fn=paired_collate_fn,
                     batch_sampler=SimilarLengthBatchSampler(train_dataset,
                                                             args.batch_size,
                                                             dynamic_batch=args.batch_size * MAX_SEQ_LEN,
                                                             optimize_batch_for_cpus=False,
                                                             use_largest_bin=True))
+                print("loaded data")
                 res = first_train_epoch(model, train_loader, optimizer, device, args, pool=pool)
 
                 # Clean up
