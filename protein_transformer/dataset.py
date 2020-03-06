@@ -188,13 +188,18 @@ class SimilarLengthBatchSampler(torch.utils.data.Sampler):
         # If batches are dynamically sized to contain the same number of residues,
         # then the approximate number of batches is the total number of residues in the dataset
         # divided by the size of the dynamic batch.
+        lens_sum = sum(self.data_source.lens) * self.repeat_train
 
         if self.dynamic_batch:
-            lens_sum = sum(self.data_source.lens) * self.repeat_train
-            if self.downsample:
-                lens_sum *=  self.downsample
-            return int(np.ceil(lens_sum / self.dynamic_batch))
-        return int(np.ceil(len(self.data_source) * self.repeat_train / self.batch_size))
+            divisor = self.dynamic_batch
+        else:
+            divisor = self.batch_size
+
+        if self.downsample:
+            lens_sum *=  self.downsample
+
+        return int(np.ceil(lens_sum / divisor))
+
 
     def __iter__(self):
         def batch_generator():
