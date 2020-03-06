@@ -70,8 +70,7 @@ def test_batch_size(args):
                 del torch
                 del res
                 if args.loss != "mse" and args.batch_size >= CPUS:
-                    args.batch_size = CPUS
-                    break
+                    return CPUS
             except RuntimeError:
                 print("(crash)")
                 if not first:
