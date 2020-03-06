@@ -508,7 +508,7 @@ def determine_largest_batch_size(fraction_to_keep=0.8):
     completed_process = subprocess.run(args=["python", "../scripts/determine_largest_batchsize.py", *sys.argv[1:],
                                              "--experimental_batch_size", str(b)], encoding="utf-8")
     b = int(completed_process.returncode)
-    max_batch_size = ceil((b * fraction_to_keep))
+    max_batch_size = max(1, ceil((b * fraction_to_keep)))
     print(f"Maximum batch size found to be {b}. Will proceed with {max_batch_size}. {int((time.time() - start)//60)}"
           f" min elapsed.")
     return max_batch_size
