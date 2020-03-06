@@ -550,7 +550,7 @@ def main():
     LOGFILEHEADER = prepare_log_header(args)
     args.bins = "auto" if args.bins == -1 else args.bins
     if args.automatically_determine_batch_size:
-        args.batch_size = determine_largest_batch_size()
+        args.batch_size = determine_largest_batch_size(args)
 
     # Prepare torch
     drmsd_worker_pool = init_worker_pool(args)
