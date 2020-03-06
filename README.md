@@ -36,8 +36,9 @@ will be free to import any classes or subroutines into your own training script 
 
 After successful installation, navigate to the `protein_transformer directory`, where you can train a model with `train.py`.
 
-This script takes as arguments a plethora of different architecture and training settings. Two positional arguments
- are required, the training data location and the model name.
+Please also modify any `wandb` initialization settings in `train.py` so that they point to your `wandb` project, and not mine :) 
+
+This script takes many different arguments to determine different architecture and training settings. 
 
 #### Example:
 ```
