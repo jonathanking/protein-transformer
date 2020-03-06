@@ -65,12 +65,12 @@ def test_batch_size(args):
                 del device
                 del model, optimizer, scheduler
                 del train_dataset, train_loader
+                if args.loss != "mse" and args.batch_size >= CPUS:
+                    return CPUS
                 args.batch_size = incrementer(args.batch_size)
                 torch.cuda.empty_cache()
                 del torch
                 del res
-                if args.loss != "mse" and args.batch_size >= CPUS:
-                    return CPUS
             except RuntimeError:
                 print("(crash)")
                 if not first:
