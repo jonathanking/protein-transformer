@@ -193,7 +193,12 @@ class PDB_Creator(object):
         pymol.cmd.color("marine", "true")
         pymol.cmd.color("oxygen", "pred")
         rmsd, _, _, _, _, _, _ = pymol.cmd.align("true", "pred", quiet=True)
-        pymol.cmd.save(gltf_out_path, f"{wandb.run.step:05}.gltf")
+        try:
+            pymol.cmd.save(gltf_out_path, f"{wandb.run.step:05}.gltf")
+        except TypeError:
+            # Addresses an issue where the PyMol scene may not be setup correctly
+            pymol.cmd.delete("all")
+            return
 
         # Align and save PSE
         if make_pse:
