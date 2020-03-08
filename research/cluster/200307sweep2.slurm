@@ -32,18 +32,19 @@ else
     cd protein-transformer/protein_transformer
     git pull
 fi
-
+echo "Updated repo."
 
 ############################
 ##     Array Job Exec.    ##
 ############################
 wandb agent --count 1 koes-group/protein-transformer/ji5vzfek
+echo "Completed wandb agent."
 
 
 ############################
 ##     Copy Files Back    ##
 ############################
 rsync -avzh --exclude "*.gltf" --exclude "*.png" wandb /net/pulsar/home/koes/jok120/protein-transformer/protein_transformer/wandb
-
+echo "Completed rsync."
 
 exit 0
