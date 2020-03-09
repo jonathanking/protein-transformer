@@ -345,7 +345,11 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
                          pse_out_path=f"{cur_struct_path}/{wandb.run.step:05}_both.pse")
     log_items = {struct_name: wandb.Object3D(gltf_out_path)}
     if args.save_pngs:
-        log_items[struct_name + "_img"]  = wandb.Image(gltf_out_path.replace("gltf", "png"))
+        try:
+            log_items[struct_name + "_img"]  = wandb.Image(gltf_out_path.replace("gltf", "png"))
+        except FileNotFoundError:
+            # Account for the possibility that a PyMol session may have failed to create successfully
+            pass
     wandb.log(log_items, commit=commit)
 
 
