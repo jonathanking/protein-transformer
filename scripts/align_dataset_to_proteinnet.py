@@ -53,25 +53,29 @@ def can_be_directly_merged(aligner, pn_seq, my_seq, pn_mask):
     """
     a = aligner.align(pn_seq, my_seq)
     if len(a) == 0:
-        return None, None
+        return None, None, None
 
     elif len(a) == 1:
         a0 = a[0]
         computed_mask = get_mask_from_alignment(a0)
-        return computed_mask == pn_mask, computed_mask
+        return computed_mask == pn_mask, computed_mask, a0
 
     elif len(a) > 1:
         best_mask = None
         found_a_match = False
+        best_alignment = None
         for a0 in a:
             computed_mask = get_mask_from_alignment(a0)
             if not best_mask:
                 best_mask = computed_mask
+            if not best_alignment:
+                best_alignment = a0
             if computed_mask == pn_mask:
                 found_a_match = True
                 best_mask = computed_mask
+                best_alignment = a0
                 break
-        return found_a_match, best_mask
+        return found_a_match, best_mask, best_alignment
 
 
 def binary_mask_to_str(m):
@@ -84,6 +88,10 @@ def binary_mask_to_str(m):
 
 
 def find_how_many_entries_can_be_directly_merged():
+    """
+    Counts the number of entries that can be succesfully aligned between the
+    sidechain dataset and the protein dataset.
+    """
     d = torch.load("/home/jok120/protein-transformer/data/proteinnet/casp12_200218_30.pt")
     pn = torch.load("/home/jok120/proteinnet/data/casp12/torch/training_30.pt")
     aligner = init_aligner()
@@ -92,15 +100,40 @@ def find_how_many_entries_can_be_directly_merged():
     with open("merging_problems.csv", "w") as f, open("merging_success.csv", "w") as sf:
         for i, my_id in enumerate(tqdm(d["train"]["ids"])):
             my_seq, pn_seq, pn_mask = d["train"]["seq"][i], pn[my_id]["primary"], binary_mask_to_str(pn[my_id]["mask"])
-            result, computed_mask = can_be_directly_merged(aligner, pn_seq, my_seq, pn_mask)
+            my_seq = unmask_seq(d["train"]["ang"][i], my_seq)
+            result, computed_mask, alignment = can_be_directly_merged(aligner, pn_seq, my_seq, pn_mask)
             if result:
                 successful += 1
                 sf.write(",".join([my_id, my_seq, computed_mask]) + "\n")
             else:
-                f.write(",".join([my_id, my_seq, pn_seq, pn_mask, str(result)]) + "\n")
+                if pn_mask.count("+") < len(my_seq):
+                    size_comparison = "<"
+                elif pn_mask.count("+") > len(my_seq):
+                    size_comparison = ">"
+                else:
+                    size_comparison = "=="
+                f.write(f"{my_id}: (PN {size_comparison} Obs)\n{str(alignment)}")
+                f.write(f"PN Mask:\n{pn_mask}\n\n")
             total += 1
         print(f"{successful} out of {total} ({successful/total}) sequences can be merged successfully.")
 
+
+def unmask_seq(ang, seq):
+    """
+    Given an angle array that is padded with np.nans, applies this padding to
+    the sequence, and returns the sequence without any padding. This means
+    that the input sequence contains residues that may be missing, while the
+    returned sequence contains only observed residues.
+    """
+    mask = np.logical_not(np.isnan(ang).all(axis=-1))
+    new_seq = ""
+    for m, s in zip(mask, seq):
+        if m:
+            new_seq += s
+        else:
+            continue
+
+    return new_seq
 
 if __name__ == '__main__':
     find_how_many_entries_can_be_directly_merged()
