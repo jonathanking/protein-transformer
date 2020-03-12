@@ -89,7 +89,7 @@ def binary_mask_to_str(m):
 
 def find_how_many_entries_can_be_directly_merged():
     """
-    Counts the number of entries that can be succesfully aligned between the
+    Counts the number of entries that can be successfully aligned between the
     sidechain dataset and the protein dataset.
     """
     d = torch.load("/home/jok120/protein-transformer/data/proteinnet/casp12_200218_30.pt")
