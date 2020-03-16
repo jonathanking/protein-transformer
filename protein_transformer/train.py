@@ -18,6 +18,7 @@ from tqdm import tqdm
 from protein_transformer.dataset import prepare_dataloaders, MAX_SEQ_LEN
 from protein_transformer.log import *
 from protein_transformer.losses import compute_batch_drmsd, mse_over_angles, combine_drmsd_mse
+from protein_transformer.models.convolutional_encoder import ConvEncoderOnlyTransformer
 from protein_transformer.models.encoder_only import EncoderOnlyTransformer
 from protein_transformer.models.transformer.Optimizer import ScheduledOptim
 from protein_transformer.models.transformer.Transformer import Transformer
@@ -284,17 +285,19 @@ def make_model(args, device, angle_means):
                                        dropout=args.dropout,
                                        vocab=VOCAB,
                                        angle_means=angle_means,
-                                       use_tanh_out=True)
-    elif args.model == "enc-only-linear-out":
-        model = EncoderOnlyTransformer(nlayers=args.n_layers,
-                                       nhead=args.n_head,
-                                       dmodel=args.d_model,
-                                       dff=args.d_inner_hid,
-                                       max_seq_len=MAX_SEQ_LEN,
-                                       dropout=args.dropout,
-                                       vocab=VOCAB,
-                                       angle_means=angle_means,
-                                       use_tanh_out=False)
+                                       use_tanh_out=not "linear-out" in args.model)
+    elif "conv-enc" in args.model:
+        model = ConvEncoderOnlyTransformer(nlayers=args.n_layers,
+                                           nhead=args.n_head,
+                                           dmodel=args.d_model,
+                                           dff=args.d_inner_hid,
+                                           max_seq_len=MAX_SEQ_LEN,
+                                           dropout=args.dropout,
+                                           vocab=VOCAB,
+                                           angle_means=angle_means,
+                                           use_tanh_out="linear-out" not in args.model,
+                                           conv_kernel_sizes=[a for a in [args.conv1_size, args.conv2_size, args.conv3_size] if a],
+                                           conv_dim_reductions=[a for a in [args.conv1_reduc, args.conv2_reduc, args.conv3_reduc] if a])
     elif args.model == "enc-dec":
         model = Transformer(dm=args.d_model,
                             dff=args.d_inner_hid,
@@ -315,6 +318,19 @@ def make_model(args, device, angle_means):
         raise argparse.ArgumentError("Model architecture not implemented.")
     return model
 
+def parse_conv_kernel_info_from_model_name(mname):
+    """ Returns the parsed settings for the number and arrangement of convolutional
+    layers. Specifically, this returns the requested kernel sizes and the factor
+    by which the number of channels should be reduced through each layer.
+
+    Ex:
+    >>> parse_conv_kernel_info_from_model_name("conv-enc|3,7,11|2,2,2")
+    ([3, 7, 11], [2, 2, 2])
+    """
+    _, kernel_sizes, dim_reducs = mname.split("|")
+    kernel_sizes = list(map(int, kernel_sizes.split(",")))
+    dim_reducs = list(map(int, dim_reducs.split(",")))
+    return kernel_sizes, dim_reducs
 
 def seed_rngs(args):
     """
@@ -451,8 +467,7 @@ def create_parser():
 
     # Model parameters
     model_args = parser.add_argument_group("Model Args")
-    model_args.add_argument('-m', '--model', type=str, choices=["enc-dec", "enc-only", "enc-only-linear-out"],
-                            default="enc-only", help="Model architecture type. Encoder only or encoder/decoder model.")
+    model_args.add_argument('-m', '--model', type=str, default="enc-only", help="Model architecture type. Encoder only or encoder/decoder model.")
     model_args.add_argument('-dm', '--d_model', type=int, default=512,
                             help="Dimension of each sequence item in the model. Each layer uses the same dimension for "
                                  "simplicity.")
@@ -470,6 +485,15 @@ def create_parser():
                             help="Use post-layer normalization, as depicted in the original figure for the Transformer "
                                  "model. May not train as well as pre-layer normalization.")
     model_args.add_argument("--weight_decay", type=my_bool, default="True", help="Applies weight decay to model weights.")
+    model_args.add_argument("--conv1_size", type=int, default=None, help="Size of conv1 layer kernel for 'conv-enc' model.")
+    model_args.add_argument("--conv2_size", type=int, default=None, help="Size of conv2 layer kernel for 'conv-enc' model.")
+    model_args.add_argument("--conv3_size", type=int, default=None, help="Size of conv2 layer kernel for 'conv-enc' model.")
+    model_args.add_argument("--conv1_reduc", type=int, default=None,
+                            help="Factor by which conv1 layer reduces the number of channels for 'conv-enc' model.")
+    model_args.add_argument("--conv2_reduc", type=int, default=None,
+                            help="Factor by which conv2 layer reduces the number of channels for 'conv-enc' model.")
+    model_args.add_argument("--conv3_reduc", type=int, default=None,
+                            help="Factor by which conv2 layer reduces the number of channels for 'conv-enc' model.")
 
     # Saving args
     saving_args = parser.add_argument_group("Saving Args")
@@ -551,6 +575,19 @@ def main():
     args.bins = "auto" if args.bins == -1 else args.bins
     if args.automatically_determine_batch_size:
         args.batch_size = determine_largest_batch_size(args)
+    if "conv-enc" in args.model:  # This will generate a model architecture based on a supplied name, ie conv-env|3,3,3|2,2,2
+        kernel_sizes, dim_reducs = parse_conv_kernel_info_from_model_name(args.model)
+        assert len(kernel_sizes) <= 3, "Only 3 convolution layers are currently supported."
+        if len(kernel_sizes) >= 1:
+            args.conv1_size = kernel_sizes[0]
+            args.conv1_reduc = dim_reducs[0]
+        if len(kernel_sizes) >=2:
+            args.conv2_size = kernel_sizes[1]
+            args.conv2_reduc = dim_reducs[1]
+        if len(kernel_sizes) == 3:
+            args.conv3_size = kernel_sizes[2]
+            args.conv3_reduc = dim_reducs[2]
+        args.model = "conv-enc"
 
     # Prepare torch
     drmsd_worker_pool = init_worker_pool(args)
