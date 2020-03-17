@@ -327,7 +327,10 @@ def parse_conv_kernel_info_from_model_name(mname):
     >>> parse_conv_kernel_info_from_model_name("conv-enc|3,7,11|2,2,2")
     ([3, 7, 11], [2, 2, 2])
     """
-    _, kernel_sizes, dim_reducs = mname.split("|")
+    try:
+        _, kernel_sizes, dim_reducs = mname.split("|")
+    except ValueError:
+        return [], []
     kernel_sizes = list(map(int, kernel_sizes.split(",")))
     dim_reducs = list(map(int, dim_reducs.split(",")))
     return kernel_sizes, dim_reducs
@@ -634,7 +637,7 @@ def main():
     # Because this model uses convolutional layers to decrease the size of sequence elements prior to attention
     # layers, we will update wandb logging to account for the correct "model" dimension.
     wandb.config.update({"d_model": model.encoder.conv_out_size(),
-                         "d_model_start": args.d_model})
+                         "d_model_start": args.d_model}, allow_val_change=True)
 
     # Prepare log and checkpoint files
     args.chkpt_path = os.path.join(local_base_dir, "checkpoints")
