@@ -298,10 +298,6 @@ def make_model(args, device, angle_means):
                                            use_tanh_out="linear-out" not in args.model,
                                            conv_kernel_sizes=[a for a in [args.conv1_size, args.conv2_size, args.conv3_size] if a],
                                            conv_dim_reductions=[a for a in [args.conv1_reduc, args.conv2_reduc, args.conv3_reduc] if a])
-        # Because this model uses convolutional layers to decrease the size of sequence elements prior to attention
-        # layers, we will update wandb logging to account for the correct "model" dimension.
-        wandb.config.update({"d_model": model.encoder.conv_out_size(),
-                             "d_model_start": args.d_model})
     elif args.model == "enc-dec":
         model = Transformer(dm=args.d_model,
                             dff=args.d_inner_hid,
@@ -635,6 +631,10 @@ def main():
     os.makedirs(args.png_dir, exist_ok=True)
     with open(os.path.join(local_base_dir, "NAME"), "w") as f:
         f.write(f"{args.name}\n")
+    # Because this model uses convolutional layers to decrease the size of sequence elements prior to attention
+    # layers, we will update wandb logging to account for the correct "model" dimension.
+    wandb.config.update({"d_model": model.encoder.conv_out_size(),
+                         "d_model_start": args.d_model})
 
     # Prepare log and checkpoint files
     args.chkpt_path = os.path.join(local_base_dir, "checkpoints")
