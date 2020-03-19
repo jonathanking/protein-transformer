@@ -73,7 +73,7 @@ class ConvolutionalEncoder(torch.nn.Module):
             self.input_embedding = Embeddings(self.din, self.dm)
             self.positional_enc = PositionalEncoding(dm, dropout, max_seq_len)
         else:
-            self.positional_enc = PositionalEncoding(din, dropout, max_seq_len)
+            self.positional_enc = PositionalEncoding(self.conv_out_size(), dropout, max_seq_len)
 
         self.conv_layers = torch.nn.ModuleList(self.make_sequence_conv_layers(conv_kernel_sizes, conv_dim_reductions))
 
