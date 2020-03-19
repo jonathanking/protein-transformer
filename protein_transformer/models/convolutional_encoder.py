@@ -14,12 +14,12 @@ class ConvEncoderOnlyTransformer(nn.Module):
     """ A Transformer that starts with 1D sequence convolutions before applying attention. """
 
     def __init__( self, nlayers, nhead, dmodel, dff, max_seq_len, vocab, angle_means, use_tanh_out, conv_kernel_sizes,
-                  conv_dim_reductions, dropout=0.1):
+                  conv_dim_reductions, use_embedding, dropout=0.1):
         super().__init__()
         self.angle_means = angle_means
         self.vocab = vocab
         self.encoder = ConvolutionalEncoder(len(vocab), dmodel, dff, nhead, nlayers, max_seq_len, dropout,
-                                            conv_kernel_sizes, conv_dim_reductions)
+                                            conv_kernel_sizes, conv_dim_reductions, use_embedding)
         self.output_projection = torch.nn.Linear(self.encoder.conv_out_size(), NUM_PREDICTED_ANGLES*2)
         self.use_tanh_out = use_tanh_out
         if use_tanh_out:
@@ -56,7 +56,7 @@ class ConvolutionalEncoder(torch.nn.Module):
     """
 
     def __init__(self, din, dm, dff, n_heads, n_enc_layers, max_seq_len, dropout, conv_kernel_sizes,
-                 conv_dim_reductions):
+                 conv_dim_reductions, use_embedding):
         super(ConvolutionalEncoder, self).__init__()
         self.din = din
         self.dm = dm
@@ -66,10 +66,14 @@ class ConvolutionalEncoder(torch.nn.Module):
         self.max_seq_len = max_seq_len
         self.conv_kernel_sizes = conv_kernel_sizes
         self.conv_dim_reductions = conv_dim_reductions
+        self.use_embedding = use_embedding
 
-        self.emb_dropout = torch.nn.Dropout(dropout)
-        self.input_embedding = Embeddings(self.din, self.dm)
-        self.positional_enc = PositionalEncoding(dm, dropout, max_seq_len)
+        if self.use_embedding:
+            self.emb_dropout = torch.nn.Dropout(dropout)
+            self.input_embedding = Embeddings(self.din, self.dm)
+            self.positional_enc = PositionalEncoding(dm, dropout, max_seq_len)
+        else:
+            self.positional_enc = PositionalEncoding(din, dropout, max_seq_len)
 
         self.conv_layers = torch.nn.ModuleList(self.make_sequence_conv_layers(conv_kernel_sizes, conv_dim_reductions))
 
@@ -77,14 +81,29 @@ class ConvolutionalEncoder(torch.nn.Module):
                                                for _ in range(self.n_enc_layers)])
 
     def conv_out_size(self):
-        d = self.dm
+        d = self.dm if self.use_embedding else self.din
         for dr in self.conv_dim_reductions:
             d /= dr
         return int(d)
 
+    def make_sequence_conv_layers(self, conv_kernel_sizes, conv_dim_reductions):
+        conv_layers = []
+        din = self.dm if self.use_embedding else self.din
+
+        for k, dim_red in zip(conv_kernel_sizes, conv_dim_reductions):
+            dout = int(din // dim_red)
+            c = self.make_length_preserving_conv_layer(k, din, dout)
+            conv_layers.append(c)
+            din = dout
+        return conv_layers
+
     def forward(self, src_seq, src_mask):
-        enc_output = self.input_embedding(src_seq)
-        enc_output = self.emb_dropout(enc_output + self.positional_enc(enc_output))
+        if self.use_embedding:
+            enc_output = self.input_embedding(src_seq)
+            enc_output = self.emb_dropout(enc_output + self.positional_enc(enc_output))
+        else:
+            enc_output = torch.nn.functional.one_hot(src_seq, num_classes=self.din).float()
+            enc_output += self.positional_enc(enc_output)
         enc_output = enc_output.transpose(-1, -2)
 
         for conv_layer in self.conv_layers:
@@ -95,16 +114,6 @@ class ConvolutionalEncoder(torch.nn.Module):
         for enc_layer in self.enc_layers:
             enc_output = enc_layer(enc_output, src_mask)
         return enc_output
-
-    def make_sequence_conv_layers(self, conv_kernel_sizes, conv_dim_reductions):
-        conv_layers = []
-        din = self.dm
-        for k, dim_red in zip(conv_kernel_sizes, conv_dim_reductions):
-            dout = din // dim_red
-            c = self.make_length_preserving_conv_layer(k, din, dout)
-            conv_layers.append(c)
-            din = dout
-        return conv_layers
 
     @staticmethod
     def make_length_preserving_conv_layer(kernel_size, d_in, d_out):

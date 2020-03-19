@@ -297,7 +297,8 @@ def make_model(args, device, angle_means):
                                            angle_means=angle_means,
                                            use_tanh_out="linear-out" not in args.model,
                                            conv_kernel_sizes=[a for a in [args.conv1_size, args.conv2_size, args.conv3_size] if a],
-                                           conv_dim_reductions=[a for a in [args.conv1_reduc, args.conv2_reduc, args.conv3_reduc] if a])
+                                           conv_dim_reductions=[a for a in [args.conv1_reduc, args.conv2_reduc, args.conv3_reduc] if a],
+                                           use_embedding=args.use_embedding)
     elif args.model == "enc-dec":
         model = Transformer(dm=args.d_model,
                             dff=args.d_inner_hid,
@@ -332,7 +333,7 @@ def parse_conv_kernel_info_from_model_name(mname):
     except ValueError:
         return [], []
     kernel_sizes = list(map(int, kernel_sizes.split(",")))
-    dim_reducs = list(map(int, dim_reducs.split(",")))
+    dim_reducs = list(map(float, dim_reducs.split(",")))
     return kernel_sizes, dim_reducs
 
 def seed_rngs(args):
@@ -497,6 +498,8 @@ def create_parser():
                             help="Factor by which conv2 layer reduces the number of channels for 'conv-enc' model.")
     model_args.add_argument("--conv3_reduc", type=int, default=None,
                             help="Factor by which conv2 layer reduces the number of channels for 'conv-enc' model.")
+    model_args.add_argument("--use_embedding", type=my_bool, default="True", help="Whether or not to use embedding "
+                                                                                  "layer in the transformer model.")
 
     # Saving args
     saving_args = parser.add_argument_group("Saving Args")
