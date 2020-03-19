@@ -103,13 +103,14 @@ class ConvolutionalEncoder(torch.nn.Module):
             enc_output = self.emb_dropout(enc_output + self.positional_enc(enc_output))
         else:
             enc_output = torch.nn.functional.one_hot(src_seq, num_classes=self.din).float()
-            enc_output += self.positional_enc(enc_output)
         enc_output = enc_output.transpose(-1, -2)
 
         for conv_layer in self.conv_layers:
             enc_output = conv_layer(enc_output)
 
         enc_output = enc_output.transpose(-1, -2)
+        if not self.use_embedding:
+            enc_output += self.positional_enc(enc_output)
 
         for enc_layer in self.enc_layers:
             enc_output = enc_layer(enc_output, src_mask)
