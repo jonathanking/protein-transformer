@@ -14,12 +14,12 @@ class ConvEncoderOnlyTransformer(nn.Module):
     """ A Transformer that starts with 1D sequence convolutions before applying attention. """
 
     def __init__( self, nlayers, nhead, dmodel, dff, max_seq_len, vocab, angle_means, use_tanh_out, conv_kernel_sizes,
-                  conv_dim_reductions, use_embedding, dropout=0.1):
+                  conv_dim_reductions, use_embedding, conv_out_matches_dm, dropout=0.1):
         super().__init__()
         self.angle_means = angle_means
         self.vocab = vocab
         self.encoder = ConvolutionalEncoder(len(vocab), dmodel, dff, nhead, nlayers, max_seq_len, dropout,
-                                            conv_kernel_sizes, conv_dim_reductions, use_embedding)
+                                            conv_kernel_sizes, conv_dim_reductions, use_embedding, conv_out_matches_dm)
         self.output_projection = torch.nn.Linear(self.encoder.conv_out_size(), NUM_PREDICTED_ANGLES*2)
         self.use_tanh_out = use_tanh_out
         if use_tanh_out:
@@ -56,7 +56,7 @@ class ConvolutionalEncoder(torch.nn.Module):
     """
 
     def __init__(self, din, dm, dff, n_heads, n_enc_layers, max_seq_len, dropout, conv_kernel_sizes,
-                 conv_dim_reductions, use_embedding):
+                 conv_dim_reductions, use_embedding, conv_out_matches_dm):
         super(ConvolutionalEncoder, self).__init__()
         self.din = din
         self.dm = dm
@@ -67,6 +67,7 @@ class ConvolutionalEncoder(torch.nn.Module):
         self.conv_kernel_sizes = conv_kernel_sizes
         self.conv_dim_reductions = conv_dim_reductions
         self.use_embedding = use_embedding
+        self.conv_out_matches_dm = conv_out_matches_dm
 
         if self.use_embedding:
             self.emb_dropout = torch.nn.Dropout(dropout)
@@ -81,6 +82,8 @@ class ConvolutionalEncoder(torch.nn.Module):
                                                for _ in range(self.n_enc_layers)])
 
     def conv_out_size(self):
+        if self.conv_out_matches_dm:
+            return self.dm
         d = self.dm if self.use_embedding else self.din
         for dr in self.conv_dim_reductions:
             d /= dr
@@ -90,8 +93,11 @@ class ConvolutionalEncoder(torch.nn.Module):
         conv_layers = []
         din = self.dm if self.use_embedding else self.din
 
-        for k, dim_red in zip(conv_kernel_sizes, conv_dim_reductions):
-            dout = int(din // dim_red)
+        for i, (k, dim_red) in enumerate(zip(conv_kernel_sizes, conv_dim_reductions)):
+            if i == len(conv_kernel_sizes) - 1 and self.conv_out_matches_dm:
+                dout = self.dm
+            else:
+                dout = int(din // dim_red)
             c = self.make_length_preserving_conv_layer(k, din, dout)
             conv_layers.append(c)
             din = dout

@@ -298,7 +298,8 @@ def make_model(args, device, angle_means):
                                            use_tanh_out="linear-out" not in args.model,
                                            conv_kernel_sizes=[a for a in [args.conv1_size, args.conv2_size, args.conv3_size] if a],
                                            conv_dim_reductions=[a for a in [args.conv1_reduc, args.conv2_reduc, args.conv3_reduc] if a],
-                                           use_embedding=args.use_embedding)
+                                           use_embedding=args.use_embedding,
+                                           conv_out_matches_dm=args.conv_out_matches_dm)
     elif args.model == "enc-dec":
         model = Transformer(dm=args.d_model,
                             dff=args.d_inner_hid,
@@ -500,6 +501,9 @@ def create_parser():
                             help="Factor by which conv2 layer reduces the number of channels for 'conv-enc' model.")
     model_args.add_argument("--use_embedding", type=my_bool, default="True", help="Whether or not to use embedding "
                                                                                   "layer in the transformer model.")
+    model_args.add_argument("--conv_out_matches_dm", type=my_bool, default="True",
+                            help="If True, the final convolution layer at the start of the model will match the" 
+                                  " dimensionality of the requested d_model. Used for ConvEnc models.")
 
     # Saving args
     saving_args = parser.add_argument_group("Saving Args")
