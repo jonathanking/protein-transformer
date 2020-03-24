@@ -633,7 +633,7 @@ def main():
     wandb.run.summary["stopped_training_early"] = False
     wandb.run.summary["max_batch_size"] = args.batch_size
     local_base_dir = wandb.run.dir
-    args.structure_dir = os.path.join(local_base_dir, "structures")
+    args.structure_dir = f"../data/logs/structures/pdbs/{wandb.run.id}" #os.path.join(local_base_dir, "structures")
     args.gltf_dir = f"../data/logs/structures/gltfs/{wandb.run.id}"
     args.png_dir = f"../data/logs/structures/pngs/{wandb.run.id}"
     os.makedirs(args.structure_dir, exist_ok=True)

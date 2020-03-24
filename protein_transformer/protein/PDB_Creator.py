@@ -204,6 +204,7 @@ class PDB_Creator(object):
         if make_pse:
             pymol.cmd.show("lines")
             pymol.cmd.save(pse_out_path, quiet=True)
+            pymol.cmd.save(pse_out_path.replace(".pse", ".pdb"), quiet=True)
         if make_png:
             pymol.cmd.png(gltf_out_path.replace("gltf", "png"), width=400, ray=0)
 

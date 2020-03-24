@@ -335,6 +335,7 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
                             seq=VOCAB.ints2str(src_seq_cpu))
     if not os.path.isfile(f"{cur_struct_path}/true.pdb") or struct_name == "train":
         t_creator.save_pdb(f"{cur_struct_path}/true.pdb", title="true")
+        wandb.log({f"{struct_name}_mol_true" : wandb.Molecule(f"{cur_struct_path}/true.pdb")}, commit=False)
 
     gltf_out_path = os.path.join(args.gltf_dir, f"{wandb.run.step:05}_{struct_name}.gltf")
     t_creator.save_gltfs(f"{cur_struct_path}/true.pdb",
@@ -343,7 +344,9 @@ def log_structure_and_angs(args, pred_ang, pred_coords, true_coords, src_seq, co
                          make_pse=True,
                          make_png=args.save_pngs,
                          pse_out_path=f"{cur_struct_path}/{wandb.run.step:05}_both.pse")
-    log_items = {struct_name: wandb.Object3D(gltf_out_path)}
+    log_items = {struct_name: wandb.Object3D(gltf_out_path),
+                 f"{struct_name}_mol": wandb.Molecule(f"{cur_struct_path}/{wandb.run.step:05}_pred.pdb"),
+                 f"{struct_name}_mol_comb": wandb.Molecule(f"{cur_struct_path}/{wandb.run.step:05}_both.pdb")}
     if args.save_pngs:
         try:
             log_items[struct_name + "_img"]  = wandb.Image(gltf_out_path.replace("gltf", "png"))
