@@ -639,8 +639,8 @@ def main():
     os.makedirs(args.structure_dir, exist_ok=True)
     os.makedirs(args.gltf_dir, exist_ok=True)
     os.makedirs(args.png_dir, exist_ok=True)
-    with open(os.path.join(local_base_dir, "NAME"), "w") as f:
-        f.write(f"{args.name}\n")
+    with open(os.path.join(local_base_dir, "MODEL.txt"), "w") as f:
+        f.write(str(model) + "\n")
     # Because this model uses convolutional layers to decrease the size of sequence elements prior to attention
     # layers, we will update wandb logging to account for the correct "model" dimension.
     wandb.config.update({"d_model": model.encoder.conv_out_size(),
