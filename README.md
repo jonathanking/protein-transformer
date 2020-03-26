@@ -46,6 +46,8 @@ This script takes many different arguments to determine different architecture a
 python train.py --data data/proteinnet/casp12.pt --name model01 -lr -0.01 -e 30 -b 12 -m conv-enc -dm 256 -l drmsd 
 ```
 
+Currently supported models are based on an "Encoder Only" version of the Transformer and can be accessed with the arguments `-m {enc-only, conv-enc}`. `enc-dec` is currently deprecated.
+
 #### Usage:
 ```
 usage: train.py [-h] [--data DATA] [--name NAME] [-lr LEARNING_RATE]
