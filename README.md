@@ -31,7 +31,8 @@ will be free to import any classes or subroutines into your own training script 
 * scipy
 * tqdm
 * [wandb](https://docs.wandb.com)
-
+* [PyMOL Open Source](https://pymolwiki.org/index.php/Linux_Install#Install_from_source)
+* collada2gltf (`conda install -c schrodinger collada2gltf`)
 ## How to run
 
 After successful installation, navigate to the `protein_transformer directory`, where you can train a model with `train.py`.
@@ -42,7 +43,7 @@ This script takes many different arguments to determine different architecture a
 
 #### Example:
 ```
-python train.py --data data/proteinnet/casp12.pt --name model01 -lr -0.01 -e 30 -b 12 -m enc-only -dm 256 -l drmsd 
+python train.py --data data/proteinnet/casp12.pt --name model01 -lr -0.01 -e 30 -b 12 -m conv-enc -dm 256 -l drmsd 
 ```
 
 #### Usage:
@@ -50,13 +51,13 @@ python train.py --data data/proteinnet/casp12.pt --name model01 -lr -0.01 -e 30 
 usage: train.py [-h] [--data DATA] [--name NAME] [-lr LEARNING_RATE]
                 [-e EPOCHS] [-b BATCH_SIZE] [-es EARLY_STOPPING]
                 [-nws N_WARMUP_STEPS] [-cg CLIP]
-                [-l {mse,drmsd,ln-drmsd,combined}] [--train_only]
+                [-l {mse,drmsd,lndrmsd,combined}] [--train_only]
                 [--lr_scheduling {noam,plateau}] [--patience PATIENCE]
                 [--early_stopping_threshold EARLY_STOPPING_THRESHOLD]
-                [-esm {train-mse,test-mse,valid-10-mse,valid-20-mse,valid-30-mse,valid-40-mse,valid-50-mse,valid-70-mse,valid-90-mse,train-drmsd,test-drmsd,valid-10-drmsd,valid-20-drmsd,valid-30-drmsd,valid-40-drmsd,valid-50-drmsd,valid-70-drmsd,valid-90-drmsd,train-ln-drmsd,test-ln-drmsd,valid-10-ln-drmsd,valid-20-ln-drmsd,valid-30-ln-drmsd,valid-40-ln-drmsd,valid-50-ln-drmsd,valid-70-ln-drmsd,valid-90-ln-drmsd,train-combined,test-combined,valid-10-combined,valid-20-combined,valid-30-combined,valid-40-combined,valid-50-combined,valid-70-combined,valid-90-combined}]
+                [-esm {train-mse,test-mse,valid-10-mse,valid-20-mse,valid-30-mse,valid-40-mse,valid-50-mse,valid-70-mse,valid-90-mse,train-drmsd,test-drmsd,valid-10-drmsd,valid-20-drmsd,valid-30-drmsd,valid-40-drmsd,valid-50-drmsd,valid-70-drmsd,valid-90-drmsd,train-lndrmsd,test-lndrmsd,valid-10-lndrmsd,valid-20-lndrmsd,valid-30-lndrmsd,valid-40-lndrmsd,valid-50-lndrmsd,valid-70-lndrmsd,valid-90-lndrmsd,train-combined,test-combined,valid-10-combined,valid-20-combined,valid-30-combined,valid-40-combined,valid-50-combined,valid-70-combined,valid-90-combined}]
                 [--without_angle_means] [--eval_train EVAL_TRAIN]
-                [--eval_train_drmsd EVAL_TRAIN_DRMSD] [-opt {adam,sgd}]
-                [-fctf FRACTION_COMPLETE_TF] [-fsstf FRACTION_SUBSEQ_TF]
+                [-opt {adam,sgd}] [-fctf FRACTION_COMPLETE_TF]
+                [-fsstf FRACTION_SUBSEQ_TF]
                 [--skip_missing_res_train SKIP_MISSING_RES_TRAIN]
                 [--repeat_train REPEAT_TRAIN] [-s SEED]
                 [--combined_drmsd_weight COMBINED_DRMSD_WEIGHT]
@@ -64,14 +65,17 @@ usage: train.py [-h] [--data DATA] [--name NAME] [-lr LEARNING_RATE]
                 [--backbone_loss] [--sequential_drmsd_loss] [--bins BINS]
                 [--train_eval_downsample TRAIN_EVAL_DOWNSAMPLE]
                 [--automatically_determine_batch_size AUTOMATICALLY_DETERMINE_BATCH_SIZE]
-                [-m {enc-dec,enc-only,enc-only-linear-out}] [-dm D_MODEL]
-                [-dih D_INNER_HID] [-nh N_HEAD] [-nl N_LAYERS] [-do DROPOUT]
-                [--postnorm] [--angle_mean_path ANGLE_MEAN_PATH]
-                [--weight_decay WEIGHT_DECAY]
+                [-m MODEL] [-dm D_MODEL] [-dih D_INNER_HID] [-nh N_HEAD]
+                [-nl N_LAYERS] [-do DROPOUT] [--postnorm]
+                [--weight_decay WEIGHT_DECAY] [--conv1_size CONV1_SIZE]
+                [--conv2_size CONV2_SIZE] [--conv3_size CONV3_SIZE]
+                [--conv1_reduc CONV1_REDUC] [--conv2_reduc CONV2_REDUC]
+                [--conv3_reduc CONV3_REDUC] [--use_embedding USE_EMBEDDING]
+                [--conv_out_matches_dm CONV_OUT_MATCHES_DM]
                 [--log_structure_step LOG_STRUCTURE_STEP]
                 [--log_val_struct_step LOG_VAL_STRUCT_STEP]
-                [--log_wandb_step LOG_WANDB_STEP] [--no_cuda] [-c CLUSTER]
-                [--restart] [--restart_opt]
+                [--log_wandb_step LOG_WANDB_STEP] [--save_pngs SAVE_PNGS]
+                [--no_cuda] [-c CLUSTER] [--restart] [--restart_opt]
                 [--checkpoint_time_interval CHECKPOINT_TIME_INTERVAL]
                 [--load_chkpt LOAD_CHKPT]
 
@@ -94,11 +98,11 @@ Training Args:
                         paper.
   -cg CLIP, --clip CLIP
                         Gradient clipping value.
-  -l {mse,drmsd,ln-drmsd,combined}, --loss {mse,drmsd,ln-drmsd,combined}
+  -l {mse,drmsd,lndrmsd,combined}, --loss {mse,drmsd,lndrmsd,combined}
                         Loss used to train the model. Can be root mean squared
                         error (RMSE), distance-based root mean squared
                         distance (DRMSD), length-normalized DRMSD (ln-DRMSD)
-                        or a combinaation of RMSE and ln-DRMSD.
+                        or a combination of RMSE and ln-DRMSD.
   --train_only          Train, validation, and testing sets are the same. Only
                         report train accuracy.
   --lr_scheduling {noam,plateau}
@@ -110,7 +114,7 @@ Training Args:
   --early_stopping_threshold EARLY_STOPPING_THRESHOLD
                         Threshold for considering improvements during
                         training/lr scheduling.
-  -esm {train-mse,test-mse,valid-10-mse,valid-20-mse,valid-30-mse,valid-40-mse,valid-50-mse,valid-70-mse,valid-90-mse,train-drmsd,test-drmsd,valid-10-drmsd,valid-20-drmsd,valid-30-drmsd,valid-40-drmsd,valid-50-drmsd,valid-70-drmsd,valid-90-drmsd,train-ln-drmsd,test-ln-drmsd,valid-10-ln-drmsd,valid-20-ln-drmsd,valid-30-ln-drmsd,valid-40-ln-drmsd,valid-50-ln-drmsd,valid-70-ln-drmsd,valid-90-ln-drmsd,train-combined,test-combined,valid-10-combined,valid-20-combined,valid-30-combined,valid-40-combined,valid-50-combined,valid-70-combined,valid-90-combined}, --early_stopping_metric {train-mse,test-mse,valid-10-mse,valid-20-mse,valid-30-mse,valid-40-mse,valid-50-mse,valid-70-mse,valid-90-mse,train-drmsd,test-drmsd,valid-10-drmsd,valid-20-drmsd,valid-30-drmsd,valid-40-drmsd,valid-50-drmsd,valid-70-drmsd,valid-90-drmsd,train-ln-drmsd,test-ln-drmsd,valid-10-ln-drmsd,valid-20-ln-drmsd,valid-30-ln-drmsd,valid-40-ln-drmsd,valid-50-ln-drmsd,valid-70-ln-drmsd,valid-90-ln-drmsd,train-combined,test-combined,valid-10-combined,valid-20-combined,valid-30-combined,valid-40-combined,valid-50-combined,valid-70-combined,valid-90-combined}
+  -esm {train-mse,test-mse,valid-10-mse,valid-20-mse,valid-30-mse,valid-40-mse,valid-50-mse,valid-70-mse,valid-90-mse,train-drmsd,test-drmsd,valid-10-drmsd,valid-20-drmsd,valid-30-drmsd,valid-40-drmsd,valid-50-drmsd,valid-70-drmsd,valid-90-drmsd,train-lndrmsd,test-lndrmsd,valid-10-lndrmsd,valid-20-lndrmsd,valid-30-lndrmsd,valid-40-lndrmsd,valid-50-lndrmsd,valid-70-lndrmsd,valid-90-lndrmsd,train-combined,test-combined,valid-10-combined,valid-20-combined,valid-30-combined,valid-40-combined,valid-50-combined,valid-70-combined,valid-90-combined}, --early_stopping_metric {train-mse,test-mse,valid-10-mse,valid-20-mse,valid-30-mse,valid-40-mse,valid-50-mse,valid-70-mse,valid-90-mse,train-drmsd,test-drmsd,valid-10-drmsd,valid-20-drmsd,valid-30-drmsd,valid-40-drmsd,valid-50-drmsd,valid-70-drmsd,valid-90-drmsd,train-lndrmsd,test-lndrmsd,valid-10-lndrmsd,valid-20-lndrmsd,valid-30-lndrmsd,valid-40-lndrmsd,valid-50-lndrmsd,valid-70-lndrmsd,valid-90-lndrmsd,train-combined,test-combined,valid-10-combined,valid-20-combined,valid-30-combined,valid-40-combined,valid-50-combined,valid-70-combined,valid-90-combined}
                         Metric observed for early stopping and LR scheduling.
   --without_angle_means
                         Do not initialize the model with pre-computed angle
@@ -118,14 +122,11 @@ Training Args:
   --eval_train EVAL_TRAIN
                         Perform an evaluation of the entire training set after
                         a training epoch.
-  --eval_train_drmsd EVAL_TRAIN_DRMSD
-                        Perform an evaluation of the entire training set after
-                        a training epoch.
   -opt {adam,sgd}, --optimizer {adam,sgd}
                         Training optimizer.
   -fctf FRACTION_COMPLETE_TF, --fraction_complete_tf FRACTION_COMPLETE_TF
                         Fraction of the time to use teacher forcing for every
-                        timestep of the batch. Model trainsfastest when this
+                        timestep of the batch. Model trains fastest when this
                         is 1.
   -fsstf FRACTION_SUBSEQ_TF, --fraction_subseq_tf FRACTION_SUBSEQ_TF
                         Fraction of the time to use teacher forcing on a per-
@@ -159,7 +160,7 @@ Training Args:
                         batchsize for training.
 
 Model Args:
-  -m {enc-dec,enc-only,enc-only-linear-out}, --model {enc-dec,enc-only,enc-only-linear-out}
+  -m MODEL, --model MODEL
                         Model architecture type. Encoder only or
                         encoder/decoder model.
   -dm D_MODEL, --d_model D_MODEL
@@ -179,11 +180,30 @@ Model Args:
   --postnorm            Use post-layer normalization, as depicted in the
                         original figure for the Transformer model. May not
                         train as well as pre-layer normalization.
-  --angle_mean_path ANGLE_MEAN_PATH
-                        Path to vector of means for every predicted angle.
-                        Used to initialize model output.
   --weight_decay WEIGHT_DECAY
                         Applies weight decay to model weights.
+  --conv1_size CONV1_SIZE
+                        Size of conv1 layer kernel for 'conv-enc' model.
+  --conv2_size CONV2_SIZE
+                        Size of conv2 layer kernel for 'conv-enc' model.
+  --conv3_size CONV3_SIZE
+                        Size of conv2 layer kernel for 'conv-enc' model.
+  --conv1_reduc CONV1_REDUC
+                        Factor by which conv1 layer reduces the number of
+                        channels for 'conv-enc' model.
+  --conv2_reduc CONV2_REDUC
+                        Factor by which conv2 layer reduces the number of
+                        channels for 'conv-enc' model.
+  --conv3_reduc CONV3_REDUC
+                        Factor by which conv2 layer reduces the number of
+                        channels for 'conv-enc' model.
+  --use_embedding USE_EMBEDDING
+                        Whether or not to use embedding layer in the
+                        transformer model.
+  --conv_out_matches_dm CONV_OUT_MATCHES_DM
+                        If True, the final convolution layer at the start of
+                        the model will match the dimensionality of the
+                        requested d_model. Used for ConvEnc models.
 
 Saving Args:
   --log_structure_step LOG_STRUCTURE_STEP
@@ -193,6 +213,8 @@ Saving Args:
                         every validation set.
   --log_wandb_step LOG_WANDB_STEP
                         Frequency of logging to wandb during training.
+  --save_pngs SAVE_PNGS, -png SAVE_PNGS
+                        Save images when making structures.
   --no_cuda
   -c CLUSTER, --cluster CLUSTER
                         Set of parameters to facilitate training on a remote
