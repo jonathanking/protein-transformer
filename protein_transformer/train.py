@@ -401,7 +401,7 @@ def create_parser():
     # Required args
     required = parser.add_argument_group("Required Args")
     required.add_argument('--data', help="Path to training data.", default="../data/proteinnet/casp12_200123_30.pt")
-    required.add_argument("--name", type=str, help="The model name.", default="sweep")
+    required.add_argument("--name", type=str, help="The model name.", default=None)
 
     # Training parameters
     training = parser.add_argument_group("Training Args")
@@ -574,7 +574,7 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
     args.cuda = not args.no_cuda
-    assert "_" not in args.name, "Please do not use a '_' in your model name. " \
+    assert not args.name or "_" not in args.name, "Please do not use a '_' in your model name. " \
                                  "Conflicts with structure files."
     args.buffering_mode = 1
     if not args.early_stopping_metric:
@@ -617,8 +617,10 @@ def main():
     wandb_dir = "/scr/jok120/wandb" if args.cluster and os.path.isdir("/scr") else None
     if wandb_dir:
         os.makedirs(wandb_dir, exist_ok=True)
-    wandb.init(project="protein-transformer", entity="koes-group", dir=wandb_dir)
+    wandb.init(project="protein-transformer", entity="koes-group", dir=wandb_dir, name=args.name)
     wandb.watch(model, "all")
+    if not args.name:
+        args.name = wandb.run.id
     wandb.config.update(args, allow_val_change=True)
     if type(data["date"]) == set:
         wandb.config.update({"data_creation_date": next(iter(data["date"]))})
@@ -633,7 +635,7 @@ def main():
     wandb.run.summary["stopped_training_early"] = False
     wandb.run.summary["max_batch_size"] = args.batch_size
     local_base_dir = wandb.run.dir
-    args.structure_dir = f"../data/logs/structures/pdbs/{wandb.run.id}" #os.path.join(local_base_dir, "structures")
+    args.structure_dir = f"../data/logs/structures/pdbs/{wandb.run.id}"
     args.gltf_dir = f"../data/logs/structures/gltfs/{wandb.run.id}"
     args.png_dir = f"../data/logs/structures/pngs/{wandb.run.id}"
     os.makedirs(args.structure_dir, exist_ok=True)
@@ -641,9 +643,9 @@ def main():
     os.makedirs(args.png_dir, exist_ok=True)
     with open(os.path.join(local_base_dir, "MODEL.txt"), "w") as f:
         f.write(str(model) + "\n")
-    # Because this model uses convolutional layers to decrease the size of sequence elements prior to attention
+    # Because some models use convolutional layers to change the dim of sequence elements prior to attention
     # layers, we will update wandb logging to account for the correct "model" dimension.
-    wandb.config.update({"d_model": model.encoder.conv_out_size(),
+    wandb.config.update({"d_model": model.encoder.conv_out_size() if "conv" in args.model else args.d_model,
                          "d_model_start": args.d_model}, allow_val_change=True)
 
     # Prepare log and checkpoint files
