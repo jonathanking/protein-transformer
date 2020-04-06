@@ -70,7 +70,9 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True, do_b
         ls = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=do_backwards,
                                  retain_graph=args.loss == "combined", pool=pool,
                                  backbone_only=args.backbone_loss,
-                                 return_rmsd=return_rmsd)
+                                 return_rmsd=return_rmsd,
+                                 comparison=args.drmsd_comparison,
+                                 pseudohuber_threshold=args.pseudohuber_threshold)
         if return_rmsd:
             d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, rmsd_loss = ls
         else:
@@ -418,6 +420,14 @@ def create_parser():
                           help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based "
                                "root mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combination"
                                " of RMSE and ln-DRMSD.")
+    training.add_argument("--drmsd_comparison", choices=["modified-pseudohuber", "pseudohuber", "mse"], default="mse", type=str,
+                          help="The comparison method for the two distance vectors in drmsd. Normally, drmsd uses L2"
+                               "loss to compare the two sets of distances. However, for a more outlier-friendly"
+                               "comparison that doesn't penalize huge losses, we may use the Huber loss (called"
+                               "'smooth_l1_loss'.")
+    training.add_argument("--pseudohuber_threshold", default=10, type=float,
+                          help="The threshold value (referred to as d in the documentation) upon which the behavior"
+                               "of the loss function changes. Residuals < d experience quadratic loss, else linear.")
     training.add_argument('--train_only', action='store_true',
                           help="Train, validation, and testing sets are the same. Only report train accuracy.")
     training.add_argument('--lr_scheduling', type=str, choices=['noam', 'plateau'], default='plateau',

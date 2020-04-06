@@ -46,7 +46,8 @@ def remove_sos_eos_from_input(input_seq):
     return input_seq[start_idx : end_idx]
 
 
-def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, backbone_only=False):
+def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, backbone_only=False, comparison="mse",
+               pseudohuber_threshold=None):
     """
     A version of drmsd loss meant to be used in parallel. Operates on a tuple
     of predicted angles, coordinates, and sequence. Works for 1 protein at a
@@ -76,7 +77,8 @@ def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, bac
     true_crds_masked = true_crd[true_crd_non_nan].reshape(-1, 3)
 
     # Compute drmsd between existing atoms only
-    loss = drmsd(pred_crds_masked, true_crds_masked)
+    loss = drmsd(pred_crds_masked, true_crds_masked, comparison=comparison,
+                 pseudohuber_threshold=pseudohuber_threshold)
     l_normed = loss / pred_crds_masked.shape[0]
 
     # Repeat above for bb only
@@ -85,7 +87,8 @@ def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, bac
     true_crd_bb_non_nan = torch.isnan(true_crd_bb).eq(0)
     pred_crd_bb_masked = pred_crd_bb[true_crd_bb_non_nan].reshape(-1, 3)
     true_crd_bb_masked = true_crd_bb[true_crd_bb_non_nan].reshape(-1, 3)
-    bb_loss = drmsd(pred_crd_bb_masked, true_crd_bb_masked)
+    bb_loss = drmsd(pred_crd_bb_masked, true_crd_bb_masked, comparison=comparison,
+                    pseudohuber_threshold=pseudohuber_threshold)
     bb_loss_normed = bb_loss / pred_crd_bb_masked.shape[0]
 
     if do_backward:
@@ -120,18 +123,20 @@ def parallel_coords_only(ang, seq):
     coords = angles_to_coords(ang, seq)
     return coords
 
-def drmsd_work_wrapper(ang_crd_seq_retrmsd_doback_bbonly):
+def drmsd_work_wrapper(ang_crd_seq_retrmsd_doback_bbonly_comparison_thresh):
     """
     Unpacks arguments for the drmsd_work function. Useful for Pool.map().
     Parameters
     ----------
-    ang_crd_seq_retrmsd_doback_bbonly : tuple
+    ang_crd_seq_retrmsd_doback_bbonly_comparison : tuple
     """
-    ang, crd, seq, return_rmsd, do_backward, backbone_only = ang_crd_seq_retrmsd_doback_bbonly
-    return drmsd_work(ang, crd, seq, return_rmsd, do_backward, backbone_only)
+    ang, crd, seq, return_rmsd, do_backward,\
+    backbone_only, comparison, threshold = ang_crd_seq_retrmsd_doback_bbonly_comparison_thresh
+    return drmsd_work(ang, crd, seq, return_rmsd, do_backward, backbone_only, comparison, threshold)
 
 def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("cpu"), return_rmsd=False,
-                        do_backward=False, retain_graph=False, pool=None, backbone_only=False):
+                        do_backward=False, retain_graph=False, pool=None, backbone_only=False,
+                        comparison="mse", pseudohuber_threshold=10):
     """
     Calculate DRMSD loss by first generating predicted coordinates from
     angles. Then, predicted coordinates are compared with the true coordinate
@@ -144,9 +149,12 @@ def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("c
     if pool is not None:
         results = pool.map(drmsd_work_wrapper, zip(pred_angs.detach().numpy(), true_crds.detach().numpy(),
                                                    input_seqs.detach().numpy(), [return_rmsd]*pred_angs.shape[0],
-                                                   [do_backward]*pred_angs.shape[0], [backbone_only]*pred_angs.shape[0]))
+                                                   [do_backward]*pred_angs.shape[0], [backbone_only]*pred_angs.shape[0],
+                                                   [comparison]*pred_angs.shape[0],
+                                                   [pseudohuber_threshold]*pred_angs.shape[0]))
     else:
-        results = (drmsd_work(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward, backbone_only)
+        results = (drmsd_work(ang.detach(), crd.detach(), seq.detach(), return_rmsd, do_backward, backbone_only,
+                              comparison, pseudohuber_threshold)
                               for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
 
     # Unpack the multiprocessing results
@@ -253,7 +261,7 @@ def pairwise_internal_dist(x):
     return res
 
 
-def drmsd(a, b):
+def drmsd(a, b, comparison="mse", pseudohuber_threshold=None):
     """ Returns distance root-mean-squared-deviation between tensors a and b.
 
     Given 2 coordinate tensors, returns the dRMSD between them. Both
@@ -272,10 +280,47 @@ def drmsd(a, b):
     b_ = pairwise_internal_dist(b)
 
     i = torch.triu_indices(a_.shape[0], a_.shape[1], offset=1)
-    mse = torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float())
-    res = torch.sqrt(mse)
+    if comparison == "mse":
+        mse = torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float())
+        res = torch.sqrt(mse)
+    elif comparison == "pseudohuber":
+        d = torch.sqrt(torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float()))
+        res = pseudohuber(a_[i[0], i[1]].float(), b_[i[0], i[1]].float(), pseudohuber_threshold)
+    elif comparison == "modified-pseudohuber":
+        d = torch.sqrt(torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float()))
+        res = modified_pseudohuber(a_[i[0], i[1]].float(), b_[i[0], i[1]].float(), pseudohuber_threshold)
+    else:
+        raise NotImplementedError(f"{comparison} is not recognized as a valid DRMSD comparison method.")
 
     return res
+
+
+def pseudohuber(a, b, d=1):
+    """
+    Returns the Pseudo-Huber loss between a and be with scaling c.
+    Based on the description here: https://en.wikipedia.org/wiki/Huber_loss.
+    Essentially, values < c and > c are treated with L2 and L1 losses, respectively.
+    """
+    residuals = a - b
+    val = d ** 2 * (torch.sqrt(1 + (residuals / d) ** 2) - 1)
+    return torch.mean(val)
+
+
+def modified_pseudohuber(a, b, d=1):
+    """
+    Returns a modified Pseudo-Huber loss between a and be with scaling c.
+    Based on the description here: https://en.wikipedia.org/wiki/Huber_loss.
+
+    It has been modified so that the slope for values > c is 1, and the slope
+    for values < c is < 1.
+
+    This may prove valuable when optimizing, as it will train relatively robustly
+    at the start, and then make finer-grained improvements as it surpasses the
+    threshold.
+    """
+    residuals = a - b
+    val = d * (torch.sqrt(1 + (residuals / d) ** 2) - 1)
+    return torch.mean(val)
 
 
 def rmsd(a, b):
