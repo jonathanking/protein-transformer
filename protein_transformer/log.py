@@ -274,10 +274,10 @@ def log_avg_validation_performance(metrics, validation_datasets):
         lndrmsd_full += metrics[mode]["epoch-lndrmsd-full"]
         combined_full += metrics[mode]["epoch-combined-full"]
 
-        ph += metrics[mode]["epoch-ph-full"],
-        lnph += metrics[mode]["epoch-lnph-full"],
-        mph += metrics[mode]["epoch-mph-full"],
-        lnmph += metrics[mode]["epoch-lnmph-full"],
+        ph += metrics[mode]["epoch-ph-full"]
+        lnph += metrics[mode]["epoch-lnph-full"]
+        mph += metrics[mode]["epoch-mph-full"]
+        lnmph += metrics[mode]["epoch-lnmph-full"]
 
         rmse_bb += np.sqrt(metrics[mode]["epoch-mse-bb"])
         rmse_sc += np.sqrt(metrics[mode]["epoch-mse-sc"])
