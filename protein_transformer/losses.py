@@ -77,9 +77,18 @@ def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, bac
     true_crds_masked = true_crd[true_crd_non_nan].reshape(-1, 3)
 
     # Compute drmsd between existing atoms only
-    loss = drmsd(pred_crds_masked, true_crds_masked, comparison=comparison,
-                 pseudohuber_threshold=pseudohuber_threshold)
+    losses = drmsd_all_methods(pred_crds_masked, true_crds_masked, pseudohuber_threshold)
+    loss = losses[comparison]
     l_normed = loss / pred_crds_masked.shape[0]
+
+    ret_losses = {"drmsd" : losses["mse"].item(),
+                  "pseudohuber" : losses["pseudohuber"].item(),
+                  "modified-pseudohuber" : losses["modified-pseudohuber"].item(),
+                  "ln-drmsd": losses["mse"].item() / pred_crds_masked.shape[0],
+                  "ln-pseudohuber": losses["pseudohuber"].item() / pred_crds_masked.shape[0],
+                  "ln-modified-pseudohuber": losses["modified-pseudohuber"].item() / pred_crds_masked.shape[0],
+                  "rmsd": rmsd(pred_crds_masked.data.numpy(), true_crds_masked.data.numpy()) if return_rmsd else None
+                  }
 
     # Repeat above for bb only
     pred_crd_bb = get_backbone_from_full_coords(pred_crd)
@@ -87,18 +96,16 @@ def drmsd_work(pred_ang, true_crd, input_seq, return_rmsd, do_backward=True, bac
     true_crd_bb_non_nan = torch.isnan(true_crd_bb).eq(0)
     pred_crd_bb_masked = pred_crd_bb[true_crd_bb_non_nan].reshape(-1, 3)
     true_crd_bb_masked = true_crd_bb[true_crd_bb_non_nan].reshape(-1, 3)
-    bb_loss = drmsd(pred_crd_bb_masked, true_crd_bb_masked, comparison=comparison,
-                    pseudohuber_threshold=pseudohuber_threshold)
+    bb_loss = drmsd(pred_crd_bb_masked, true_crd_bb_masked, comparison="mse")
     bb_loss_normed = bb_loss / pred_crd_bb_masked.shape[0]
+
+    ret_losses["bb-drmsd"] = bb_loss.item()
+    ret_losses["ln-bb-drmsd"] = bb_loss_normed.item()
 
     if do_backward:
         l_normed.backward()
 
-    if return_rmsd:
-        return starting_ang.grad, loss.item(), l_normed.item(), bb_loss.item(), bb_loss_normed.item(), \
-               rmsd(pred_crds_masked.data.numpy(), true_crds_masked.data.numpy())
-    else:
-        return starting_ang.grad, loss.item(), l_normed.item(), bb_loss.item(), bb_loss_normed.item()
+    return starting_ang.grad, ret_losses
 
 
 def angles_to_coords(angles, seq, remove_batch_padding=False):
@@ -158,26 +165,43 @@ def compute_batch_drmsd(pred_angs, true_crds, input_seqs, device=torch.device("c
                               for ang, crd, seq in zip(pred_angs, true_crds, input_seqs))
 
     # Unpack the multiprocessing results
-    grads, losses, ln_losses, bb_losses, bb_ln_losses, rmsds = [], [], [], [], [], []
+    grads, drmsds, ln_drmsds, bb_drmsds, bb_ln_drmsds, rmsds = [], [], [], [], [], []
+    pseudohubers, modpseudohubers, ln_pseudohubers, ln_modpseudohubers = [], [], [], []
     for r in results:
-        if len(r) == 6:
-            grad, l, ln, bb_l, bb_ln, rmsd_val = r
-            rmsds.append(rmsd_val)
-        else:
-            grad, l, ln, bb_l, bb_ln = r
+        grad, loss_dict = r
+        d, ln_d, bb_d, bb_ln_d, rmsd_val = loss_dict["drmsd"], loss_dict["ln-drmsd"], loss_dict["bb-drmsd"], \
+                                       loss_dict["ln-bb-drmsd"], loss_dict["rmsd"]
+        ph, ln_ph = loss_dict["pseudohuber"], loss_dict["ln-pseudohuber"]
+        mph, ln_mph = loss_dict["modified-pseudohuber"], loss_dict["ln-modified-pseudohuber"]
+
         grads.append(grad)
-        losses.append(l)
-        ln_losses.append(ln)
-        bb_losses.append(bb_l)
-        bb_ln_losses.append(bb_ln)
+        drmsds.append(d)
+        ln_drmsds.append(ln_d)
+        bb_drmsds.append(bb_d)
+        bb_ln_drmsds.append(bb_ln_d)
+        pseudohubers.append(ph)
+        modpseudohubers.append(mph)
+        ln_pseudohubers.append(ln_ph)
+        ln_modpseudohubers.append(ln_mph)
+
+        if rmsd_val:
+            rmsds.append(rmsd_val)
 
     if do_backward:
         pred_angs.backward(gradient=torch.stack(grads), retain_graph=retain_graph)
 
-    if return_rmsd:
-        return np.mean(losses), np.mean(ln_losses), np.mean(bb_losses), np.mean(bb_ln_losses), np.mean(rmsds)
-    else:
-        return np.mean(losses), np.mean(ln_losses), np.mean(bb_losses), np.mean(bb_ln_losses)
+    ret_losses = {"drmsd": np.mean(drmsds),
+                  "ln-drmsd": np.mean(ln_drmsds),
+                  "bb-drmsd": np.mean(bb_drmsds),
+                  "ln-bb-drmsd": np.mean(bb_ln_drmsds),
+                  "pseudohuber": np.mean(pseudohubers),
+                  "modified-pseudohuber": np.mean(modpseudohubers),
+                  "ln-pseudohuber": np.mean(ln_pseudohubers),
+                  "ln-modified-pseudohuber": np.mean(ln_modpseudohubers),
+                  "rmsd": np.mean(rmsds) if len(rmsds) > 0 else None}
+
+    return ret_losses
+
 
 
 def mse_over_angles(pred, true, bb_only=False, sc_only=False):
@@ -284,15 +308,43 @@ def drmsd(a, b, comparison="mse", pseudohuber_threshold=None):
         mse = torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float())
         res = torch.sqrt(mse)
     elif comparison == "pseudohuber":
-        d = torch.sqrt(torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float()))
         res = pseudohuber(a_[i[0], i[1]].float(), b_[i[0], i[1]].float(), pseudohuber_threshold)
     elif comparison == "modified-pseudohuber":
-        d = torch.sqrt(torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float()))
         res = modified_pseudohuber(a_[i[0], i[1]].float(), b_[i[0], i[1]].float(), pseudohuber_threshold)
     else:
         raise NotImplementedError(f"{comparison} is not recognized as a valid DRMSD comparison method.")
 
     return res
+
+
+def drmsd_all_methods(a, b, pseudohuber_threshold=None):
+    """ Returns distance root-mean-squared-deviation between tensors a and b.
+
+    Given 2 coordinate tensors, returns the dRMSD between them. Both
+    tensors must be the exact same shape. It works by creating a mask of the
+    upper-triangular indices of the pairwise distance matrix (excluding the
+    diagonal). Then, the resulting values are compared with Pytorch's MSE loss.
+
+    Args:
+        a, b (torch.Tensor): coordinate tensor with shape (L x 3).
+
+    Returns:
+        res (torch.Tensor): DRMSD between a and b.
+    """
+
+    a_ = pairwise_internal_dist(a)
+    b_ = pairwise_internal_dist(b)
+
+    i = torch.triu_indices(a_.shape[0], a_.shape[1], offset=1)
+
+    results = {}
+    results["mse"] = torch.sqrt(torch.nn.functional.mse_loss(a_[i[0], i[1]].float(), b_[i[0], i[1]].float()))
+    results["pseudohuber"] = pseudohuber(a_[i[0], i[1]].float(), b_[i[0], i[1]].float(), pseudohuber_threshold)
+    results["modified-pseudohuber"] = modified_pseudohuber(a_[i[0], i[1]].float(),
+                                                           b_[i[0], i[1]].float(),
+                                                           pseudohuber_threshold)
+
+    return results
 
 
 def pseudohuber(a, b, d=1):

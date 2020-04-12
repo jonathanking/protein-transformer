@@ -66,23 +66,36 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True, do_b
     m_loss_sc = mse_over_angles(pred, tgt_ang, sc_only=True)
 
 
-    if args.loss in ["lndrmsd", "drmsd", "combined"] or eval_mode:
+    if args.loss in ["lndrmsd", "drmsd", "combined"] or "pseudohuber" in args.loss or eval_mode:
         ls = compute_batch_drmsd(pred, tgt_crds, src_seq, do_backward=do_backwards,
-                                 retain_graph=args.loss == "combined", pool=pool,
+                                 retain_graph="combined" in args.loss, pool=pool,
                                  backbone_only=args.backbone_loss,
                                  return_rmsd=return_rmsd,
-                                 comparison=args.drmsd_comparison,
                                  pseudohuber_threshold=args.pseudohuber_threshold)
-        if return_rmsd:
-            d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, rmsd_loss = ls
-        else:
-            d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, rmsd_loss = *ls, None
-        c_loss = combine_drmsd_mse(ln_d_loss, m_loss_full, w=args.combined_drmsd_weight, log=log)
-        if args.loss == "lndrmsd":
+        d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, rmsd_loss = ls["drmsd"], ls["ln-drmsd"], ls["bb-drmsd"],\
+                                                                ls["ln-bb-drmsd"], ls["rmsd"]
+        ph_loss, ln_ph_loss, mph_loss, ln_mph_loss = ls["pseudohuber"], ls["modified-pseudohuber"], \
+                                                     ls["ln-pseudohuber"], ls["ln-modified-pseudohuber"],
+        if args.loss == "pseudohuber":
+            loss = ph_loss
+        elif args.loss == "modified_pseudohuber":
+            loss = mph_loss
+        elif args.loss == "lnpseudohuber":
+            loss = ln_ph_loss
+        elif args.loss == "modified_lnpseudohuber":
+            loss = ln_mph_loss
+        elif args.loss == "lndrmsd":
             loss = ln_d_loss
         elif args.loss == "drmsd":
             loss = d_loss
-        elif args.loss == "combined":
+        elif "combined" in args.loss:
+            if args.loss == "combined":
+                str_loss = ln_d_loss
+            elif args.loss == "combined_lnpseudohuber":
+                str_loss = ln_ph_loss
+            elif args.loss == "combined_modified_lnpseudohuber":
+                str_loss = ln_mph_loss
+            c_loss = combine_drmsd_mse(str_loss, m_loss_full, w=args.combined_drmsd_weight, log=log)
             loss = c_loss
             if do_backwards:
                 c_loss.backward()
@@ -94,6 +107,7 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True, do_b
         d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, c_loss, rmsd_loss = torch.tensor(0), torch.tensor(0), \
                                                                         torch.tensor(0), torch.tensor(0), \
                                                                         torch.tensor(0), None
+        ph_loss, ln_ph_loss, mph_loss, ln_mph_loss = torch.tensor(0), torch.tensor(0), torch.tensor(0), torch.tensor(0)
         loss = m_loss_full
         if do_backwards:
             m_loss_full.backward()
@@ -108,7 +122,11 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True, do_b
               "mse-full": m_loss_full,
               "mse-bb": m_loss_bb,
               "mse-sc": m_loss_sc,
-              "rmsd-full": rmsd_loss}
+              "rmsd-full": rmsd_loss,
+              "pseudohuber": ph_loss,
+              "lnpseudohuber": ln_ph_loss,
+              "modified-pseudohuber":mph_loss,
+              "modified-lnpseudohuber":ln_mph_loss}
 
     return losses
 
@@ -416,7 +434,9 @@ def create_parser():
                           help="Number of warmup training steps when using lr-scheduling as proposed in the original"
                                "Transformer paper.")
     training.add_argument('-cg', '--clip', type=float, default=1, help="Gradient clipping value.")
-    training.add_argument('-l', '--loss', choices=["mse", "drmsd", "lndrmsd", "combined"], default="combined",
+    training.add_argument('-l', '--loss', choices=["mse", "drmsd", "lndrmsd", "pseudohuber", "modified_pseudohuber",
+                                                   "lnpseudohuber", "modified_lnpseudohuber", "combined_lnpseudohuber",
+                                                   "combined_modified_lnpseudohuber", "combined"], default="combined",
                           help="Loss used to train the model. Can be root mean squared error (RMSE), distance-based "
                                "root mean squared distance (DRMSD), length-normalized DRMSD (ln-DRMSD) or a combination"
                                " of RMSE and ln-DRMSD.")
@@ -590,6 +610,16 @@ def main():
     if not args.early_stopping_metric:
         args.early_stopping_metric = f"train-{args.loss}"
     args.es_mode, args.es_metric = args.early_stopping_metric.split("-")
+    if "combined_" in args.es_metric:
+        args.es_metric = "combined"
+    elif args.es_metric == "pseudohuber":
+        args.es_metric = "ph"
+    elif args.es_metric == "modified_pseudohuber":
+        args.es_metric = "mph"
+    elif args.es_metric == "lnpseudohuber":
+        args.es_metric = "lnph"
+    elif args.es_metric == "modified_lnpseudohuber":
+        args.es_metric = "lnmph"
     args.add_sos_eos = args.model == "enc-dec"
     LOGFILEHEADER = prepare_log_header(args)
     args.bins = "auto" if args.bins == -1 else args.bins

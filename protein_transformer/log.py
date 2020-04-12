@@ -166,6 +166,11 @@ def do_train_batch_logging(metrics, losses, src_seq, optimizer, args, log_writer
                    "Train Batch Speed": metrics["train"]["speed"],
                    "Batch size": pred_angs.shape[0],
 
+                   "Train Batch Pseudohuber": losses["pseudohuber"],
+                   "Train Batch ln-Pseudohuber": losses["lnpseudohuber"],
+                   "Train Batch Mod-Pseudohuber": losses["modified-pseudohuber"],
+                   "Train Batch Mod-ln-Pseudohuber": losses["modified-lnpseudohuber"],
+
                    "Train Batch DRMSD Backbone": losses["drmsd-bb"],
                    "Train Batch ln-DRMSD Backbone": losses["lndrmsd-bb"],
                    "Train Batch RMSE Backbone": np.sqrt(losses["mse-bb"].item()),
@@ -301,6 +306,11 @@ def do_eval_epoch_logging(metrics, mode):
                f"{mode.title()} Epoch ln-DRMSD": metrics[mode]["epoch-lndrmsd-full"],
                f"{mode.title()} Epoch Combined Loss": metrics[mode]["epoch-combined-full"],
 
+               f"{mode.title()} Epoch Pseudohuber Loss": metrics[mode]["epoch-ph-full"],
+               f"{mode.title()} Epoch ln-Pseudohuber Loss": metrics[mode]["epoch-lnph-full"],
+               f"{mode.title()} Epoch Mod-Pseudohuber Loss": metrics[mode]["epoch-mph-full"],
+               f"{mode.title()} Epoch Mod-ln-Pseudohuber Loss": metrics[mode]["epoch-lnmph-full"],
+
                f"{mode.title()} Epoch ln-DRMSD Backbone": metrics[mode]["epoch-lndrmsd-bb"],
                f"{mode.title()} Epoch DRMSD Backbone": metrics[mode]["epoch-drmsd-bb"],
                f"{mode.title()} Epoch RMSE Backbone": np.sqrt(metrics[mode]["epoch-mse-bb"]),
@@ -409,15 +419,23 @@ def update_metrics(metrics, losses, mode, src_seq, tracking_loss=None, batch_lev
         metrics[mode]["batch-mse-bb"] = losses["mse-bb"].item()
         metrics[mode]["batch-mse-sc"] = losses["mse-sc"].item()
         metrics[mode]["batch-lndrmsd-bb"] = losses["lndrmsd-bb"].item()
+        metrics[mode]["batch-ph"] = losses["pseudohuber"].item()
+        metrics[mode]["batch-mph"] = losses["modified-pseudohuber"].item()
+        metrics[mode]["batch-lnph"] = losses["lnpseudohuber"].item()
+        metrics[mode]["batch-lnmph"] = losses["modified-lnpseudohuber"].item()
     metrics[mode]["epoch-drmsd-full"] += drmsd.item()
     metrics[mode]["epoch-lndrmsd-full"] += ln_drmsd.item()
     metrics[mode]["epoch-mse-full"] += mse.item()
     metrics[mode]["epoch-combined-full"] += combined.item()
     if rmsd: metrics[mode]["epoch-rmsd-full"] += rmsd.item()
-    metrics[mode]["epoch-drmsd-bb"] = losses["drmsd-bb"].item()
-    metrics[mode]["epoch-mse-bb"] = losses["mse-bb"].item()
-    metrics[mode]["epoch-mse-sc"] = losses["mse-sc"].item()
-    metrics[mode]["epoch-lndrmsd-bb"] = losses["lndrmsd-bb"].item()
+    metrics[mode]["epoch-drmsd-bb"] += losses["drmsd-bb"].item()
+    metrics[mode]["epoch-mse-bb"] += losses["mse-bb"].item()
+    metrics[mode]["epoch-mse-sc"] += losses["mse-sc"].item()
+    metrics[mode]["epoch-lndrmsd-bb"] += losses["lndrmsd-bb"].item()
+    metrics[mode]["epoch-ph-full"] += losses["pseudohuber"].item()
+    metrics[mode]["epoch-mph-full"] += losses["modified-pseudohuber"].item()
+    metrics[mode]["epoch-lnph-full"] += losses["lnpseudohuber"].item()
+    metrics[mode]["epoch-lnmph-full"] += losses["modified-lnpseudohuber"].item()
 
     # Compute and update speed
     num_res = (src_seq != VOCAB.pad_id).sum().item()
@@ -449,6 +467,11 @@ def reset_metrics_for_epoch(metrics, mode):
     metrics[mode]["epoch-mse-sc"] = metrics[mode]["batch-mse-sc"] = 0
     metrics[mode]["epoch-mse-bb"] = metrics[mode]["batch-mse-bb"] = 0
 
+    metrics[mode]["batch-ph"] = metrics[mode]["epoch-ph-full"] = 0
+    metrics[mode]["batch-mph"] = metrics[mode]["epoch-mph-full"] = 0
+    metrics[mode]["batch-lnph"] = metrics[mode]["epoch-lnph-full"] = 0
+    metrics[mode]["batch-lnmph"] = metrics[mode]["epoch-lnmph-full"] = 0
+
     metrics[mode]["batch-history"] = []
     metrics[mode]["batch-time"] = time.time()
     metrics[mode]["speed-history"] = []
@@ -469,6 +492,11 @@ def update_metrics_end_of_epoch(metrics, mode):
     metrics[mode]["epoch-lndrmsd-bb"] /= n_batches
     metrics[mode]["epoch-mse-bb"] /= n_batches
     metrics[mode]["epoch-mse-sc"] /= n_batches
+
+    metrics[mode]["epoch-ph-full"] /= n_batches
+    metrics[mode]["epoch-mph-full"] /= n_batches
+    metrics[mode]["epoch-lnph-full"] /= n_batches
+    metrics[mode]["epoch-lnmph-full"] /= n_batches
 
     if metrics[mode]["epoch-drmsd-full"] == 0:
         metrics[mode]["epoch-combined-full"] = 0
