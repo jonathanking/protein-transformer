@@ -264,6 +264,7 @@ def log_avg_validation_performance(metrics, validation_datasets):
     the average validation performance to wandb.
     """
     rmse_full, rmse_bb, rmse_sc, rmsd_full, drmsd_full, drmsd_bb, lndrmsd_full, lndrmsd_bb, combined_full = 0, 0, 0, 0, 0, 0, 0, 0, 0
+    ph, lnph, mph, lnmph = 0, 0, 0, 0
     n = 0.
     for split, validation_data in validation_datasets.items():
         mode = f"valid-{split}"
@@ -272,6 +273,11 @@ def log_avg_validation_performance(metrics, validation_datasets):
         drmsd_full += metrics[mode]["epoch-drmsd-full"]
         lndrmsd_full += metrics[mode]["epoch-lndrmsd-full"]
         combined_full += metrics[mode]["epoch-combined-full"]
+
+        ph += metrics[mode]["epoch-ph-full"],
+        lnph += metrics[mode]["epoch-lnph-full"],
+        mph += metrics[mode]["epoch-mph-full"],
+        lnmph += metrics[mode]["epoch-lnmph-full"],
 
         rmse_bb += np.sqrt(metrics[mode]["epoch-mse-bb"])
         rmse_sc += np.sqrt(metrics[mode]["epoch-mse-sc"])
@@ -285,6 +291,11 @@ def log_avg_validation_performance(metrics, validation_datasets):
                "Valid-Avg Epoch DRMSD": drmsd_full/n,
                "Valid-Avg Epoch ln-DRMSD": lndrmsd_full/n,
                "Valid-Avg Epoch Combined Loss": combined_full/n,
+
+               "Valid-Avg Epoch Pseudohuber Loss": ph/n,
+               "Valid-Avg Epoch ln-Pseudohuber Loss": lnph / n,
+               "Valid-Avg Epoch Mod-Pseudohuber Loss": mph / n,
+               "Valid-Avg Epoch Mod-ln-Pseudohuber Loss": lnmph / n,
 
                "Valid-Avg Epoch RMSE Backbone": rmse_bb / n,
                "Valid-Avg Epoch RMSE Sidechain": rmse_sc / n,
