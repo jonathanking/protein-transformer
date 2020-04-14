@@ -81,8 +81,8 @@ def get_losses(args, pred, tgt_ang, tgt_crds, src_seq, pool=None, log=True, do_b
                                  pseudohuber_threshold=args.pseudohuber_threshold)
         d_loss, ln_d_loss, d_bb_loss, d_bb_ln_loss, rmsd_loss = ls["drmsd"], ls["ln-drmsd"], ls["bb-drmsd"],\
                                                                 ls["ln-bb-drmsd"], ls["rmsd"]
-        ph_loss, ln_ph_loss, mph_loss, ln_mph_loss = ls["pseudohuber"], ls["modified-pseudohuber"], \
-                                                     ls["ln-pseudohuber"], ls["ln-modified-pseudohuber"],
+        ph_loss, ln_ph_loss, mph_loss, ln_mph_loss = ls["pseudohuber"], ls["ln-pseudohuber"], \
+                                                     ls["modified-pseudohuber"], ls["ln-modified-pseudohuber"],
         if args.loss == "pseudohuber":
             loss = ph_loss
         elif args.loss == "modified_pseudohuber":
