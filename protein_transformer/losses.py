@@ -243,7 +243,10 @@ def mse_over_angles(pred, true, bb_only=False, sc_only=False):
 
     # Remove missing angles
     ang_non_nans = torch.isnan(tgt_ang_non_zero).eq(0)
-    return torch.nn.functional.mse_loss(pred[ang_non_zero][ang_non_nans], true[ang_non_zero][ang_non_nans])
+    if torch.sum(ang_non_nans) > 0:
+        return torch.nn.functional.mse_loss(pred[ang_non_zero][ang_non_nans], true[ang_non_zero][ang_non_nans])
+    else:
+        return pred.sum()*0.44/pred.sum()
 
 
 def mse_over_angles_numpy(pred, true):
