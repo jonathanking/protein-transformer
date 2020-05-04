@@ -1,3 +1,8 @@
+"""
+Hard coded values to use when building and analyzing sidechain structures.
+"""
+
+
 SC_BUILD_INFO = \
     {'ALA': {'angles-names': ['N-CA-CB'],
              'angles-types': ['N -CX-CT'],
